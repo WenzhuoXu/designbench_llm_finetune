@@ -1,0 +1,19 @@
+# SFT warmstart config — tuned for reasoning models (Qwen3, DeepSeek-R1, Phi-4-reasoning)
+# Lower LR and longer warmup to preserve reasoning capabilities during SFT
+
+defaults:
+  - base
+
+# Lower LR: reasoning models are sensitive to large gradient steps
+learning_rate: 5.0e-6
+warmup_ratio: 0.10              # Longer warmup for stability
+
+# More conservative gradient clipping
+max_grad_norm: 0.5
+
+# Longer training for complex task
+num_epochs: 5
+gradient_accumulation_steps: 16    # Larger effective batch for stability
+
+# Checkpoint more frequently (warmstart is valuable, save often)
+save_steps: 50

@@ -1,0 +1,4 @@
+# No distributed strategy — single GPU training
+# Use for smoke tests, debugging, or 1-GPU runs
+strategy: none
+deepspeed_config: null

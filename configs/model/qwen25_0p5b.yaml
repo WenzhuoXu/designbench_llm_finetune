@@ -1,0 +1,21 @@
+# Qwen2.5-0.5B-Instruct — smoke-test / pipeline verification
+# Same Qwen2.5 architecture as qwen25_14b but tiny (fits in 16GB V100/L40S)
+defaults:
+  - base
+
+model_name_or_path: Qwen/Qwen2.5-0.5B-Instruct
+cache_dir: /ocean/projects/mch250030p/wxu7/hf_models
+thinking_mode: false
+
+# V100 does not have native BF16 tensor cores — use float16
+torch_dtype: float16
+
+# Flash Attention 2 requires A100/H100; use sdpa on V100/L40S
+attn_implementation: sdpa
+
+# torch.compile slows first iteration on small smoke runs — disable
+use_compile: false
+
+# Gradient checkpointing is not needed for a 0.5B model but keep it on to
+# verify the code path works
+use_gradient_checkpointing: true

@@ -1,0 +1,6 @@
+# DeepSpeed ZeRO-2 configuration
+# Recommended for SFT on 8xH100 with 14B models
+# ZeRO-2: shards gradients + optimizer states (params replicated)
+# VRAM usage: ~22 GB/GPU for 14B BF16 model
+strategy: deepspeed_zero2
+deepspeed_config: deepspeed/zero2.json

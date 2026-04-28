@@ -1,0 +1,12 @@
+# Qwen3-14B — thinking model with <think> tokens
+# https://huggingface.co/Qwen/Qwen3-14B
+
+defaults:
+  - base
+
+model_name_or_path: Qwen/Qwen3-14B
+thinking_mode: true
+think_token: "<think>"
+
+# Qwen3 supports enable_thinking=True in apply_chat_template
+# Chat formatter will pass this automatically

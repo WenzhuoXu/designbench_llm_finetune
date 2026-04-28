@@ -1,0 +1,6 @@
+# DeepSpeed ZeRO-3 configuration
+# For very large batches, multi-node, or memory-constrained scenarios
+# ZeRO-3: shards params + gradients + optimizer states
+# VRAM usage: ~12 GB/GPU for 14B BF16 model (much lower, slower)
+strategy: deepspeed_zero3
+deepspeed_config: deepspeed/zero3.json

@@ -1,0 +1,38 @@
+# Base SFT training configuration
+
+# Batch & throughput
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 8      # Effective batch = 8 × n_gpus = 64 on 8xH100
+
+# Sequence packing (TRL feature — eliminates padding, 2-3x throughput)
+packing: true
+max_seq_len: 8192                    # H100 handles this well with FA2
+
+# Learning rate
+learning_rate: 2.0e-5
+lr_scheduler: cosine
+warmup_ratio: 0.05
+
+# Duration
+num_epochs: 3
+max_steps: -1                        # -1 = run full epochs; set > 0 to override
+
+# Regularization
+max_grad_norm: 1.0
+weight_decay: 0.01
+
+# Optimizer — adamw_torch_fused is fast on CUDA
+optimizer: adamw_torch_fused
+
+# Checkpointing
+save_steps: 100
+save_total_limit: 3
+output_dir: checkpoints/sft
+
+# Data loading
+dataloader_num_workers: 4
+
+# HuggingFace Hub (optional: push checkpoints for sharing)
+push_to_hub: false
+hub_model_id: null

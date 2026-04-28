@@ -1,0 +1,19 @@
+# Logging configuration
+
+# W&B settings
+wandb_enabled: true
+wandb_project: designbench-training
+wandb_entity: null              # Set to your W&B entity/team name
+wandb_tags: []                  # e.g. [sft, qwen3, warmstart]
+wandb_notes: null               # Free-text notes for this run
+
+# Local logging
+log_dir: logs
+log_every_n_steps: 10          # Console + JSONL log frequency
+gpu_stats_every_n_steps: 50    # GPU pynvml poll frequency
+
+# torch.profiler (0 = disabled)
+profile_steps: 0               # Set to 5 to profile first 5 steps
+
+# Checkpoint artifact logging
+save_artifact_to_wandb: true   # Push checkpoints as W&B Artifacts

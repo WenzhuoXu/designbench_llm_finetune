@@ -1,0 +1,24 @@
+# MCTS tree data configuration — DesignBench modification trees
+
+# Tree data directory
+tree_dir: /ocean/projects/mch250030p/wxu7/DesignBench/data/modification_trees
+traces_dir: /ocean/projects/mch250030p/wxu7/DesignBench/data/modification_trees
+
+# Sampling strategy (see data/datasets/mcts_dataset.py)
+# Options: flat | path | subtree | curriculum
+# Research hook: change this to explore different MCTS training strategies
+sampling_strategy: curriculum
+
+# Filters
+min_subtree_value: 0.0          # Minimum subtree value (FOS-based)
+solution_only: false            # Only include samples from solution subtrees
+max_depth: 10                   # Maximum tree depth
+
+# Curriculum settings (when sampling_strategy: curriculum)
+curriculum_sort_by: solution_then_value  # solution paths first, then by value
+
+# Max sequence length for MCTS samples
+max_seq_len: 2048
+
+# Seed for sampling
+seed: 42

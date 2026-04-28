@@ -1,0 +1,8 @@
+# Llama-4-Scout-17B-16E-Instruct — MoE, no thinking tokens
+# https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct
+
+defaults:
+  - base
+
+model_name_or_path: meta-llama/Llama-4-Scout-17B-16E-Instruct
+thinking_mode: false

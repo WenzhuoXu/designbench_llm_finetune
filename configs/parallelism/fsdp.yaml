@@ -1,0 +1,8 @@
+# FSDP2 (PyTorch native) configuration
+# Alternative to DeepSpeed — better for some model architectures
+strategy: fsdp
+fsdp_sharding_strategy: FULL_SHARD
+fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+fsdp_cpu_offload: false
+fsdp_backward_prefetch: BACKWARD_PRE
+fsdp_activation_checkpointing: true

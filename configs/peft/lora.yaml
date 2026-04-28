@@ -1,0 +1,20 @@
+# LoRA configuration (optional PEFT fine-tuning)
+# Enable with: use_lora: true in model config
+
+# LoRA rank (higher = more expressive, more parameters)
+r: 64
+lora_alpha: 128                 # Scaling: alpha/r = 2.0
+
+# Target modules (typical for Qwen/LLaMA architectures)
+# Adjust based on model architecture
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+lora_dropout: 0.05
+bias: none

@@ -1,0 +1,5 @@
+# Qwen2.5-14B-Instruct — previous baseline
+defaults:
+  - base
+model_name_or_path: Qwen/Qwen2.5-14B-Instruct
+thinking_mode: false

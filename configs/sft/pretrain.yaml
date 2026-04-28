@@ -1,0 +1,35 @@
+# Warmstart SFT hyperparameters — pre-training for GRPO
+# Conservative LR, short training, early stopping to avoid overfitting
+# Literature: VLAA-Thinker shows excessive SFT harms subsequent GRPO
+
+defaults:
+  - base
+
+# Lower LR: preserving base model capabilities during warmstart
+learning_rate: 5.0e-6
+warmup_ratio: 0.10
+
+# Conservative gradient clipping
+max_grad_norm: 0.5
+
+# Short training — 1-3 epochs typical for warmstart (DeepSeek-R1, SASR)
+# Early stopping usually triggers before epoch 2 completes
+num_epochs: 2
+gradient_accumulation_steps: 16    # Larger effective batch for stability
+
+# TRL 1.0+: packing=True enables padding-free batching which rejects custom
+# DataCollatorForSFT. Our WarmstartReasoningTarget needs the custom collator
+# for loss masking, so packing must be disabled here.
+packing: false
+
+# Checkpoint frequently
+save_steps: 50
+eval_steps: 50
+
+# Warmstart early stopping (enabled by default)
+# Stops when format compliance >= threshold AND val loss plateaus
+early_stopping: true
+warmstart_eval_steps: 50           # Check readiness every N steps
+warmstart_format_threshold: 0.90   # Min grammar parse rate to be RL-ready
+warmstart_kl_threshold: 5.0        # Max KL divergence from base model (nats)
+warmstart_loss_delta_threshold: 0.05  # Stop when val loss improves < 5% per eval

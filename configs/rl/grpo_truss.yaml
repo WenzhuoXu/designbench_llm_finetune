@@ -1,0 +1,29 @@
+# GRPO config tuned for DesignBench truss optimization
+
+defaults:
+  - grpo_base
+
+# Reward function configuration
+# Research hook: change reward_fn and weights for different objectives
+reward_fn: composite
+reward_weights:
+  feasibility: 1.0              # Primary: did design become feasible?
+  fos_improvement: 0.5          # Dense: FOS improvement (even for infeasible)
+  grammar_compliance: 0.1       # Format: valid grammar action parsing
+  step_efficiency: 0.1          # Efficiency: fewer steps to solution
+
+# Cost function (optional — set cost_fn: null to disable)
+cost_fn: composite
+cost_weights:
+  constraint_violation: 1.0    # Penalize severity of violations
+  token_budget: 0.1            # Penalize excessive token generation
+
+# Cost coefficient (reward -= cost_coef * cost)
+cost_coef: 0.1
+
+# DesignBench-specific
+max_steps: 20                  # Match DesignBench validation max_steps
+n_env_workers: 32              # Use more CPUs for FEA parallelism
+
+# More aggressive group size for better exploration
+group_size: 8                  # Increase to 16 for 16xH100

@@ -1,0 +1,23 @@
+# SFT data configuration — DesignBench SFT traces
+#
+# Data source: DesignBench SFT JSONL (pre-built multi-turn conversations
+# with <think> tags and FEA feedback between steps).
+# Location: DesignBench/data/sft/ — this is the ONLY supported data source.
+
+data_format: jsonl
+
+# JSONL data paths — complete multi-turn with <think> and FEA feedback
+train_jsonl: /ocean/projects/mch250030p/wxu7/DesignBench/data/sft/train.jsonl
+dev_jsonl: /ocean/projects/mch250030p/wxu7/DesignBench/data/sft/dev.jsonl
+
+# SFT target function (see training/sft/targets.py)
+# Options: warmstart_reasoning | full_sequence
+# warmstart_reasoning: reformats messages (actions into <action> tags, roles remapped) — recommended for GRPO warmstart
+# full_sequence: supervise all non-masked tokens — simple baseline
+target_fn: warmstart_reasoning
+
+# Filters
+min_trace_quality: 0.5          # Exclude low-quality traces
+
+# Max sequence length (traces can be long with thinking tokens)
+max_seq_len: 8192

@@ -1,0 +1,12 @@
+# Top-level GRPO training config
+
+defaults:
+  - model: qwen3_14b
+  - rl: grpo_truss
+  - data: sft_traces
+  - parallelism: deepspeed_zero2
+  - logging: logging
+  - _self_
+
+run_name: grpo_run
+seed: 42

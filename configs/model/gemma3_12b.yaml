@@ -1,0 +1,5 @@
+# Gemma-3-12B-IT — Google baseline
+defaults:
+  - base
+model_name_or_path: google/gemma-3-12b-it
+thinking_mode: false

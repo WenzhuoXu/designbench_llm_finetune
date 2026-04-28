@@ -1,0 +1,42 @@
+# Base GRPO configuration
+
+# GRPO-specific
+group_size: 8                   # K rollouts per prompt (K=8 on 8xH100, K=16 on 16xH100)
+temperature: 0.8                # Rollout sampling temperature
+max_new_tokens: 1024            # Max tokens per rollout step
+max_prompt_length: 2048         # Max prompt length (left-truncated if exceeded)
+
+# KL regularization (prevents policy from drifting too far from reference)
+kl_coef: 0.04                   # Start conservative; increase if reward hacking
+
+# PPO-style clipping
+clip_ratio: 0.2
+
+# Training
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 5.0e-7           # Much lower than SFT (fine adjustment)
+lr_scheduler: cosine
+warmup_ratio: 0.05
+max_grad_norm: 1.0
+weight_decay: 0.01
+optimizer: adamw_torch_fused
+num_epochs: 1
+max_steps_train: -1
+
+# Checkpointing
+save_steps: 50
+save_total_limit: 3
+output_dir: checkpoints/grpo
+
+# Data loading
+dataloader_num_workers: 4
+
+# vLLM for fast rollout generation (TRL >= 0.12)
+use_vllm: true
+vllm_server_host: localhost
+vllm_server_port: 8000
+
+# Environment
+max_steps: 20                   # Max grammar actions per episode
+n_env_workers: 16               # Parallel FEA workers (up to 104 CPUs on H100 node)

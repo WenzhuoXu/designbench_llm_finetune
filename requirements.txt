@@ -1,0 +1,44 @@
+# Core training stack
+torch>=2.4.0
+torchvision>=0.19.0
+transformers>=4.47.0
+trl>=0.12.0
+accelerate>=1.0.0
+deepspeed>=0.15.0
+peft>=0.13.0
+
+# Data
+datasets>=2.20.0
+tokenizers>=0.19.0
+huggingface_hub>=0.24.0
+
+# RL rollouts — fast inference
+# Install separately: pip install vllm>=0.6.0
+# (requires compatible CUDA; on H100: pip install vllm --extra-index-url https://download.pytorch.org/whl/cu126)
+
+# Attention optimization — install separately due to CUDA dependency:
+# pip install flash-attn>=2.6.0 --no-build-isolation
+# (H100 supports FA2 natively; dramatically reduces memory for long sequences)
+
+# Logging & monitoring
+wandb>=0.18.0
+pynvml>=11.5.0          # Per-GPU stats (util, memory, temp, power)
+
+# Config management
+hydra-core>=1.3.2
+omegaconf>=2.3.0
+
+# CLI / display
+rich>=13.7.0
+
+# Numerics (shared with DesignBench)
+numpy>=1.24.0
+scipy>=1.11.0
+pandas>=2.0.0
+
+# Dev
+pytest>=8.0
+pytest-cov
+black
+ruff
+ipython

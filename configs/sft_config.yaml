@@ -1,0 +1,18 @@
+# Top-level SFT training config
+# Override any field via CLI: python train_sft.py model=phi4 sft.learning_rate=1e-5
+#
+# Default: warmstart SFT on DesignBench JSONL data for GRPO pre-training
+# Data source: DesignBench/data/sft/train.jsonl (5K examples with FEA feedback)
+# Target: warmstart_reasoning (reformats messages, supervises <think>+<action>+<answer>)
+# Early stopping: enabled by default (format compliance + loss plateau)
+
+defaults:
+  - model: qwen3_14b
+  - sft: pretrain
+  - data: sft_traces
+  - parallelism: deepspeed_zero2
+  - logging: logging
+  - _self_
+
+run_name: sft_run
+seed: 42

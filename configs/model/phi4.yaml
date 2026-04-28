@@ -1,0 +1,5 @@
+# Phi-4 14B — standard instruct model
+defaults:
+  - base
+model_name_or_path: microsoft/phi-4
+thinking_mode: false

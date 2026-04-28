@@ -1,0 +1,36 @@
+# Base model configuration — inherited by all model configs
+# Override specific fields in model-specific configs
+
+# HuggingFace cache (HPC storage, fast SSD)
+cache_dir: /ocean/projects/mch250030p/wxu7/hf_models
+
+# Precision
+torch_dtype: bfloat16           # Best for H100 (native BF16 tensor cores)
+
+# Attention implementation
+# "flash_attention_2" requires: pip install flash-attn --no-build-isolation
+# Falls back to "sdpa" if flash-attn not available
+attn_implementation: flash_attention_2
+
+# Trust remote code (required for Qwen3, Phi-4, etc.)
+trust_remote_code: true
+
+# Device mapping for multi-GPU
+# MUST be null when using DeepSpeed — see HF transformers#31557 and accelerate#2543.
+# DeepSpeed's ZeRO engine handles param placement; device_map="auto" conflicts
+# and produces either errors or subtle param-placement bugs during training.
+device_map: null
+
+# torch.compile for ~20% speedup on H100 (inductor backend)
+# Disable if debugging or using FSDP (may conflict)
+use_compile: false              # Enable for production runs
+
+# Gradient checkpointing (trades compute for memory)
+use_gradient_checkpointing: true
+
+# LoRA (optional) — disabled by default (full fine-tuning)
+use_lora: false
+
+# Thinking mode (for reasoning models like Qwen3, DeepSeek-R1)
+thinking_mode: false
+think_token: null
