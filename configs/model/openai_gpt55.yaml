@@ -1,0 +1,10 @@
+# OpenAI GPT-5.5 API model for MCTS inference evals.
+#
+# Use with:
+#   python scripts/eval_mcts_inference.py \
+#     --api-provider openai \
+#     --model-config configs/model/openai_gpt55.yaml
+
+model_name_or_path: gpt-5.5
+provider: openai
+reasoning_effort: high

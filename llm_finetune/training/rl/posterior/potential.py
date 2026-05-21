@@ -5,6 +5,14 @@ from __future__ import annotations
 import math
 
 
+def _finite_or_default(value: object, default: float) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return default
+    return numeric if math.isfinite(numeric) else default
+
+
 def softplus(x: float) -> float:
     if x > 20:
         return x
@@ -19,13 +27,20 @@ def violation_score(
     target_fos: float = 1.5,
     max_deflection: float = 0.01,
 ) -> float:
-    fos_b = float(state.get("fos_buckling", 0.0) or 0.0)
-    fos_y = float(state.get("fos_yielding", 0.0) or 0.0)
-    deflection = float(state.get("deflection", 0.0) or 0.0)
+    # Clamp FOS to [0, inf): negative values from failed FEA have no physical
+    # meaning and would cause softplus(1.5 - (-1e25)) = 1e25, blowing up rewards.
+    fos_b = max(0.0, _finite_or_default(state.get("fos_buckling", 0.0) or 0.0, 0.0))
+    fos_y = max(0.0, _finite_or_default(state.get("fos_yielding", 0.0) or 0.0, 0.0))
+    _max_d = max(max_deflection, 1e-6)
+    # Cap deflection at 100× the limit so softplus stays finite (<= ~100).
+    deflection = min(
+        _finite_or_default(state.get("deflection", 0.0) or 0.0, _max_d * 10.0),
+        _max_d * 100.0,
+    )
     return (
         softplus(target_fos - fos_b)
         + softplus(target_fos - fos_y)
-        + softplus((deflection / max(max_deflection, 1e-6)) - 1.0)
+        + softplus((deflection / _max_d) - 1.0)
     )
 
 
@@ -37,7 +52,8 @@ def compute_potential(
     target_fos: float = 1.5,
     max_deflection: float = 0.01,
 ) -> float:
-    mass = float(state.get("mass", 0.0) or 0.0)
+    mass = _finite_or_default(state.get("mass", 0.0) or 0.0, 0.0)
+    initial_mass = _finite_or_default(initial_mass, 0.0)
     if mass <= 0.0 or initial_mass <= 0.0:
         return -alpha * violation_score(
             state,

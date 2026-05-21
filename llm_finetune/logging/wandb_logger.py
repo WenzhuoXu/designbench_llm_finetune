@@ -32,11 +32,38 @@ Usage:
 from __future__ import annotations
 
 import logging
+import math
 import time
 from pathlib import Path
 from typing import Any, Optional
 
 log = logging.getLogger(__name__)
+
+
+def _finite_float(value: object, default: float = 0.0) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return numeric if math.isfinite(numeric) else default
+
+
+def _finite_or_none(value: object) -> Optional[float]:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return numeric if math.isfinite(numeric) else None
+
+
+def _sanitize_metric_dict(metrics: dict[str, Any]) -> dict[str, Any]:
+    clean: dict[str, Any] = {}
+    for key, value in metrics.items():
+        if isinstance(value, (int, float)):
+            clean[key] = _finite_float(value, 0.0)
+        else:
+            clean[key] = value
+    return clean
 
 
 class WandbLogger:
@@ -111,6 +138,7 @@ class WandbLogger:
 
         import wandb
 
+        metrics = _sanitize_metric_dict(metrics)
         log_dict = {"train/" + k: v for k, v in metrics.items()}
 
         # Add perplexity if loss is present
@@ -143,8 +171,6 @@ class WandbLogger:
         if not self.is_active or not rollouts:
             return
 
-        import wandb
-
         if self._rollout_table is None:
             self._init_rollout_table()
 
@@ -158,16 +184,14 @@ class WandbLogger:
             actions = getattr(rollout, "action_sequence", [])
             parse_ok = getattr(rollout, "parse_success", [])
 
-            delta_fos_b = (
-                float(final.get("fos_buckling", 0) or 0)
-                - float(initial.get("fos_buckling", 0) or 0)
+            delta_fos_b = _finite_float(final.get("fos_buckling")) - _finite_float(
+                initial.get("fos_buckling")
             )
-            delta_fos_y = (
-                float(final.get("fos_yielding", 0) or 0)
-                - float(initial.get("fos_yielding", 0) or 0)
+            delta_fos_y = _finite_float(final.get("fos_yielding")) - _finite_float(
+                initial.get("fos_yielding")
             )
-            delta_mass = (
-                float(final.get("mass", 0) or 0) - float(initial.get("mass", 0) or 0)
+            delta_mass = _finite_float(final.get("mass")) - _finite_float(
+                initial.get("mass")
             )
             grammar_rate = (
                 sum(parse_ok) / len(parse_ok) if parse_ok else 0.0
@@ -176,10 +200,16 @@ class WandbLogger:
             cost_val = 0.0
             if cost_fn is not None:
                 try:
-                    cost_val = cost_fn.compute(rollout, {})
+                    cost_val = _finite_float(cost_fn.compute(rollout, {}))
                 except Exception:
                     pass
 
+            tree_adv = _finite_or_none(
+                (getattr(rollout, "tree_metrics", None) or {}).get("tree_advantage")
+            )
+            phi_H = _finite_or_none(
+                (getattr(rollout, "tree_metrics", None) or {}).get("phi_H")
+            )
             row = [
                 getattr(rollout, "problem_id", ""),
                 len(actions),
@@ -188,15 +218,70 @@ class WandbLogger:
                 round(delta_fos_y, 4),
                 round(delta_mass, 4),
                 bool(getattr(rollout, "reaches_solution", False)),
-                round(reward, 4),
+                round(_finite_float(reward), 4),
                 round(cost_val, 4),
                 round(grammar_rate, 4),
+                round(phi_H, 4) if phi_H is not None else None,
+                round(tree_adv, 4) if tree_adv is not None else None,
             ]
             self._rollout_table.add_data(*row)
 
         # Log table periodically (W&B has row limits per log call)
         if self._rollout_table_step % 10 == 0:
             self._flush_rollout_table()
+
+    def log_reward_breakdown(
+        self,
+        step: int,
+        means: dict[str, float],
+        stds: Optional[dict[str, float]] = None,
+    ) -> None:
+        """Log per-component reward mean and std to W&B.
+
+        Keys logged: rewards/<component>_mean, rewards/<component>_std.
+        Std is logged only when provided and non-zero — it is the primary
+        signal for whether a component is actually differentiating rollouts.
+        """
+        if not self.is_active or not means:
+            return
+        import wandb
+        log_dict: dict = {}
+        for k, v in means.items():
+            log_dict[f"rewards/{k}_mean"] = _finite_float(v)
+        if stds:
+            for k, v in stds.items():
+                log_dict[f"rewards/{k}_std"] = _finite_float(v)
+        wandb.log(log_dict, step=step)
+
+    def log_cost_breakdown(
+        self,
+        step: int,
+        means: dict[str, float],
+        stds: Optional[dict[str, float]] = None,
+    ) -> None:
+        """Log per-component cost mean and std to W&B as costs/<component>_mean/std."""
+        if not self.is_active or not means:
+            return
+        import wandb
+        log_dict: dict = {}
+        for k, v in means.items():
+            log_dict[f"costs/{k}_mean"] = _finite_float(v)
+        if stds:
+            for k, v in stds.items():
+                log_dict[f"costs/{k}_std"] = _finite_float(v)
+        wandb.log(log_dict, step=step)
+
+    def log_rho(self, step: int, rho: float) -> None:
+        """Log rho(t) — the training-time proxy for LLM-vs-tree-best agreement.
+
+        rho = fraction of rollout groups where argmax(Φ_H) == argmax(total_reward).
+        Rises toward 1 as the composite reward aligns with the Φ criterion.
+        See docs/reward_rho_connection.md §ρ(t).
+        """
+        if not self.is_active:
+            return
+        import wandb
+        wandb.log({"eval/rho_tree_agreement": _finite_float(rho)}, step=step)
 
     def log_eval_metrics(self, step: int, metrics: dict[str, Any]) -> None:
         """Log DesignBench evaluation metrics.
@@ -207,7 +292,7 @@ class WandbLogger:
         if not self.is_active:
             return
         import wandb
-        log_dict = {"eval/" + k: v for k, v in metrics.items()}
+        log_dict = {"eval/" + k: v for k, v in _sanitize_metric_dict(metrics).items()}
         wandb.log(log_dict, step=step)
         log.info(f"W&B eval metrics logged at step {step}: {metrics}")
 
@@ -287,6 +372,8 @@ class WandbLogger:
                 "feasible",
                 "reward", "cost",
                 "grammar_success_rate",
+                "phi_H",
+                "tree_advantage",
             ])
         except Exception:
             pass

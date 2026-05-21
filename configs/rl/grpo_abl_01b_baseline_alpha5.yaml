@@ -1,0 +1,19 @@
+# §6.3 Step 1b — Baseline: r_env alone, α=5 (default)
+# r_env = γΦ(s') − Φ(s) is the only reward signal. No tree expansion.
+# Sweep point: default α — the §6.2 recommended starting point.
+# This is the primary baseline all subsequent ablation steps are measured against.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env only
+
+cost_fn: null
+
+use_tree_expansion: false
+
+posterior:
+  alpha: 5.0                    # Lagrange multiplier — default §6.2
+  gamma: 0.99

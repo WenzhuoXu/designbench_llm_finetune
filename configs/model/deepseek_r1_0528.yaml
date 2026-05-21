@@ -1,0 +1,9 @@
+# DeepSeek-R1-0528 — newest official DeepSeek-R1 update
+# https://huggingface.co/deepseek-ai/DeepSeek-R1-0528
+
+defaults:
+  - base
+
+model_name_or_path: deepseek-ai/DeepSeek-R1-0528
+thinking_mode: true
+think_token: "<think>"

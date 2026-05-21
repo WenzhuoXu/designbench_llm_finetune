@@ -1,0 +1,42 @@
+# §6.3 Step 5 — +LLM-capability terms (stagnation escape + difficulty weighting)
+# Builds on step 4. Adds the two capability-shaping terms that target what the
+# LLM can do that gradient/SA/CMA-ES cannot.
+#
+# stagnation_escape (κ=0.30): bonus for breaking a FOS plateau by switching
+#   action class — detects local-search traps §4.3.
+# difficulty_weighted (λ=0.50): scales the base reward by initial-state
+#   difficulty d(s₀) = max(0, −Φ(s₀)) / difficulty_scale, so hard starts
+#   contribute proportionally stronger gradient signal §4.2.
+#
+# Critical experiment: if no advantage gap appears vs. step 4 on the
+# hard-init/OOD slice, the LLM is not using priors. Diagnose before step 6.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env
+  tree_advantage: 1.0           # group-relative Φ advantage
+  macro_completion: 0.05        # §2.3 β₂
+  stagnation_escape: 0.30       # §4.3 κ
+  difficulty_weighted: 0.30     # §4.2 λ=0.5 inside the reward class
+
+cost_fn: composite
+cost_weights:
+  dead_end_avoidance: 0.20      # §2.4 ξ
+  constraint_violation: 1.0
+  token_budget: 0.10
+
+cost_coef: 0.1
+
+use_tree_expansion: true
+tree_expansion:
+  depth: 1
+  branching: 5
+  deeper_branching: 3
+  continuation: greedy
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99

@@ -1,0 +1,6 @@
+# Mistral-Small-24B-Instruct-2501 — retained for 1x H100 compatibility.
+# Newer official open-weight family: Mistral Small 4 (119B, March 16, 2026).
+defaults:
+  - base
+model_name_or_path: mistralai/Mistral-Small-24B-Instruct-2501
+thinking_mode: false

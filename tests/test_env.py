@@ -10,14 +10,14 @@ Run with: pytest tests/test_env.py -v
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, "/ocean/projects/mch250030p/wxu7/DesignBench")
 
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from llm_finetune.envs.truss_env import TrussRolloutEnv, parse_grammar_action
-
 
 # ── Grammar action parsing ────────────────────────────────────────────────────
 
@@ -58,6 +58,11 @@ SCALE_PARAM(3, radius, 1.541)"""
     assert result == "SCALE_PARAM(3, radius, 1.541)"
 
 
+def test_parse_grammar_action_rejects_semantic_placeholders():
+    assert parse_grammar_action("SCALE_MULTI_PARAM([ids], [param:factor, ...])") is None
+    assert parse_grammar_action("SCALE_MULTI_PARAM([0-11], [r:1.1, t:1.1])") is None
+
+
 # ── TrussRolloutEnv initialization ────────────────────────────────────────────
 
 def test_env_initialization():
@@ -89,7 +94,6 @@ def test_env_split_completion_single():
 
 try:
     sys.path.insert(0, "/ocean/projects/mch250030p/wxu7/DesignBench")
-    from validation.truss_executor import load_truss_from_problem
     DESIGNBENCH_AVAILABLE = True
 except Exception:
     DESIGNBENCH_AVAILABLE = False

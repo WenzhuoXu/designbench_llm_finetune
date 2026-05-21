@@ -7,22 +7,22 @@ Many tests use mock tokenizers to avoid requiring model downloads.
 Run with: pytest tests/test_data.py -v
 """
 
-import sys
 import json
+import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
-import torch
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+import torch
+
+from llm_finetune.data.collators import DataCollatorForRL, DataCollatorForSFT
 from llm_finetune.data.processors.chat_formatter import ChatFormatter, ThinkingMode
 from llm_finetune.data.processors.mcts_processor import MCTSProcessor, MCTSSample
-from llm_finetune.data.collators import DataCollatorForSFT, DataCollatorForRL
-from llm_finetune.training.sft.targets import FullSequenceTarget
-
+from llm_finetune.data.processors.sft_jsonl_processor import SFTJsonlProcessor
+from llm_finetune.training.sft.targets import FullSequenceTarget, GoldCurriculumWarmstartTarget
 
 # ── Mock tokenizer ────────────────────────────────────────────────────────────
 
@@ -34,7 +34,9 @@ def make_tokenizer():
     tok.pad_token = "<pad>"
     tok.eos_token = "</s>"
     # apply_chat_template returns simple token IDs
-    tok.apply_chat_template.side_effect = lambda msgs, **kwargs: list(range(10, 10 + len(msgs) * 5))
+    tok.apply_chat_template.side_effect = (
+        lambda conversation=None, **kwargs: list(range(10, 10 + len(conversation or []) * 5))
+    )
     tok.decode.side_effect = lambda ids, **kwargs: "text " * len(ids)
     tok.convert_tokens_to_ids.return_value = 999
     tok.unk_token_id = 999
@@ -45,12 +47,12 @@ def make_tokenizer():
 
 def test_chat_formatter_from_model_id_qwen3():
     tok = make_tokenizer()
-    formatter = ChatFormatter.from_model_id("Qwen/Qwen3-14B", tok)
+    formatter = ChatFormatter.from_model_id("Qwen/Qwen3-30B-A3B-Thinking-2507", tok)
     assert formatter.thinking_mode == ThinkingMode.QWEN3
 
 def test_chat_formatter_from_model_id_deepseek():
     tok = make_tokenizer()
-    formatter = ChatFormatter.from_model_id("deepseek-ai/DeepSeek-R1-Distill-Qwen-14B", tok)
+    formatter = ChatFormatter.from_model_id("deepseek-ai/DeepSeek-R1-0528", tok)
     assert formatter.thinking_mode == ThinkingMode.DEEPSEEK_R1
 
 def test_chat_formatter_from_model_id_llama():
@@ -85,8 +87,16 @@ def test_chat_formatter_thinking_action_none():
 
 def test_chat_formatter_thinking_extraction():
     tok = make_tokenizer()
-    formatter = ChatFormatter.from_model_id("Qwen/Qwen3-14B", tok)
+    formatter = ChatFormatter.from_model_id("Qwen/Qwen3-30B-A3B-Thinking-2507", tok)
     text = "<think>I should scale member 3</think>\nSCALE_PARAM(3, radius, 1.2)"
+    thinking, action = formatter.extract_thinking(text)
+    assert "scale member 3" in thinking
+    assert action == "SCALE_PARAM(3, radius, 1.2)"
+
+def test_chat_formatter_thinking_extraction_qwen2507_without_open_tag():
+    tok = make_tokenizer()
+    formatter = ChatFormatter.from_model_id("Qwen/Qwen3-30B-A3B-Thinking-2507", tok)
+    text = "I should scale member 3</think>\nSCALE_PARAM(3, radius, 1.2)"
     thinking, action = formatter.extract_thinking(text)
     assert "scale member 3" in thinking
     assert action == "SCALE_PARAM(3, radius, 1.2)"
@@ -205,6 +215,41 @@ def test_collator_sft_pad_to_multiple():
     ]
     batch = collator(features)
     assert batch["input_ids"].shape[1] % 8 == 0
+
+
+def test_sft_processor_expands_gold_turn_slices():
+    tok = make_tokenizer()
+    formatter = ChatFormatter.from_model_id("Qwen/Qwen2.5-14B-Instruct", tok)
+    processor = SFTJsonlProcessor(
+        tokenizer=tok,
+        formatter=formatter,
+        target=GoldCurriculumWarmstartTarget(curriculum_stage=1),
+    )
+    raw = {
+        "problem_id": "p0",
+        "trace_id": "t0",
+        "trace_quality": 1.0,
+        "messages": [
+            {"role": "system", "content": "PROBLEM"},
+            {"role": "system", "content": "STATE"},
+            {
+                "role": "assistant",
+                "content": "<think>Modification: X\nAction: SCALE_PARAM(1, t, 1.1)</think>",
+            },
+            {"role": "system", "content": "RESULT: INFEASIBLE"},
+            {
+                "role": "assistant",
+                "content": "<think>Modification: Y\nAction: SCALE_PARAM(2, t, 1.2)</think>",
+            },
+        ],
+    }
+
+    examples = processor._process_example(raw)
+    assert examples is not None
+    assert len(examples) == 2
+    assert examples[0]["step_index"] == 0
+    assert examples[1]["step_index"] == 1
+    assert examples[0]["gold_stage"] == "action_only"
 
 
 # ── DataCollatorForRL tests ───────────────────────────────────────────────────

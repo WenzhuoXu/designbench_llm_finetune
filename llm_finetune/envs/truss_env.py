@@ -29,30 +29,24 @@ Usage:
 from __future__ import annotations
 
 import logging
-import re
+import math
 import sys
-from concurrent.futures import ProcessPoolExecutor, TimeoutError, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+from llm_finetune.data.grammar import ACTION_PATTERN as COMBINED_PATTERN
+from llm_finetune.data.grammar import extract_action
 
 log = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from llm_finetune.training.rl.rewards import RolloutResult
+
 # DesignBench path for FEA imports
 DESIGNBENCH_PATH = Path("/ocean/projects/mch250030p/wxu7/DesignBench")
-
-# Grammar action regex patterns
-ACTION_PATTERNS = [
-    r"SCALE_MULTI_PARAM\s*\([^)]+\)",
-    r"SCALE_PARAM\s*\([^)]+\)",
-    r"ADD_MEMBER\s*\([^)]+\)",
-    r"MODIFY_PARAM\s*\([^)]+\)",
-    r"REMOVE_MEMBER\s*\([^)]+\)",
-    r"MOVE_JOINT\s*\([^)]+\)",
-]
-COMBINED_PATTERN = re.compile("|".join(ACTION_PATTERNS), re.IGNORECASE)
-
 
 @dataclass
 class StepResult:
@@ -338,12 +332,13 @@ class TrussRolloutEnv:
 
 
 def parse_grammar_action(text: str) -> Optional[str]:
-    """Extract the first grammar action from model output text.
+    """Extract the first semantically valid grammar action from model output text.
 
     Handles:
     - Text with <think>…</think> preamble
     - Multiple actions on separate lines
     - Actions embedded in longer text
+    - Invalid placeholders/ranges by returning None
 
     Args:
         text: Raw model output.
@@ -351,10 +346,7 @@ def parse_grammar_action(text: str) -> Optional[str]:
     Returns:
         First grammar action string, or None if none found.
     """
-    match = COMBINED_PATTERN.search(text)
-    if match:
-        return match.group(0).strip()
-    return None
+    return extract_action(text)
 
 
 # ── Worker functions (module-level for pickling) ──────────────────────────────
@@ -392,7 +384,58 @@ def _analyze_truss(truss, goals: dict) -> dict:
     """Run FEA and return state dict."""
     _ensure_path()
     from validation.truss_executor import analyze_truss
-    return analyze_truss(truss, goals)
+    return _sanitize_fea_state(analyze_truss(truss, goals), goals)
+
+
+def _finite_or_default(value: object, default: float) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return numeric if math.isfinite(numeric) else default
+
+
+def _sanitize_fea_state(state: dict, goals: dict) -> dict:
+    """Clamp non-finite FEA outputs into bounded, explicitly bad states.
+
+    DesignBench occasionally returns inf/nan for structurally invalid designs.
+    RL can tolerate bad rollouts, but not non-finite scalars in rewards.
+    """
+    clean = dict(state or {})
+    reasons: list[str] = []
+
+    max_mass = _finite_or_default((goals or {}).get("maximum_mass"), 0.0)
+    penalty_mass = max(max_mass * 10.0, 1.0) if max_mass > 0 else 1_000_000.0
+    mass = _finite_or_default(clean.get("mass"), penalty_mass)
+    if mass <= 0.0 or mass >= penalty_mass:
+        reasons.append("mass")
+        mass = penalty_mass
+    clean["mass"] = mass
+
+    fos_cap = 15.0
+    for key in ("fos_buckling", "fos_yielding"):
+        raw = clean.get(key)
+        value = _finite_or_default(raw, 0.0)
+        if value != raw or value < 0.0 or value > fos_cap:
+            reasons.append(key)
+        clean[key] = max(0.0, min(fos_cap, value))
+
+    max_deflection = _finite_or_default((goals or {}).get("maximum_deflection"), 0.01)
+    max_deflection = max(max_deflection, 1e-6)
+    deflection_cap = max_deflection * 100.0
+    deflection = _finite_or_default(clean.get("deflection"), deflection_cap)
+    if deflection < 0.0 or deflection > deflection_cap:
+        reasons.append("deflection")
+    clean["deflection"] = max(0.0, min(deflection_cap, deflection))
+
+    if reasons:
+        clean["is_feasible"] = False
+        clean["fea_sanitized"] = True
+        clean["fea_sanitize_reasons"] = sorted(set(reasons))
+    else:
+        clean.setdefault("fea_sanitized", False)
+
+    return clean
 
 
 def _execute_step_in_worker(
@@ -401,9 +444,9 @@ def _execute_step_in_worker(
     """Execute a single step in a worker process (picklable)."""
     _ensure_path()
     from validation.truss_executor import (
-        load_truss_from_problem,
-        execute_grammar_action,
         analyze_truss,
+        execute_grammar_action,
+        load_truss_from_problem,
     )
     # Rebuild truss from spec (stateless: re-apply all previous actions)
     truss = load_truss_from_problem(problem_spec)

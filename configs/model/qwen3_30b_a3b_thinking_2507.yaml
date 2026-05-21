@@ -1,0 +1,13 @@
+# Qwen3-30B-A3B-Thinking-2507 — newest official Qwen3 reasoning update
+# https://huggingface.co/Qwen/Qwen3-30B-A3B-Thinking-2507
+
+defaults:
+  - base
+
+model_name_or_path: Qwen/Qwen3-30B-A3B-Thinking-2507
+thinking_mode: true
+think_token: "<think>"
+device_map: auto
+
+# Qwen3-2507 no longer requires enable_thinking=True in apply_chat_template.
+# The chat template inserts the thinking prefix automatically.

@@ -24,18 +24,44 @@ Usage:
 from __future__ import annotations
 
 import logging
+import math
 import os
 from pathlib import Path
 from typing import Optional
 
-import torch
 from omegaconf import DictConfig
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
-from llm_finetune.training.rl.rewards import RewardFunction, RolloutResult, build_reward_from_config
 from llm_finetune.training.rl.costs import CostFunction, build_cost_from_config
+from llm_finetune.training.rl.rewards import RewardFunction, build_reward_from_config
 
 log = logging.getLogger(__name__)
+
+
+MAX_GRPO_REWARD_ABS = 10_000.0
+MAX_GRPO_COST = 100.0
+
+
+def _finite_float(value: object, default: float = 0.0) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return numeric if math.isfinite(numeric) else default
+
+
+def _bounded_scalar(
+    value: object,
+    *,
+    lower: float,
+    upper: float,
+    default: float,
+    label: str,
+) -> float:
+    numeric = _finite_float(value, default)
+    if numeric != value or numeric < lower or numeric > upper:
+        log.warning("%s was non-finite or out of bounds (%r); clamped", label, value)
+    return max(lower, min(upper, numeric))
 
 
 def build_grpo_trainer(
@@ -74,6 +100,8 @@ def build_grpo_trainer(
 
     rl_cfg = cfg.rl
     log_cfg = cfg.get("logging", {})
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    enable_wandb_reporting = bool(log_cfg.get("wandb_enabled", True)) and local_rank == 0
 
     # Build reward and cost functions
     if reward_fn is None:
@@ -120,15 +148,14 @@ def build_grpo_trainer(
 
     grpo_config = GRPOConfig(
         output_dir=str(output_dir),
-        # GRPO-specific
+        # GRPO-specific (TRL 1.0.0 names)
         num_generations=rl_cfg.get("group_size", 8),        # K rollouts per prompt
         temperature=rl_cfg.get("temperature", 0.8),
-        max_new_tokens=rl_cfg.get("max_new_tokens", 1024),
-        max_prompt_length=rl_cfg.get("max_prompt_length", 2048),
-        # KL regularization
-        kl_coef=rl_cfg.get("kl_coef", 0.04),
-        # Clipping (PPO-style)
-        cliprange=rl_cfg.get("clip_ratio", 0.2),
+        max_completion_length=rl_cfg.get("max_new_tokens", 1024),
+        # KL regularization (renamed kl_coef → beta in TRL 1.0)
+        beta=rl_cfg.get("kl_coef", 0.04),
+        # Clipping (renamed cliprange → epsilon in TRL 1.0)
+        epsilon=rl_cfg.get("clip_ratio", 0.2),
         # Batch configuration
         per_device_train_batch_size=rl_cfg.get("per_device_train_batch_size", 1),
         gradient_accumulation_steps=rl_cfg.get("gradient_accumulation_steps", 8),
@@ -144,16 +171,17 @@ def build_grpo_trainer(
         fp16=False,
         # Gradient clipping
         max_grad_norm=rl_cfg.get("max_grad_norm", 1.0),
-        # vLLM integration (TRL >= 0.12)
+        # vLLM integration — "server" mode: connect to our manually started VLLMServer (rank 0)
         use_vllm=use_vllm,
-        vllm_server_host=vllm_server_host if use_vllm else None,
-        vllm_server_port=vllm_server_port if use_vllm else None,
+        **({"vllm_mode": "server",
+            "vllm_server_host": vllm_server_host,
+            "vllm_server_port": vllm_server_port} if use_vllm else {}),
         # Checkpointing
         save_steps=rl_cfg.get("save_steps", 50),
         save_total_limit=rl_cfg.get("save_total_limit", 3),
         # Logging
         logging_steps=log_cfg.get("log_every_n_steps", 10),
-        report_to=["wandb"] if log_cfg.get("wandb_enabled", True) else ["none"],
+        report_to=["wandb"] if enable_wandb_reporting else ["none"],
         run_name=cfg.get("run_name", "designbench_grpo"),
         # Optimizer
         optim=rl_cfg.get("optimizer", "adamw_torch_fused"),
@@ -169,10 +197,10 @@ def build_grpo_trainer(
 
     callbacks = _build_grpo_callbacks(wandb_logger, local_logger, cfg)
 
+    # ref_model removed from TRL 1.0.0 constructor — created internally when beta != 0
     trainer = GRPOTrainer(
         model=model,
         processing_class=tokenizer,
-        ref_model=ref_model,
         reward_funcs=[reward_callable],
         args=grpo_config,
         train_dataset=train_dataset,
@@ -183,13 +211,111 @@ def build_grpo_trainer(
         f"GRPOTrainer built:\n"
         f"  reward_fn={reward_fn.name()}\n"
         f"  group_size={grpo_config.num_generations}\n"
-        f"  max_new_tokens={grpo_config.max_new_tokens}\n"
-        f"  kl_coef={grpo_config.kl_coef}\n"
-        f"  use_vllm={use_vllm}\n"
+        f"  max_completion_length={grpo_config.max_completion_length}\n"
+        f"  beta(kl)={grpo_config.beta}\n"
+        f"  vllm_mode={grpo_config.vllm_mode}\n"
         f"  output_dir={output_dir}"
     )
 
     return trainer
+
+
+def _compute_group_tree_advantages(
+    rollout_data: list,
+    problem_specs: list[dict],
+    rl_cfg: DictConfig,
+) -> list[float]:
+    """Group rollouts by problem_id and set tree_metrics["tree_advantage"].
+
+    Computes the group-relative Φ advantage within each GRPO rollout group:
+        tree_advantage_k = γ·Φ(s_H^k) − mean_j(γ·Φ(s_H^j))
+
+    This is the D=∞ trajectory-level analog of A^{(D,b)} from §3.1: the K
+    rollouts sampled by GRPO are the lookahead tree at the trajectory level.
+
+    Returns per-rollout phi_H values (for rho computation after reward scoring).
+    """
+    from collections import defaultdict
+
+    from llm_finetune.training.rl.posterior.potential import compute_potential
+
+    posterior = dict(rl_cfg.get("posterior", {})) if hasattr(rl_cfg.get("posterior", {}), "items") else {}
+    alpha = float(posterior.get("alpha", 5.0))
+    gamma = float(posterior.get("gamma", 0.99))
+
+    # Group rollout indices by problem_id
+    groups: dict[str, list[int]] = defaultdict(list)
+    for i, rollout in enumerate(rollout_data):
+        if rollout is not None:
+            groups[rollout.problem_id].append(i)
+
+    phi_H_per_rollout: list[float] = [0.0] * len(rollout_data)
+
+    for problem_id, indices in groups.items():
+        first_rollout = rollout_data[indices[0]]
+        initial_mass = _finite_float((first_rollout.initial_state or {}).get("mass"), 1.0)
+
+        phi_values: list[float] = []
+        for idx in indices:
+            r = rollout_data[idx]
+            phi = _bounded_scalar(
+                compute_potential(
+                    r.final_state or {},
+                    initial_mass=initial_mass,
+                    alpha=alpha,
+                ),
+                lower=-MAX_GRPO_REWARD_ABS,
+                upper=MAX_GRPO_REWARD_ABS,
+                default=-MAX_GRPO_REWARD_ABS,
+                label=f"phi_H[{idx}]",
+            )
+            phi_values.append(phi)
+
+        mean_phi = sum(phi_values) / len(phi_values)
+        for idx, phi_H in zip(indices, phi_values):
+            tree_advantage = _bounded_scalar(
+                gamma * phi_H - mean_phi,
+                lower=-MAX_GRPO_REWARD_ABS,
+                upper=MAX_GRPO_REWARD_ABS,
+                default=0.0,
+                label=f"tree_advantage[{idx}]",
+            )
+            rollout_data[idx].tree_metrics["tree_advantage"] = tree_advantage
+            rollout_data[idx].tree_metrics["phi_H"] = phi_H
+            phi_H_per_rollout[idx] = phi_H
+
+    return phi_H_per_rollout
+
+
+def _compute_rho_per_group(
+    rollout_data: list,
+    rewards: list[float],
+    phi_H_per_rollout: list[float],
+) -> float:
+    """Compute mean rho_tree_agreement across all rollout groups in this batch.
+
+    rho for a group = 1 if argmax(φ_H) == argmax(total_reward), else 0.
+    This is the training-time proxy for ρ(t) from §3.6: does the composite
+    reward rank the same trajectory as the Φ criterion?
+    """
+    from collections import defaultdict
+    groups: dict[str, list[int]] = defaultdict(list)
+    for i, rollout in enumerate(rollout_data):
+        if rollout is not None:
+            groups[rollout.problem_id].append(i)
+
+    if not groups:
+        return 0.0
+
+    rho_values: list[int] = []
+    for indices in groups.values():
+        if len(indices) < 2:
+            continue
+        best_phi_idx = max(indices, key=lambda i: phi_H_per_rollout[i])
+        best_reward_idx = max(indices, key=lambda i: rewards[i])
+        rho_values.append(int(best_phi_idx == best_reward_idx))
+
+    return sum(rho_values) / len(rho_values) if rho_values else 0.0
 
 
 def _build_reward_callable(
@@ -205,59 +331,150 @@ def _build_reward_callable(
         reward_fn(completions: list[str], prompts: list[str], **kwargs) → list[float]
 
     This wrapper:
-    1. Parses completions to extract grammar actions (handling thinking blocks)
-    2. Executes actions through TrussRolloutEnv (parallel with multiprocessing)
-    3. Computes rewards using the configured RewardFunction
-    4. Logs rollout results to W&B Tables
+    1. Executes completions through TrussRolloutEnv (parallel FEA)
+    2. Optionally computes group-relative tree advantages (use_tree_expansion=true)
+    3. Computes rewards + cost deductions
+    4. Logs per-component mean+std for rewards and costs, plus rho(t)
     """
-    from llm_finetune.data.processors.chat_formatter import ChatFormatter
+    import numpy as _np
+
+    def _mean(vs): return float(_np.mean(vs))
+    def _std(vs): return float(_np.std(vs, ddof=1)) if len(vs) > 1 else 0.0
+
+    _call_count = [0]  # mutable counter shared across calls
+    use_tree_expansion = bool(rl_cfg.get("use_tree_expansion", False))
+    cost_coef = float(rl_cfg.get("cost_coef", 0.1))
 
     def compute_rewards(
         completions: list[str],
         prompts: list[str],
-        problem_specs: Optional[list[dict]] = None,
         **kwargs,
     ) -> list[float]:
-        rewards = []
-        rollout_data = []
-
         n = len(completions)
-        if problem_specs is None:
-            problem_specs = [{}] * n
+        problem_specs: list[dict] = kwargs.get("problem_spec", [{}] * n)
 
-        for i, (completion, prompt, spec) in enumerate(
-            zip(completions, prompts, problem_specs)
-        ):
+        # ── Phase 1: execute all rollouts ──────────────────────────────────
+        rollout_data: list = []
+        for i, (completion, spec) in enumerate(zip(completions, problem_specs)):
             try:
-                # Execute rollout through TrussRolloutEnv
-                rollout = env.run_completion(
-                    problem_spec=spec,
-                    completion=completion,
-                )
-                # Compute reward
-                reward = reward_fn.compute(rollout, spec)
-                # Subtract cost if configured
-                if cost_fn is not None:
-                    cost = cost_fn.compute(rollout, spec)
-                    reward -= rl_cfg.get("cost_coef", 0.1) * cost
-                rewards.append(reward)
+                rollout = env.run_completion(problem_spec=spec, completion=completion)
                 rollout_data.append(rollout)
+            except Exception as e:
+                log.warning(f"Rollout {i} failed: {e}")
+                rollout_data.append(None)
+
+        # ── Phase 2: group-relative tree advantages ────────────────────────
+        phi_H_per_rollout: list[float] = [0.0] * n
+        if use_tree_expansion:
+            phi_H_per_rollout = _compute_group_tree_advantages(
+                rollout_data, problem_specs, rl_cfg
+            )
+
+        # ── Phase 3: reward + cost computation ────────────────────────────
+        rewards: list[float] = []
+        reward_breakdowns: list[dict] = []
+        cost_breakdowns: list[dict] = []
+
+        for i, (rollout, spec) in enumerate(zip(rollout_data, problem_specs)):
+            if rollout is None:
+                rewards.append(0.0)
+                continue
+            try:
+                r = _bounded_scalar(
+                    reward_fn.compute(rollout, spec),
+                    lower=-MAX_GRPO_REWARD_ABS,
+                    upper=MAX_GRPO_REWARD_ABS,
+                    default=0.0,
+                    label=f"reward[{i}]",
+                )
+                if hasattr(reward_fn, "get_breakdown"):
+                    try:
+                        reward_breakdowns.append(reward_fn.get_breakdown(rollout, spec))
+                    except Exception:
+                        pass
+                if cost_fn is not None:
+                    c = _bounded_scalar(
+                        cost_fn.compute(rollout, spec),
+                        lower=0.0,
+                        upper=MAX_GRPO_COST,
+                        default=MAX_GRPO_COST,
+                        label=f"cost[{i}]",
+                    )
+                    r -= cost_coef * c
+                    if hasattr(cost_fn, "get_breakdown"):
+                        try:
+                            cost_breakdowns.append(cost_fn.get_breakdown(rollout, spec))
+                        except Exception:
+                            pass
+                rewards.append(
+                    _bounded_scalar(
+                        r,
+                        lower=-MAX_GRPO_REWARD_ABS,
+                        upper=MAX_GRPO_REWARD_ABS,
+                        default=0.0,
+                        label=f"final_reward[{i}]",
+                    )
+                )
             except Exception as e:
                 log.warning(f"Reward computation failed for rollout {i}: {e}")
                 rewards.append(0.0)
-                rollout_data.append(None)
 
-        # Log rollout table to W&B
-        if wandb_logger is not None and wandb_logger.is_active and rollout_data:
-            valid_rollouts = [(r, s) for r, s in zip(rollout_data, problem_specs)
-                             if r is not None]
+        # ── Phase 4: rho(t) proxy ──────────────────────────────────────────
+        rho = _compute_rho_per_group(rollout_data, rewards, phi_H_per_rollout)
+
+        # ── Phase 5: logging ───────────────────────────────────────────────
+        _call_count[0] += 1
+        step = _call_count[0]
+
+        if wandb_logger is not None and wandb_logger.is_active:
+            valid_rollouts = [r for r in rollout_data if r is not None]
+            valid_rewards = [rewards[i] for i, r in enumerate(rollout_data) if r is not None]
+
             if valid_rollouts:
-                rollouts, specs = zip(*valid_rollouts)
                 wandb_logger.log_rollout_table(
-                    rollouts=list(rollouts),
-                    rewards=rewards[:len(rollouts)],
+                    rollouts=valid_rollouts,
+                    rewards=valid_rewards,
                     cost_fn=cost_fn,
                 )
+
+            # Per-component reward breakdown: mean + std across all rollouts
+            if reward_breakdowns:
+                merged: dict[str, list[float]] = {}
+                for bd in reward_breakdowns:
+                    for k, v in bd.items():
+                        merged.setdefault(k, []).append(
+                            _bounded_scalar(
+                                v,
+                                lower=-MAX_GRPO_REWARD_ABS,
+                                upper=MAX_GRPO_REWARD_ABS,
+                                default=0.0,
+                                label=f"reward_breakdown.{k}",
+                            )
+                        )
+                means = {k: _mean(vs) for k, vs in merged.items()}
+                stds = {k: _std(vs) for k, vs in merged.items()}
+                wandb_logger.log_reward_breakdown(step, means, stds)
+
+            # Per-component cost breakdown: mean + std
+            if cost_breakdowns:
+                merged_c: dict[str, list[float]] = {}
+                for bd in cost_breakdowns:
+                    for k, v in bd.items():
+                        merged_c.setdefault(k, []).append(
+                            _bounded_scalar(
+                                v,
+                                lower=0.0,
+                                upper=MAX_GRPO_COST,
+                                default=MAX_GRPO_COST,
+                                label=f"cost_breakdown.{k}",
+                            )
+                        )
+                cost_means = {k: _mean(vs) for k, vs in merged_c.items()}
+                cost_stds = {k: _std(vs) for k, vs in merged_c.items()}
+                wandb_logger.log_cost_breakdown(step, cost_means, cost_stds)
+
+            # rho(t) training proxy
+            wandb_logger.log_rho(step, rho)
 
         return rewards
 

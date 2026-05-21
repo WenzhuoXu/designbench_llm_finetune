@@ -1,0 +1,8 @@
+# Gemma 4 26B A4B IT — newest official Gemma variant in the 20-30B range
+# https://huggingface.co/google/gemma-4-26B-A4B-it
+
+defaults:
+  - base
+
+model_name_or_path: google/gemma-4-26B-A4B-it
+thinking_mode: false

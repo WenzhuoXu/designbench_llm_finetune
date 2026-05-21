@@ -1,0 +1,21 @@
+# §6.3 Step 1a — Baseline: r_env alone, α=2
+# r_env = γΦ(s') − Φ(s) is the only reward signal. No tree expansion.
+# Sweep point: low α — feasibility constraint is lightly penalised.
+# Compare with 01b (α=5) and 01c (α=10) to confirm monotone feasibility convergence.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env only
+
+cost_fn: null                   # no cost penalty at baseline
+
+use_tree_expansion: false
+
+posterior:
+  alpha: 2.0                    # Lagrange multiplier — low
+  gamma: 0.99
+
+# inherit group_size=8, max_steps=20, n_env_workers=32 from grpo_truss

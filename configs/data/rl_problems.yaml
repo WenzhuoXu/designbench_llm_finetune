@@ -1,0 +1,11 @@
+# GRPO RL training data — DesignBench problem instances
+#
+# Each problem is presented repeat times per epoch so the policy sees
+# the same structural problem with different rollout samples (temperature
+# sampling gives diverse completions each time).
+#
+# With 131 problems × repeat=5 = 655 prompts per epoch.
+# At max_steps_train=500 this gives well over 1 full cycle before stopping.
+
+problems_dir: /ocean/projects/mch250030p/wxu7/DesignBench/data/problems
+repeat: 5

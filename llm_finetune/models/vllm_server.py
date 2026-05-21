@@ -73,6 +73,7 @@ class VLLMServer:
         enable_prefix_caching: bool = True,
         trust_remote_code: bool = True,
         served_model_name: Optional[str] = None,
+        enable_lora: bool = False,
     ):
         self.model_path = model_path
         self.tensor_parallel_size = tensor_parallel_size
@@ -83,6 +84,7 @@ class VLLMServer:
         self.enable_prefix_caching = enable_prefix_caching
         self.trust_remote_code = trust_remote_code
         self.served_model_name = served_model_name or "actor"
+        self.enable_lora = enable_lora
         self._process: Optional[subprocess.Popen] = None
         self._client = None
 
@@ -99,13 +101,21 @@ class VLLMServer:
         cmd = self._build_command()
         log.info(f"Starting vLLM server: {' '.join(cmd)}")
 
+        # Write vLLM stdout+stderr to a log file alongside the SLURM logs so
+        # startup errors (OOM, port conflicts, driver issues) are always visible.
+        log_dir = os.environ.get("SLURM_SUBMIT_DIR", ".")
+        job_id = os.environ.get("SLURM_JOB_ID", "local")
+        vllm_log_path = os.path.join(log_dir, "logs", "slurm", f"vllm_{job_id}.log")
+        os.makedirs(os.path.dirname(vllm_log_path), exist_ok=True)
+        self._log_file = open(vllm_log_path, "w")  # noqa: WPS515 — closed in stop()
+        log.info(f"vLLM server log: {vllm_log_path}")
+
         env = os.environ.copy()
         self._process = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stdout=self._log_file,
+            stderr=self._log_file,
             env=env,
-            text=True,
         )
         log.info(f"vLLM server PID: {self._process.pid}")
 
@@ -123,6 +133,9 @@ class VLLMServer:
                 self._process.kill()
             self._process = None
             self._client = None
+            if hasattr(self, "_log_file") and self._log_file is not None:
+                self._log_file.close()
+                self._log_file = None
             log.info("vLLM server stopped")
 
     def is_alive(self) -> bool:
@@ -236,6 +249,8 @@ class VLLMServer:
             cmd.append("--enable-prefix-caching")
         if self.trust_remote_code:
             cmd.append("--trust-remote-code")
+        if self.enable_lora:
+            cmd.append("--enable-lora")
         return cmd
 
     def _wait_until_ready(self) -> None:

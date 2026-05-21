@@ -1,19 +1,18 @@
 #!/bin/bash
 #SBATCH --job-name=format_compliance
-#SBATCH --partition=GPU
+#SBATCH --partition=GPU-shared
 #SBATCH --account=mch250030p
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=8
-#SBATCH --gpus-per-node=h100-80:8
-#SBATCH --cpus-per-task=13
+#SBATCH --gres=gpu:h100-80:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
 #SBATCH --time=00:30:00
 #SBATCH --output=logs/slurm/%x_%j.out
 #SBATCH --error=logs/slurm/%x_%j.err
 #SBATCH --qos=gpu
 
 # ============================================================
-# Warmstart format compliance check — runs model.generate() on
-# dev-set prompts and measures <action>/<think>/<answer> tag rates.
+# Gold warmstart compliance check — runs model.generate() on
+# dev-set prompts and enforces strict semantic action gates.
 # Saves per-sample JSON for downstream analysis and plotting.
 #
 # Usage:
@@ -23,7 +22,7 @@
 # Optional overrides:
 #   N=100                       # number of dev prompts (default: 50)
 #   MAX_NEW_TOKENS=512          # generation budget (default: 256)
-#   THRESHOLD=0.90              # GRPO-readiness threshold (default: 0.90)
+#   THRESHOLD=0.95              # semantic compliance threshold (default: 0.95)
 # ============================================================
 
 set -euo pipefail
@@ -50,7 +49,11 @@ export CUDA_DEVICE_ORDER=PCI_BUS_ID
 CHECKPOINT="${CHECKPOINT:-checkpoints/sft/warmstart_qwen3_14b_39083858/final}"
 N="${N:-50}"
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-256}"
-THRESHOLD="${THRESHOLD:-0.90}"
+THRESHOLD="${THRESHOLD:-0.95}"
+SEMANTIC_COMPLIANCE_MIN="${SEMANTIC_COMPLIANCE_MIN:-0.95}"
+EXECUTABLE_ACTION_MIN="${EXECUTABLE_ACTION_MIN:-0.95}"
+SINGLE_ACTION_MIN="${SINGLE_ACTION_MIN:-0.98}"
+ANSWER_SPAM_MAX="${ANSWER_SPAM_MAX:-0.02}"
 
 # Derive run name from checkpoint path
 CKPT_NAME=$(basename "$(dirname "$CHECKPOINT")")
@@ -64,6 +67,10 @@ python scripts/check_format_compliance.py \
   --n "$N" \
   --max-new-tokens "$MAX_NEW_TOKENS" \
   --threshold "$THRESHOLD" \
+  --semantic-compliance-min "$SEMANTIC_COMPLIANCE_MIN" \
+  --executable-action-min "$EXECUTABLE_ACTION_MIN" \
+  --single-action-min "$SINGLE_ACTION_MIN" \
+  --answer-spam-max "$ANSWER_SPAM_MAX" \
   --save-results "$RESULTS_FILE"
 
 echo "Results saved to: $RESULTS_FILE"

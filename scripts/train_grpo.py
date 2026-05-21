@@ -31,6 +31,19 @@ import os
 import sys
 from pathlib import Path
 
+# PyTorch 2.4.x compatibility: FSDPModule not yet in public torch.distributed.fsdp API.
+# TRL 1.0.0 imports it unconditionally; inject it from the private path before TRL loads.
+try:
+    from torch.distributed.fsdp import FSDPModule as _  # noqa: F401
+except ImportError:
+    try:
+        import torch.distributed.fsdp as _fsdp_mod
+        from torch.distributed._composable.fsdp import FSDPModule as _FSDPModule
+
+        _fsdp_mod.FSDPModule = _FSDPModule
+    except ImportError:
+        pass
+
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
@@ -55,26 +68,31 @@ def main(cfg: DictConfig) -> None:
     from llm_finetune.logging.wandb_logger import build_wandb_logger
 
     run_name = cfg.get("run_name", "grpo_run")
-    local_logger = LocalLogger(
-        run_name=run_name,
-        log_dir=cfg.get("logging", {}).get("log_dir", "logs"),
-        log_every_n_steps=cfg.get("logging", {}).get("log_every_n_steps", 10),
-    )
-    local_logger.start()
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    is_main_process = local_rank == 0
+
+    local_logger = None
+    if is_main_process:
+        local_logger = LocalLogger(
+            run_name=run_name,
+            log_dir=cfg.get("logging", {}).get("log_dir", "logs"),
+            log_every_n_steps=cfg.get("logging", {}).get("log_every_n_steps", 10),
+        )
+        local_logger.start()
 
     wandb_logger = build_wandb_logger(cfg, run_name=run_name)
-    if cfg.get("logging", {}).get("wandb_enabled", True):
+    if is_main_process and cfg.get("logging", {}).get("wandb_enabled", True):
         wandb_logger.init()
 
     try:
         _run_grpo_training(cfg, local_logger, wandb_logger, run_name)
     finally:
         wandb_logger.finish()
-        local_logger.stop()
+        if local_logger is not None:
+            local_logger.stop()
 
 
 def _run_grpo_training(cfg, local_logger, wandb_logger, run_name):
-    import torch
     from llm_finetune.data.datasets.rl_dataset import RLPromptDataset
     from llm_finetune.data.processors.chat_formatter import ChatFormatter
     from llm_finetune.envs.truss_env import TrussRolloutEnv
@@ -139,17 +157,19 @@ def _run_grpo_training(cfg, local_logger, wandb_logger, run_name):
         model_path = cfg.model.model_name_or_path
         cache_dir = cfg.model.get("cache_dir", "/ocean/projects/mch250030p/wxu7/hf_models")
         # Use local cache if available, else HF model ID
-        local_model_path = Path(cache_dir) / "models--" + model_path.replace("/", "--")
+        local_model_path = Path(cache_dir) / ("models--" + model_path.replace("/", "--"))
         if not local_model_path.exists():
             local_model_path = model_path  # use HF ID
 
-        log.info(f"Starting vLLM server (tensor_parallel={world_size}) ...")
+        use_lora = cfg.model.get("use_lora", False)
+        log.info(f"Starting vLLM server (tensor_parallel={world_size}, enable_lora={use_lora}) ...")
         vllm_server = VLLMServer(
             model_path=str(local_model_path),
             tensor_parallel_size=world_size,
             port=rl_cfg.get("vllm_server_port", 8000),
             gpu_memory_utilization=0.85,
             dtype="bfloat16",
+            enable_lora=use_lora,
         )
         vllm_server.start(wait_ready=True)
         log.info("vLLM server ready")
@@ -181,7 +201,8 @@ def _run_grpo_training(cfg, local_logger, wandb_logger, run_name):
             trainer.save_model(str(final_ckpt))
             tokenizer.save_pretrained(str(final_ckpt))
             log.info(f"Final GRPO checkpoint saved to {final_ckpt}")
-            wandb_logger.save_artifact(str(final_ckpt), f"grpo-{run_name}-final", "model")
+            if wandb_logger is not None and wandb_logger.is_active:
+                wandb_logger.save_artifact(str(final_ckpt), f"grpo-{run_name}-final", "model")
     finally:
         if vllm_server is not None:
             vllm_server.stop()

@@ -25,12 +25,29 @@ Usage:
 from __future__ import annotations
 
 import logging
+import math
 from abc import ABC, abstractmethod
 from typing import Optional
 
 from llm_finetune.training.rl.rewards import RolloutResult
 
 log = logging.getLogger(__name__)
+
+
+MAX_COST_VALUE = 100.0
+
+
+def _finite_float(value: object, default: float = 0.0) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return numeric if math.isfinite(numeric) else default
+
+
+def _bounded_cost(value: object, *, max_value: float = MAX_COST_VALUE) -> float:
+    numeric = _finite_float(value, max_value)
+    return max(0.0, min(float(max_value), numeric))
 
 
 class CostFunction(ABC):
@@ -99,10 +116,11 @@ class TokenBudgetCost(CostFunction):
         if not rollout.token_counts:
             return 0.0
 
-        mean_tokens = sum(rollout.token_counts) / len(rollout.token_counts)
+        token_counts = [_finite_float(t, 0.0) for t in rollout.token_counts]
+        mean_tokens = sum(token_counts) / len(token_counts)
         budget = self.max_tokens_per_step
         excess = max(0.0, mean_tokens - budget)
-        return excess / budget  # normalized cost in [0, ∞)
+        return _bounded_cost(excess / max(budget, 1))  # normalized cost in [0, max]
 
     def name(self) -> str:
         return "token_budget"
@@ -129,10 +147,12 @@ class ConstraintViolationCost(CostFunction):
         fos_weight: float = 1.0,
         mass_weight: float = 0.5,
         quadratic: bool = True,
+        max_cost: float = 10.0,
     ):
         self.fos_weight = fos_weight
         self.mass_weight = mass_weight
         self.quadratic = quadratic
+        self.max_cost = max_cost
 
     def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
         if not rollout.final_state:
@@ -142,8 +162,8 @@ class ConstraintViolationCost(CostFunction):
         total_cost = 0.0
 
         # FOS constraints
-        fos_b = float(final.get("fos_buckling", 0.0) or 0.0)
-        fos_y = float(final.get("fos_yielding", 0.0) or 0.0)
+        fos_b = max(0.0, _finite_float(final.get("fos_buckling"), 0.0))
+        fos_y = max(0.0, _finite_float(final.get("fos_yielding"), 0.0))
 
         for fos in [fos_b, fos_y]:
             if fos < self.TARGET_FOS:
@@ -153,17 +173,20 @@ class ConstraintViolationCost(CostFunction):
                 total_cost += self.fos_weight * violation / 2  # divide by 2 (two FOS constraints)
 
         # Mass constraint
-        goal_mass = float(
-            problem_spec.get("goals", {}).get("maximum_mass", float("inf"))
+        goal_mass = _finite_float(
+            problem_spec.get("goals", {}).get("maximum_mass"), float("inf")
         )
-        final_mass = float(final.get("mass", 0.0) or 0.0)
-        if goal_mass < float("inf") and final_mass > goal_mass:
+        final_mass_raw = final.get("mass", 0.0)
+        final_mass = _finite_float(final_mass_raw, float("inf"))
+        if not math.isfinite(final_mass):
+            total_cost += self.mass_weight * self.max_cost
+        elif math.isfinite(goal_mass) and goal_mass > 0 and final_mass > goal_mass:
             mass_violation = (final_mass - goal_mass) / goal_mass
             if self.quadratic:
                 mass_violation = mass_violation ** 2
-            total_cost += self.mass_weight * mass_violation
+            total_cost += self.mass_weight * min(self.max_cost, mass_violation)
 
-        return total_cost
+        return _bounded_cost(total_cost, max_value=self.max_cost)
 
     def name(self) -> str:
         return "constraint_violation"
@@ -187,7 +210,7 @@ class ComputationalCost(CostFunction):
 
     def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
         n_calls = rollout.n_fea_calls or len(rollout.action_sequence)
-        return min(1.0, n_calls / self.max_fea_calls)
+        return min(1.0, _finite_float(n_calls, 0.0) / max(self.max_fea_calls, 1))
 
     def name(self) -> str:
         return "computational"
@@ -239,17 +262,67 @@ class CompositeCost(CostFunction):
     def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
         total = 0.0
         for name, component in self.components.items():
-            total += self.weights.get(name, 0.0) * component.compute(rollout, problem_spec)
-        return total
+            weight = _finite_float(self.weights.get(name, 0.0), 0.0)
+            total += weight * _bounded_cost(component.compute(rollout, problem_spec))
+        return _bounded_cost(total)
 
     def get_breakdown(self, rollout: RolloutResult, problem_spec: dict) -> dict[str, float]:
         return {
-            name: component.compute(rollout, problem_spec)
+            name: _bounded_cost(component.compute(rollout, problem_spec))
             for name, component in self.components.items()
         }
 
     def name(self) -> str:
         return "composite_cost"
+
+
+class DeadEndAvoidanceCost(CostFunction):
+    """Penalty for entering a structural dead-end configuration (§2.4).
+
+    Detects dead-ends via two simultaneous signals:
+      1. Monotone-worsening min-FOS over the last window_size steps.
+      2. All recent actions are parameter-only (SCALE_PARAM / MODIFY_PARAM),
+         indicating the policy is stuck in a local-search loop.
+
+    Self-gating: returns 0.0 when neither condition holds, so it is silent on
+    states with no matching dead-end signature.
+
+    Config: cost_fn: dead_end_avoidance
+    Params: dead_end_cost (default 0.20 per §6.2 ξ), window_size (3).
+    """
+
+    def __init__(self, dead_end_cost: float = 0.20, window_size: int = 3) -> None:
+        self.dead_end_cost = dead_end_cost
+        self.window_size = window_size
+
+    def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
+        history = rollout.state_history
+        actions = rollout.action_sequence
+        if len(history) < self.window_size + 1 or len(actions) < self.window_size:
+            return 0.0
+
+        def _min_fos(s: dict) -> float:
+            return min(
+                max(0.0, _finite_float(s.get("fos_buckling"), 0.0)),
+                max(0.0, _finite_float(s.get("fos_yielding"), 0.0)),
+            )
+
+        window_states = history[-(self.window_size + 1):]
+        fos_vals = [_min_fos(s) for s in window_states]
+        monotone_worse = all(fos_vals[i] >= fos_vals[i + 1] for i in range(len(fos_vals) - 1))
+        if not monotone_worse:
+            return 0.0
+
+        recent_actions = actions[-self.window_size:]
+        _local = {"SCALE_PARAM", "SCALE_MULTI_PARAM", "MODIFY_PARAM"}
+        all_local = all(
+            any(a.upper().startswith(p) for p in _local)
+            for a in recent_actions
+        )
+        return self.dead_end_cost if all_local else 0.0
+
+    def name(self) -> str:
+        return "dead_end_avoidance"
 
 
 # ── Registry ──────────────────────────────────────────────────────────────────
@@ -259,6 +332,7 @@ COST_REGISTRY: dict[str, type[CostFunction]] = {
     "computational": ComputationalCost,
     "repetition": RepetitionCost,
     "composite": CompositeCost,
+    "dead_end_avoidance": DeadEndAvoidanceCost,
 }
 
 

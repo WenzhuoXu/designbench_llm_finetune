@@ -2,8 +2,8 @@
 Chat template formatting for all DesignBench target models.
 
 Handles model-specific chat templates and thinking token conventions:
-  - Qwen3-14B:           enable_thinking=True, <think>…</think> prefix
-  - DeepSeek-R1-14B:     <think>\n…\n</think> before answer
+  - Qwen3 reasoning:     <think>…</think> prefix, with 2507 emitting only </think>
+  - DeepSeek-R1:         <think>\n…\n</think> before answer
   - Phi-4-reasoning:     <think>…</think> block
   - Llama-4-Scout-17B:   standard instruct, no thinking tokens
   - Phi-4 / Gemma-3 / Qwen2.5:  standard instruct
@@ -36,11 +36,17 @@ class ThinkingMode(Enum):
 # Map HF model IDs → thinking mode
 MODEL_THINKING_MODE: dict[str, ThinkingMode] = {
     "Qwen/Qwen3-14B": ThinkingMode.QWEN3,
+    "Qwen/Qwen3-30B-A3B-Thinking-2507": ThinkingMode.QWEN3,
     "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B": ThinkingMode.DEEPSEEK_R1,
+    "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B": ThinkingMode.DEEPSEEK_R1,
+    "deepseek-ai/DeepSeek-R1-0528": ThinkingMode.DEEPSEEK_R1,
+    "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": ThinkingMode.DEEPSEEK_R1,
     "microsoft/Phi-4-reasoning": ThinkingMode.PHI4_REASONING,
     "meta-llama/Llama-4-Scout-17B-16E-Instruct": ThinkingMode.NONE,
     "microsoft/phi-4": ThinkingMode.NONE,
     "google/gemma-3-12b-it": ThinkingMode.NONE,
+    "google/gemma-4-26B-A4B-it": ThinkingMode.NONE,
+    "google/gemma-4-31B-it": ThinkingMode.NONE,
     "Qwen/Qwen2.5-14B-Instruct": ThinkingMode.NONE,
 }
 
@@ -59,8 +65,14 @@ Available grammar actions:
 Parameters: r (outer radius, meters), t (wall thickness, meters)
 Material: 6061_T6_Aluminum | Shape: Pipe
 
-After each action, you will receive updated FEA results (mass, FOS_buckling, FOS_yielding, feasible).
-Respond with a single grammar action per turn. Think step-by-step about structural mechanics."""
+After each action, you will receive updated simulation results (mass, FOS_buckling, FOS_yielding, feasible).
+Respond with exactly one grammar action per turn.
+If you include reasoning, format it as:
+<think>
+...
+</think>
+<action>GRAMMAR_ACTION(...)</action>
+Do not include any prose outside the optional <think> block and the final <action> block."""
 
 
 @dataclass
@@ -85,6 +97,7 @@ class ChatFormatter:
         self,
         problem_text: str,
         action_history: Optional[list[dict]] = None,
+        initial_fea_result: Optional[dict] = None,
         add_generation_prompt: bool = True,
     ) -> list[dict]:
         """Build OpenAI-style message list for a truss design conversation.
@@ -102,6 +115,12 @@ class ChatFormatter:
             {"role": "system", "content": TRUSS_SYSTEM_PROMPT},
             {"role": "user", "content": problem_text},
         ]
+
+        if initial_fea_result:
+            messages.append({
+                "role": "user",
+                "content": self._format_fea_feedback(initial_fea_result),
+            })
 
         if action_history:
             for turn in action_history:
@@ -143,12 +162,9 @@ class ChatFormatter:
             return_tensors=return_tensors,
         )
 
-        if self.thinking_mode == ThinkingMode.QWEN3:
-            # Qwen3 apply_chat_template supports enable_thinking natively
-            try:
-                kwargs["enable_thinking"] = True
-            except Exception:
-                pass
+        if self.thinking_mode == ThinkingMode.QWEN3 and "2507" not in self.model_id:
+            # Legacy Qwen3 templates expect enable_thinking=True explicitly.
+            kwargs["enable_thinking"] = True
 
         result = self.tokenizer.apply_chat_template(**kwargs)
 
@@ -164,29 +180,30 @@ class ChatFormatter:
 
     def _format_assistant_turn(self, action: str, thinking: str = "") -> str:
         """Format assistant response with optional thinking tokens."""
+        wrapped_action = f"<action>{action.strip()}</action>"
         if self.thinking_mode == ThinkingMode.NONE:
-            return action.strip()
+            return wrapped_action
 
         elif self.thinking_mode == ThinkingMode.QWEN3:
             if thinking:
-                return f"<think>\n{thinking.strip()}\n</think>\n{action.strip()}"
-            return action.strip()
+                return f"<think>\n{thinking.strip()}\n</think>\n{wrapped_action}"
+            return wrapped_action
 
         elif self.thinking_mode == ThinkingMode.DEEPSEEK_R1:
             if thinking:
-                return f"<think>\n{thinking.strip()}\n</think>\n{action.strip()}"
-            return f"<think>\n</think>\n{action.strip()}"
+                return f"<think>\n{thinking.strip()}\n</think>\n{wrapped_action}"
+            return f"<think>\n</think>\n{wrapped_action}"
 
         elif self.thinking_mode == ThinkingMode.PHI4_REASONING:
             if thinking:
-                return f"<think>{thinking.strip()}</think>\n{action.strip()}"
-            return action.strip()
+                return f"<think>{thinking.strip()}</think>\n{wrapped_action}"
+            return wrapped_action
 
-        return action.strip()
+        return wrapped_action
 
     def _format_fea_feedback(self, fea_result: dict) -> str:
         """Format FEA result as structured feedback for the next user turn."""
-        lines = ["[FEA Result]"]
+        lines = ["[Simulation Result]"]
         if "mass" in fea_result:
             lines.append(f"  Mass:          {fea_result['mass']:.4f} kg")
         if "fos_buckling" in fea_result:
@@ -200,7 +217,7 @@ class ChatFormatter:
             lines.append(f"  Status:        {status}")
         if "error" in fea_result:
             lines.append(f"  Error:         {fea_result['error']}")
-        lines.append("\nContinue optimizing. Provide your next grammar action.")
+        lines.append("\nContinue optimizing. Provide your next grammar action in a <action>...</action> block.")
         return "\n".join(lines)
 
     def extract_thinking(self, text: str) -> tuple[str, str]:
@@ -218,5 +235,12 @@ class ChatFormatter:
             thinking = match.group(1).strip()
             action = match.group(2).strip()
             return thinking, action
+
+        # Qwen3-2507 may omit the opening tag in generated text because the chat
+        # template inserts it before decoding starts. In that case, split on the
+        # closing tag and treat the prefix as reasoning content.
+        if self.thinking_mode == ThinkingMode.QWEN3 and "</think>" in text:
+            thinking, action = text.split("</think>", 1)
+            return thinking.strip(), action.strip()
 
         return "", text.strip()

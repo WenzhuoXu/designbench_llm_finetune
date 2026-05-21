@@ -3,7 +3,7 @@
 #
 # Default: warmstart SFT on DesignBench JSONL data for GRPO pre-training
 # Data source: DesignBench/data/sft/train.jsonl (5K examples with FEA feedback)
-# Target: warmstart_reasoning (reformats messages, supervises <think>+<action>+<answer>)
+# Target: gold_curriculum_warmstart (turn-sliced strict grammar curriculum)
 # Early stopping: enabled by default (format compliance + loss plateau)
 
 defaults:

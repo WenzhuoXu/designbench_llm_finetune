@@ -3,7 +3,7 @@
 defaults:
   - model: qwen3_14b
   - rl: grpo_truss
-  - data: sft_traces
+  - data: rl_problems
   - parallelism: deepspeed_zero2
   - logging: logging
   - _self_

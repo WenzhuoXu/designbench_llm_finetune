@@ -69,11 +69,11 @@ class SFTJsonlProcessor:
                     continue
 
                 raw = json.loads(line)
-                result = self._process_example(raw)
-                if result is None:
+                results = self._process_example(raw)
+                if not results:
                     skipped += 1
                     continue
-                processed.append(result)
+                processed.extend(results)
 
         log.info(
             f"Processed {len(processed)}/{total} examples "
@@ -81,7 +81,7 @@ class SFTJsonlProcessor:
         )
         return processed
 
-    def _process_example(self, raw: dict) -> Optional[dict]:
+    def _process_example(self, raw: dict) -> Optional[list[dict]]:
         """Process a single JSONL example.
 
         Steps:
@@ -102,28 +102,42 @@ class SFTJsonlProcessor:
         # For WarmstartReasoningTarget, this reformats messages
         # For other targets, this is typically a no-op pass-through
         transformed = self.target.transform_example(raw, self.tokenizer)
-        messages = transformed.get("messages", messages)
+        transformed_examples = transformed if isinstance(transformed, list) else [transformed]
 
-        # Tokenize with chat template
-        input_ids = self.formatter.apply_template(
-            messages,
-            add_generation_prompt=False,
-            tokenize=True,
-        )
+        processed: list[dict] = []
+        for transformed_ex in transformed_examples:
+            ex_messages = transformed_ex.get("messages", messages)
+            if not ex_messages:
+                continue
 
-        if len(input_ids) > self.max_seq_len:
-            input_ids = input_ids[: self.max_seq_len]
+            # Tokenize with chat template
+            input_ids = self.formatter.apply_template(
+                ex_messages,
+                add_generation_prompt=False,
+                tokenize=True,
+            )
 
-        # Labels: clone input_ids (SFTTarget.get_loss_mask() will mask later in collator)
-        labels = list(input_ids)
+            if len(input_ids) > self.max_seq_len:
+                input_ids = input_ids[: self.max_seq_len]
 
-        return {
-            "input_ids": input_ids,
-            "labels": labels,
-            "attention_mask": [1] * len(input_ids),
-            "problem_id": raw.get("problem_id", ""),
-            "trace_id": raw.get("trace_id", ""),
-            "trace_quality": trace_quality,
-            "reaches_solution": True,  # All SFT JSONL traces reach solution
-            "n_actions": sum(1 for m in messages if m["role"] == "assistant"),
-        }
+            # Labels: clone input_ids (SFTTarget.get_loss_mask() masks later in collator)
+            labels = list(input_ids)
+
+            metadata = {
+                key: value
+                for key, value in transformed_ex.items()
+                if key not in {"messages", "structured"}
+            }
+            processed.append({
+                "input_ids": input_ids,
+                "labels": labels,
+                "attention_mask": [1] * len(input_ids),
+                "problem_id": raw.get("problem_id", ""),
+                "trace_id": raw.get("trace_id", ""),
+                "trace_quality": trace_quality,
+                "reaches_solution": transformed_ex.get("reaches_solution", True),
+                "n_actions": sum(1 for m in ex_messages if m["role"] == "assistant"),
+                **metadata,
+            })
+
+        return processed or None

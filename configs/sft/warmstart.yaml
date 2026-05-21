@@ -17,3 +17,10 @@ gradient_accumulation_steps: 16    # Larger effective batch for stability
 
 # Checkpoint more frequently (warmstart is valuable, save often)
 save_steps: 50
+
+# Strict post-training gates enforced by scripts/check_format_compliance.py.
+gold_gates:
+  semantic_compliance_min: 0.95
+  executable_action_min: 0.95
+  single_action_min: 0.98
+  answer_spam_max: 0.02

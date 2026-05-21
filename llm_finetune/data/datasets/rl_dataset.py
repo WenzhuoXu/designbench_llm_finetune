@@ -23,7 +23,6 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import torch
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer
 
@@ -66,10 +65,10 @@ class RLPromptDataset(Dataset):
 
     def __getitem__(self, idx: int) -> dict:
         item = self.prompts[idx]
-        input_ids = item["input_ids"][-self.max_prompt_len:]  # left-truncate
         return {
-            "input_ids": torch.tensor(input_ids, dtype=torch.long),
-            "attention_mask": torch.ones(len(input_ids), dtype=torch.long),
+            # TRL GRPOTrainer expects "prompt" as a raw text string and tokenizes
+            # it internally — this is the required key.
+            "prompt": item["prompt_text"],
             "problem_id": item["problem_id"],
             # problem_spec is kept as-is (not a tensor) for env.reset()
             "problem_spec": item.get("problem_spec", {}),
@@ -111,32 +110,19 @@ class RLPromptDataset(Dataset):
             pid = spec.get("problem_id", pf.stem)
             if problem_ids and pid not in problem_ids:
                 continue
+            problem_text = _spec_to_problem_text(spec)
+            messages = formatter.build_messages(problem_text=problem_text)
+            # Build both text (for TRL) and token IDs (kept for reference)
+            prompt_text = formatter.apply_template(messages, add_generation_prompt=True, tokenize=False)
             for _ in range(repeat):
-                prompt_ids = cls._build_prompt(spec, formatter, tokenizer)
                 prompts.append({
-                    "input_ids": prompt_ids,
+                    "prompt_text": prompt_text,
                     "problem_id": pid,
                     "problem_spec": spec,
                 })
 
         log.info(f"RLPromptDataset: {len(prompts)} prompts")
         return cls(prompts=prompts, tokenizer=tokenizer, max_prompt_len=max_prompt_len)
-
-    @staticmethod
-    def _build_prompt(
-        spec: dict,
-        formatter: ChatFormatter,
-        tokenizer: PreTrainedTokenizer,
-    ) -> list[int]:
-        """Build tokenized prompt from a problem spec."""
-        # Format problem as human-readable text
-        problem_text = _spec_to_problem_text(spec)
-        messages = formatter.build_messages(problem_text=problem_text)
-        return formatter.apply_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-        )
 
 
 def _spec_to_problem_text(spec: dict) -> str:
@@ -147,12 +133,15 @@ def _spec_to_problem_text(spec: dict) -> str:
     members = spec.get("topology", {}).get("members", [])
     if members:
         lines.append(f"\nINITIAL STRUCTURE: {len(members)} members")
-        for m in members[:5]:  # show first 5 to keep prompt short
-            j1, j2 = m.get("joint_1", "?"), m.get("joint_2", "?")
+        for idx, m in enumerate(members[:5]):  # show first 5 to keep prompt short
+            joints = m.get("joints", [])
+            j1 = joints[0] if len(joints) > 0 else m.get("joint_1", "?")
+            j2 = joints[1] if len(joints) > 1 else m.get("joint_2", "?")
             shape = m.get("shape", {})
             r = shape.get("r", "?")
             t = shape.get("t", "?")
-            lines.append(f"  Member {m.get('id', '?')}: joints ({j1},{j2}), r={r}, t={t}")
+            member_id = m.get("id", idx)
+            lines.append(f"  Member {member_id}: joints ({j1},{j2}), r={r}, t={t}")
         if len(members) > 5:
             lines.append(f"  ... ({len(members) - 5} more members)")
 

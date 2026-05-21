@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Optional
 
 from llm_finetune.training.rl.posterior.features import (
@@ -49,6 +49,7 @@ class TreeSearchResult:
     adaptive_expanded: bool
     total_fea_calls: int
     total_elapsed_s: float
+    trace: dict = field(default_factory=dict)
 
     @property
     def action_values(self) -> dict[str, float]:
@@ -56,8 +57,19 @@ class TreeSearchResult:
 
 
 TransitionFn = Callable[[Any, str], tuple[Any, float, int]]
-ContinuationFn = Callable[[Any, int], tuple[float, int]]
+ContinuationFn = Callable[[Any, int], tuple[float, int, dict]]
 SamplerFn = Callable[[Any, int, int, Optional[str]], list[CandidateAction]]
+
+
+def _serialize_candidate(candidate: CandidateAction) -> dict:
+    return asdict(candidate) | {"cls": candidate.cls}
+
+
+def _serialize_state(node_or_state: Any) -> Any:
+    state = getattr(node_or_state, "current_state", node_or_state)
+    if isinstance(state, dict):
+        return dict(state)
+    return state
 
 
 def stratified_select_candidates(
@@ -137,16 +149,17 @@ def evaluate_tree(
     )
 
     evaluated: list[EvaluatedCandidate] = []
+    evaluated_traces: list[dict] = []
     total_fea_calls = 0
     for candidate in chosen:
         next_node, immediate_reward, fea_calls = transition_fn(root_node, candidate.action)
         total_fea_calls += fea_calls
         child_start = time.perf_counter()
         if depth <= 0:
-            continuation_value, child_calls = continuation_fn(next_node, 0)
+            continuation_value, child_calls, continuation_trace = continuation_fn(next_node, 0)
             depth_used = 0
         else:
-            continuation_value, child_calls = _recursive_value(
+            continuation_value, child_calls, continuation_trace = _recursive_value(
                 node=next_node,
                 depth=depth - 1,
                 branching=deeper_branching,
@@ -158,16 +171,31 @@ def evaluate_tree(
             )
             depth_used = depth
         total_fea_calls += child_calls
+        total_value = immediate_reward + gamma * continuation_value
+        candidate_elapsed = time.perf_counter() - child_start
         evaluated.append(
             EvaluatedCandidate(
                 candidate=candidate,
                 next_state=getattr(next_node, "current_state", next_node),
                 immediate_reward=immediate_reward,
-                total_value=immediate_reward + gamma * continuation_value,
+                total_value=total_value,
                 depth_used=depth_used,
                 subtree_fea_calls=fea_calls + child_calls,
-                elapsed_s=time.perf_counter() - child_start,
+                elapsed_s=candidate_elapsed,
             )
+        )
+        evaluated_traces.append(
+            {
+                "candidate": _serialize_candidate(candidate),
+                "immediate_reward": immediate_reward,
+                "continuation_value": continuation_value,
+                "total_value": total_value,
+                "depth_used": depth_used,
+                "subtree_fea_calls": fea_calls + child_calls,
+                "elapsed_s": candidate_elapsed,
+                "next_state": _serialize_state(next_node),
+                "continuation_trace": continuation_trace,
+            }
         )
 
     if not evaluated:
@@ -181,6 +209,15 @@ def evaluate_tree(
             adaptive_expanded=adaptive_expanded,
             total_fea_calls=0,
             total_elapsed_s=time.perf_counter() - start,
+            trace={
+                "root_state": _serialize_state(root_node),
+                "root_candidates": [_serialize_candidate(candidate) for candidate in root_candidates],
+                "selected_root_candidates": [],
+                "evaluated_candidates": [],
+                "class_entropy": entropy,
+                "adaptive_expanded": adaptive_expanded,
+                "selected_root_branching": first_branching,
+            },
         )
 
     evaluated.sort(key=lambda item: item.total_value, reverse=True)
@@ -196,6 +233,15 @@ def evaluate_tree(
         adaptive_expanded=adaptive_expanded,
         total_fea_calls=total_fea_calls,
         total_elapsed_s=time.perf_counter() - start,
+        trace={
+            "root_state": _serialize_state(root_node),
+            "root_candidates": [_serialize_candidate(candidate) for candidate in root_candidates],
+            "selected_root_candidates": [_serialize_candidate(candidate) for candidate in chosen],
+            "evaluated_candidates": evaluated_traces,
+            "class_entropy": entropy,
+            "adaptive_expanded": adaptive_expanded,
+            "selected_root_branching": first_branching,
+        },
     )
 
 
@@ -209,7 +255,7 @@ def _recursive_value(
     sampler_fn: SamplerFn,
     gamma: float,
     stratified: bool,
-) -> tuple[float, int]:
+) -> tuple[float, int, dict]:
     if depth <= 0:
         return continuation_fn(node, 0)
 
@@ -220,13 +266,27 @@ def _recursive_value(
         ensure_full_class_coverage=stratified and branching >= len(ACTION_CLASS_ORDER),
     )
     if not chosen:
-        return continuation_fn(node, depth)
+        continuation_value, continuation_calls, continuation_trace = continuation_fn(node, depth)
+        return (
+            continuation_value,
+            continuation_calls,
+            {
+                "mode": "fallback_continuation",
+                "depth": depth,
+                "state": _serialize_state(node),
+                "sampled_candidates": [_serialize_candidate(candidate) for candidate in sampled],
+                "selected_candidates": [],
+                "continuation_trace": continuation_trace,
+            },
+        )
 
     best_value = -math.inf
     total_calls = 0
+    branch_traces: list[dict] = []
+    best_action = ""
     for candidate in chosen:
         next_node, immediate_reward, fea_calls = transition_fn(node, candidate.action)
-        continuation_value, child_calls = _recursive_value(
+        continuation_value, child_calls, child_trace = _recursive_value(
             node=next_node,
             depth=depth - 1,
             branching=branching,
@@ -238,8 +298,46 @@ def _recursive_value(
         )
         total_calls += fea_calls + child_calls
         total_value = immediate_reward + gamma * continuation_value
-        best_value = max(best_value, total_value)
+        if total_value > best_value:
+            best_value = total_value
+            best_action = candidate.action
+        branch_traces.append(
+            {
+                "candidate": _serialize_candidate(candidate),
+                "immediate_reward": immediate_reward,
+                "continuation_value": continuation_value,
+                "total_value": total_value,
+                "subtree_fea_calls": fea_calls + child_calls,
+                "next_state": _serialize_state(next_node),
+                "child_trace": child_trace,
+            }
+        )
 
     if best_value == -math.inf:
-        return continuation_fn(node, depth)
-    return best_value, total_calls
+        continuation_value, continuation_calls, continuation_trace = continuation_fn(node, depth)
+        return (
+            continuation_value,
+            continuation_calls,
+            {
+                "mode": "empty_recursive_fallback",
+                "depth": depth,
+                "state": _serialize_state(node),
+                "sampled_candidates": [_serialize_candidate(candidate) for candidate in sampled],
+                "selected_candidates": [_serialize_candidate(candidate) for candidate in chosen],
+                "continuation_trace": continuation_trace,
+            },
+        )
+    return (
+        best_value,
+        total_calls,
+        {
+            "mode": "recursive",
+            "depth": depth,
+            "branching": branching,
+            "state": _serialize_state(node),
+            "sampled_candidates": [_serialize_candidate(candidate) for candidate in sampled],
+            "selected_candidates": [_serialize_candidate(candidate) for candidate in chosen],
+            "best_action": best_action,
+            "branches": branch_traces,
+        },
+    )

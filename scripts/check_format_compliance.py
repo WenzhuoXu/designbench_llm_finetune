@@ -29,7 +29,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import re
 import sys
 from pathlib import Path
 
@@ -44,17 +43,49 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-# Grammar pattern — accepts <action>ACTION(...)</action> or bare ACTION(...)
-_ACTION_TAG = re.compile(
-    r"<action>\s*"
-    r"(SCALE_PARAM|SCALE_MULTI_PARAM|ADD_MEMBER|MODIFY_PARAM|REMOVE_MEMBER|MOVE_JOINT|OPTIMAL_STATE)"
-    r"(?:\([^)]*\))?"
-    r"\s*</action>"
+from llm_finetune.data.grammar import (  # noqa: E402
+    ACTION_TAG_PATTERN,
+    count_answer_tags,
+    count_think_tags,
+    find_actions,
+    validate_action,
 )
-_BARE_ACTION = re.compile(
-    r"(SCALE_PARAM|SCALE_MULTI_PARAM|ADD_MEMBER|MODIFY_PARAM|REMOVE_MEMBER|MOVE_JOINT|OPTIMAL_STATE)"
-    r"\([^)]*\)"
-)
+
+
+def evaluate_generation_text(gen_text: str, *, problem_or_state: dict | None = None) -> dict:
+    """Evaluate one generated response under the strict gold warmstart gates."""
+    actions = find_actions(gen_text)
+    action_tag_count = len(ACTION_TAG_PATTERN.findall(gen_text or ""))
+    answer_count = count_answer_tags(gen_text)
+    think_count = count_think_tags(gen_text)
+    single_action = len(actions) == 1 and (action_tag_count in (0, 1))
+    validation = validate_action(actions[0], problem_or_state) if actions else None
+    semantic_ok = bool(single_action and validation and validation.is_valid)
+    if semantic_ok:
+        invalid_reason = ""
+    elif not actions:
+        invalid_reason = "no_action"
+    elif not single_action:
+        invalid_reason = "multiple_actions"
+    else:
+        invalid_reason = validation.reason if validation is not None else "invalid_action"
+    return {
+        "status": "STRICT" if semantic_ok else "FAIL",
+        "semantic_ok": semantic_ok,
+        "executable_ok": semantic_ok,
+        "single_action": single_action,
+        "action": validation.action if validation else "",
+        "canonical_action": validation.canonical_action if validation else "",
+        "action_type": validation.action_type if validation else None,
+        "invalid_reason": invalid_reason,
+        "n_actions": len(actions),
+        "n_action_tags": action_tag_count,
+        "has_think": think_count > 0,
+        "n_think_blocks": think_count,
+        "has_answer": answer_count > 0,
+        "n_answer_blocks": answer_count,
+        "answer_spam": answer_count > 0,
+    }
 
 
 def main():
@@ -68,6 +99,10 @@ def main():
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--threshold", type=float, default=0.90,
                         help="Required compliance rate to be RL-ready")
+    parser.add_argument("--semantic-compliance-min", type=float, default=0.95)
+    parser.add_argument("--executable-action-min", type=float, default=0.95)
+    parser.add_argument("--single-action-min", type=float, default=0.98)
+    parser.add_argument("--answer-spam-max", type=float, default=0.02)
     parser.add_argument("--device", default="cuda",
                         help="Device to run generation on")
     parser.add_argument("--save-results", default=None,
@@ -100,8 +135,8 @@ def main():
     ).to(args.device)
     model.eval()
 
-    # Use the checkpoint's model_name_or_path for chat template selection.
-    # Fall back to generic formatter if unknown.
+    # Use the checkpoint's base model for chat template selection.
+    # LoRA checkpoints usually have adapter_config.json rather than config.json.
     try:
         config_path = ckpt_path / "config.json"
         with open(config_path) as f:
@@ -109,6 +144,14 @@ def main():
         model_id = config.get("_name_or_path", "")
     except Exception:
         model_id = ""
+    if not model_id:
+        try:
+            adapter_config_path = ckpt_path / "adapter_config.json"
+            with open(adapter_config_path) as f:
+                adapter_config = json.load(f)
+            model_id = adapter_config.get("base_model_name_or_path", "")
+        except Exception:
+            model_id = ""
     formatter = ChatFormatter.from_model_id(model_id, tokenizer)
 
     transform = WarmstartTransform()
@@ -124,14 +167,15 @@ def main():
             messages = ex.get("messages", [])
             if not messages:
                 continue
-            # Apply the same transform used during training
+            # Apply the same transform used during training.
             transformed = transform.transform_messages(messages)
-            # Use only the system message (the problem prompt) — ask the model
-            # to produce its first assistant turn
-            system_msg = next((m for m in transformed if m["role"] == "system"), None)
-            if system_msg is None:
+            first_assistant_idx = next(
+                (idx for idx, m in enumerate(transformed) if m["role"] == "assistant"),
+                None,
+            )
+            if first_assistant_idx is None or first_assistant_idx == 0:
                 continue
-            prompt_messages = [system_msg]
+            prompt_messages = transformed[:first_assistant_idx]
             prompts.append(prompt_messages)
             prompt_meta.append({
                 "problem_id": ex.get("problem_id", ""),
@@ -141,17 +185,8 @@ def main():
             })
 
     log.info(f"Generating {len(prompts)} completions ...")
-    n_parseable = 0
-    n_tag_wrapped = 0
     examples_shown = 0
     per_sample_results = []
-
-    # Patterns for richer per-sample analysis
-    _THINK_TAG = re.compile(r"<think>(.*?)</think>", re.DOTALL)
-    _ANSWER_TAG = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
-    _ACTION_TYPE = re.compile(
-        r"(SCALE_PARAM|SCALE_MULTI_PARAM|ADD_MEMBER|MODIFY_PARAM|REMOVE_MEMBER|MOVE_JOINT|OPTIMAL_STATE)"
-    )
 
     for i, prompt_messages in enumerate(prompts):
         input_ids = formatter.apply_template(
@@ -173,31 +208,19 @@ def main():
             skip_special_tokens=False,
         )
 
-        tag_match = _ACTION_TAG.search(gen_text)
-        bare_match = _BARE_ACTION.search(gen_text)
-
-        if tag_match:
-            n_parseable += 1
-            n_tag_wrapped += 1
-        elif bare_match:
-            n_parseable += 1
-
-        # Per-sample analysis
-        think_blocks = _THINK_TAG.findall(gen_text)
-        answer_blocks = _ANSWER_TAG.findall(gen_text)
-        action_type_match = _ACTION_TYPE.search(gen_text)
+        eval_result = evaluate_generation_text(gen_text)
         output_tokens = output.shape[1] - input_ids.shape[1]
 
-        status = "TAG" if tag_match else ("BARE" if bare_match else "FAIL")
         sample = {
             "idx": i,
             **prompt_meta[i],
-            "status": status,
-            "action_type": action_type_match.group(1) if action_type_match else None,
-            "has_think": len(think_blocks) > 0,
-            "n_think_blocks": len(think_blocks),
-            "has_answer": len(answer_blocks) > 0,
-            "n_answer_blocks": len(answer_blocks),
+            **eval_result,
+            "messages": prompt_messages,
+            "source": "greedy",
+            "rank": 0,
+            "parsed_action": eval_result["action"],
+            "rejection_reason": eval_result["invalid_reason"],
+            "raw_output": gen_text,
             "output_tokens": output_tokens,
             "gen_preview": gen_text[:300].replace("\n", " "),
         }
@@ -205,26 +228,46 @@ def main():
 
         if examples_shown < 3:
             preview = gen_text[:200].replace("\n", " ")
-            log.info(f"  [{i}] ✓ {status}: {preview}")
+            log.info(f"  [{i}] {sample['status']}: {preview}")
             examples_shown += 1
 
     n_total = len(prompts)
-    compliance = n_parseable / n_total if n_total > 0 else 0.0
-    tag_rate = n_tag_wrapped / n_total if n_total > 0 else 0.0
-    ready = compliance >= args.threshold
+    if n_total == 0:
+        log.error("No prompts were checked; zero-candidate compliance runs are invalid.")
+        sys.exit(1)
 
+    semantic_rate = sum(1 for s in per_sample_results if s["semantic_ok"]) / n_total
+    executable_rate = sum(1 for s in per_sample_results if s["executable_ok"]) / n_total
+    single_action_rate = sum(1 for s in per_sample_results if s["single_action"]) / n_total
+    tag_rate = sum(1 for s in per_sample_results if s["n_action_tags"] == 1) / n_total
     think_rate = sum(1 for s in per_sample_results if s["has_think"]) / n_total
-    answer_rate = sum(1 for s in per_sample_results if s["has_answer"]) / n_total
+    answer_spam_rate = sum(1 for s in per_sample_results if s["answer_spam"]) / n_total
+    invalid_placeholder_or_range = sum(
+        1
+        for s in per_sample_results
+        if s["invalid_reason"] in {"placeholder_token", "range_member_ids"}
+    )
     mean_output_tokens = sum(s["output_tokens"] for s in per_sample_results) / n_total
+    semantic_min = max(args.threshold, args.semantic_compliance_min)
+    ready = (
+        semantic_rate >= semantic_min
+        and executable_rate >= args.executable_action_min
+        and single_action_rate >= args.single_action_min
+        and answer_spam_rate <= args.answer_spam_max
+        and invalid_placeholder_or_range == 0
+    )
 
     print()
     print(f"Checked {n_total} prompts from {args.dev}")
-    print(f"format_compliance: {compliance:.1%} ({n_parseable}/{n_total} parseable)")
-    print(f"action_tag_rate:   {tag_rate:.1%} ({n_tag_wrapped}/{n_total} wrapped in <action>)")
-    print(f"think_tag_rate:    {think_rate:.1%} ({sum(1 for s in per_sample_results if s['has_think'])}/{n_total} with <think>)")
-    print(f"answer_tag_rate:   {answer_rate:.1%} ({sum(1 for s in per_sample_results if s['has_answer'])}/{n_total} with <answer>)")
+    print(f"semantic_compliance: {semantic_rate:.1%}")
+    print(f"executable_action:   {executable_rate:.1%}")
+    print(f"single_action_rate:  {single_action_rate:.1%}")
+    print(f"action_tag_rate:     {tag_rate:.1%}")
+    print(f"think_tag_rate:      {think_rate:.1%}")
+    print(f"answer_spam_rate:    {answer_spam_rate:.1%}")
+    print(f"invalid_placeholder_or_range: {invalid_placeholder_or_range}")
     print(f"mean_output_tokens:{mean_output_tokens:.1f}")
-    print(f"ready_for_grpo:    {ready}  (threshold={args.threshold:.0%})")
+    print(f"ready_for_grpo:    {ready}")
     print()
 
     if args.save_results:
@@ -234,13 +277,23 @@ def main():
             "checkpoint": str(args.checkpoint),
             "dev_file": str(args.dev),
             "n_total": n_total,
-            "format_compliance": compliance,
+            "format_compliance": semantic_rate,
+            "semantic_compliance": semantic_rate,
+            "executable_action": executable_rate,
+            "single_action_rate": single_action_rate,
             "action_tag_rate": tag_rate,
             "think_tag_rate": think_rate,
-            "answer_rate": answer_rate,
+            "answer_spam_rate": answer_spam_rate,
+            "invalid_placeholder_or_range": invalid_placeholder_or_range,
             "mean_output_tokens": mean_output_tokens,
             "ready_for_grpo": ready,
-            "threshold": args.threshold,
+            "threshold": semantic_min,
+            "gold_gates": {
+                "semantic_compliance_min": semantic_min,
+                "executable_action_min": args.executable_action_min,
+                "single_action_min": args.single_action_min,
+                "answer_spam_max": args.answer_spam_max,
+            },
             "samples": per_sample_results,
         }
         with open(out_path, "w") as f:

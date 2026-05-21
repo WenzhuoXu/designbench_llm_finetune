@@ -1,0 +1,28 @@
+# §6.3 Step 2 — +Tree expansion
+# Adds group-relative Φ tree advantage on top of r_env.
+# use_tree_expansion=true: _compute_group_tree_advantages() sets tree_metrics
+# so that OnlineTreeAdvantageReward reads γ·Φ(s_H^k) − mean_j(γ·Φ(s_H^j)).
+#
+# Primary diagnostic: watch eval/rho_tree_agreement rise vs. step 1b.
+# Secondary: Φ(s_H) improvement and feasibility_rate vs. baseline.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env dense shaping
+  tree_advantage: 1.0           # group-relative Φ advantage
+
+cost_fn: null
+
+use_tree_expansion: true        # enables _compute_group_tree_advantages()
+tree_expansion:
+  depth: 1
+  branching: 5
+  deeper_branching: 3
+  continuation: greedy
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99

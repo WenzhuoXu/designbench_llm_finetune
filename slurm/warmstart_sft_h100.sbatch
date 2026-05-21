@@ -1,19 +1,18 @@
 #!/bin/bash
 #SBATCH --job-name=warmstart_sft
-#SBATCH --partition=GPU
+#SBATCH --partition=GPU-shared
 #SBATCH --account=mch250030p
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=8
-#SBATCH --gpus-per-node=h100-80:8
-#SBATCH --cpus-per-task=13
+#SBATCH --gres=gpu:h100-80:2
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=128G
 #SBATCH --time=02:00:00
 #SBATCH --output=logs/slurm/%x_%j.out
 #SBATCH --error=logs/slurm/%x_%j.err
 #SBATCH --qos=gpu
 
 # ============================================================
-# Warmstart SFT — Pre-training for GRPO RL
-# 1 node × 8×H100-80GB, ~30-45 min with early stopping
+# Gold warmstart SFT — Pre-training for GRPO RL
+# Default: 2×H100-80GB LoRA. Never use >4 GPUs unless ALLOW_GT4_GPUS=1.
 # ============================================================
 # Usage:
 #   # Default: Qwen3-14B warmstart
@@ -25,12 +24,10 @@
 #   # Smoke test (10 steps)
 #   OVERRIDE_ARGS="sft.max_steps=10" sbatch --time=00:10:00 slurm/warmstart_sft_h100.sbatch
 #
-# Compute estimate (14B model, full-param, ZeRO-3):
-#   - Model: 28 GB (bf16) → sharded across 8 GPUs
-#   - Optimizer: 168 GB (fp32 states) → sharded
-#   - Per-GPU: ~35-45 GB → comfortable on H100-80GB
-#   - 5K examples × 2 epochs ÷ batch=128 ≈ 78 grad updates
-#   - With early stopping: ~40-60 updates → ~30-45 min
+# Compute policy:
+#   - Default 2 GPUs, LoRA enabled.
+#   - Use 3-4 GPUs only by overriding GPUS and the Slurm allocation.
+#   - Refuse >4 GPUs unless ALLOW_GT4_GPUS=1.
 # ============================================================
 
 set -euo pipefail
@@ -62,11 +59,18 @@ MODEL="${MODEL:-qwen3_14b}"
 SFT_CONFIG="${SFT_CONFIG:-pretrain}"
 DATA_CONFIG="${DATA_CONFIG:-sft_traces}"
 PARALLELISM="${PARALLELISM:-deepspeed_zero2}"
-RUN_NAME="${RUN_NAME:-warmstart_${MODEL}_${SLURM_JOB_ID}}"
+GPUS="${GPUS:-2}"
+RUN_NAME="${RUN_NAME:-gold_warmstart_${MODEL}_${SLURM_JOB_ID}}"
+
+if [ "$GPUS" -gt 4 ] && [ "${ALLOW_GT4_GPUS:-0}" != "1" ]; then
+  echo "ERROR: Refusing GPUS=$GPUS. Set ALLOW_GT4_GPUS=1 only after explicit approval."
+  exit 2
+fi
 
 echo "Model: $MODEL"
 echo "SFT config: $SFT_CONFIG"
 echo "Data config: $DATA_CONFIG"
+echo "GPUs: $GPUS"
 echo "Run name: $RUN_NAME"
 
 # ─── HuggingFace cache ────────────────────────────────────────
@@ -75,7 +79,7 @@ export HF_HOME="/ocean/projects/mch250030p/wxu7/hf_models"
 export TRANSFORMERS_CACHE="/ocean/projects/mch250030p/wxu7/hf_models"
 export HF_HUB_CACHE="/ocean/projects/mch250030p/wxu7/hf_models"
 export HF_HUB_OFFLINE=0
-# Avoid HF Xet download race condition when 8 ranks hit the cache simultaneously
+# Avoid HF Xet download race condition when ranks hit the cache simultaneously
 export HF_HUB_DISABLE_XET=1
 
 # ─── NCCL configuration for H100 NVLink ──────────────────────
@@ -107,7 +111,7 @@ huggingface-cli download "$MODEL_HF_ID" \
 
 # ─── Launch training with torchrun ────────────────────────────
 torchrun \
-  --nproc_per_node=8 \
+  --nproc_per_node="$GPUS" \
   --master_port=29500 \
   --master_addr=localhost \
   scripts/train_sft.py \
@@ -116,6 +120,11 @@ torchrun \
     data="$DATA_CONFIG" \
     parallelism="$PARALLELISM" \
     run_name="$RUN_NAME" \
+    model.use_lora=true \
+    model.lora.r=32 \
+    model.lora.lora_alpha=64 \
+    model.lora.lora_dropout=0.0 \
+    model.device_map=null \
     logging.wandb_project=designbench-training \
     ${OVERRIDE_ARGS:-}
 

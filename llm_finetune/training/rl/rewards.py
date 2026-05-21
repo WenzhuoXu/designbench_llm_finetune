@@ -25,11 +25,28 @@ Usage:
 from __future__ import annotations
 
 import logging
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional
 
 log = logging.getLogger(__name__)
+
+
+MAX_REWARD_ABS = 10_000.0
+
+
+def _finite_float(value: object, default: float = 0.0) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return numeric if math.isfinite(numeric) else default
+
+
+def _bounded_reward(value: object, *, limit: float = MAX_REWARD_ABS) -> float:
+    numeric = _finite_float(value, 0.0)
+    return max(-limit, min(limit, numeric))
 
 
 @dataclass
@@ -145,11 +162,11 @@ class FOSImprovementReward(RewardFunction):
             # Normalize by target FOS
             delta = delta / self.TARGET_FOS
             return max(-1.0, min(1.0, delta))
-        return delta
+        return _bounded_reward(delta)
 
     def _min_fos(self, state: dict) -> float:
-        fos_b = float(state.get("fos_buckling", 0.0) or 0.0)
-        fos_y = float(state.get("fos_yielding", 0.0) or 0.0)
+        fos_b = max(0.0, _finite_float(state.get("fos_buckling"), 0.0))
+        fos_y = max(0.0, _finite_float(state.get("fos_yielding"), 0.0))
         if fos_b <= 0 and fos_y <= 0:
             return 0.0
         if fos_b <= 0:
@@ -182,19 +199,21 @@ class MassReductionReward(RewardFunction):
         if self.only_if_feasible and not rollout.reaches_solution:
             return 0.0
 
-        initial_mass = float(rollout.initial_state.get("mass", 0.0) or 0.0)
-        final_mass = float(rollout.final_state.get("mass", 0.0) or 0.0)
+        initial_mass = _finite_float(rollout.initial_state.get("mass"), 0.0)
+        final_mass = _finite_float(rollout.final_state.get("mass"), initial_mass)
 
         if initial_mass <= 0:
             return 0.0
 
         # Get goal mass from problem spec
-        goal_mass = float(
-            problem_spec.get("goals", {}).get("maximum_mass", initial_mass) or initial_mass
+        goal_mass = _finite_float(
+            problem_spec.get("goals", {}).get("maximum_mass"), initial_mass
         )
+        if goal_mass <= 0:
+            return 0.0
 
         mass_reduction = (initial_mass - final_mass) / goal_mass
-        return float(mass_reduction)
+        return _bounded_reward(mass_reduction)
 
     def name(self) -> str:
         return "mass_reduction"
@@ -290,8 +309,8 @@ class ProgressReward(RewardFunction):
         return sum(improvements) / len(improvements) / self.TARGET_FOS
 
     def _min_fos(self, state: dict) -> float:
-        fos_b = float(state.get("fos_buckling", 0.0) or 0.0)
-        fos_y = float(state.get("fos_yielding", 0.0) or 0.0)
+        fos_b = max(0.0, _finite_float(state.get("fos_buckling"), 0.0))
+        fos_y = max(0.0, _finite_float(state.get("fos_yielding"), 0.0))
         return min(fos_b, fos_y) if fos_b > 0 and fos_y > 0 else max(fos_b, fos_y)
 
     def name(self) -> str:
@@ -335,20 +354,361 @@ class CompositeReward(RewardFunction):
     def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
         total = 0.0
         for name, component in self.components.items():
-            weight = self.weights.get(name, 0.0)
-            component_reward = component.compute(rollout, problem_spec)
+            weight = _finite_float(self.weights.get(name, 0.0), 0.0)
+            component_reward = _bounded_reward(component.compute(rollout, problem_spec))
             total += weight * component_reward
-        return total
+        return _bounded_reward(total)
 
     def get_breakdown(self, rollout: RolloutResult, problem_spec: dict) -> dict[str, float]:
         """Return per-component rewards (for logging)."""
         return {
-            name: component.compute(rollout, problem_spec)
+            name: _bounded_reward(component.compute(rollout, problem_spec))
             for name, component in self.components.items()
         }
 
     def name(self) -> str:
         return "composite"
+
+
+# ── Posterior reward hooks (§1-§4 of plan_posterior_reward_walkthrough.md) ────
+
+def _action_class(action_str: str) -> str:
+    """Extract action type prefix from a grammar action string."""
+    if not action_str:
+        return "UNKNOWN"
+    for prefix in (
+        "SCALE_MULTI_PARAM", "SCALE_PARAM", "ADD_MEMBER",
+        "MODIFY_PARAM", "REMOVE_MEMBER", "MOVE_JOINT",
+    ):
+        if action_str.upper().startswith(prefix):
+            return prefix
+    return "UNKNOWN"
+
+
+class LagrangianPotentialReward(RewardFunction):
+    """Potential-based per-step reward r_env = γΦ(s') - Φ(s) (§1).
+
+    Sums discounted potential differences along the trajectory.
+    Provides dense, policy-invariant shaping aligned with the mass/FOS objective.
+
+    Config: reward_fn: lagrangian_potential
+    Params: alpha (Lagrangian constraint price, default 5.0), gamma (0.99).
+    """
+
+    def __init__(self, alpha: float = 5.0, gamma: float = 0.99) -> None:
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
+        from llm_finetune.training.rl.posterior.potential import compute_step_reward
+        history = rollout.state_history
+        if len(history) < 2:
+            return 0.0
+        initial_mass = _finite_float((rollout.initial_state or {}).get("mass"), 1.0)
+        total = 0.0
+        for t in range(len(history) - 1):
+            total += compute_step_reward(
+                history[t],
+                history[t + 1],
+                initial_mass=initial_mass,
+                gamma=self.gamma,
+                alpha=self.alpha,
+            )
+        return _bounded_reward(total)
+
+    def name(self) -> str:
+        return "lagrangian_potential"
+
+
+class MacroCompletionReward(RewardFunction):
+    """Bonus for completing a known macro-action pattern (§2.3).
+
+    Detects two-step action-class sequences that correspond to multi-step
+    design moves (e.g. ADD_MEMBER → SCALE_PARAM for reinforce-and-tune).
+    Self-gating: returns 0.0 when no pattern is matched.
+
+    Config: reward_fn: macro_completion
+    Params: macro_bonus (default 0.05 per §6.2 β₂).
+    """
+
+    _PATTERNS: tuple[tuple[str, str], ...] = (
+        ("ADD_MEMBER", "SCALE_PARAM"),
+        ("ADD_MEMBER", "MODIFY_PARAM"),
+        ("REMOVE_MEMBER", "MOVE_JOINT"),
+        ("REMOVE_MEMBER", "SCALE_PARAM"),
+        ("SCALE_PARAM", "ADD_MEMBER"),
+        ("MOVE_JOINT", "SCALE_PARAM"),
+    )
+
+    def __init__(self, macro_bonus: float = 0.05) -> None:
+        self.macro_bonus = macro_bonus
+
+    def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
+        actions = rollout.action_sequence
+        if len(actions) < 2:
+            return 0.0
+        types = [_action_class(a) for a in actions]
+        for i in range(len(types) - 1):
+            if (types[i], types[i + 1]) in self._PATTERNS:
+                return self.macro_bonus
+        return 0.0
+
+    def name(self) -> str:
+        return "macro_completion"
+
+
+class ForwardPredictionReward(RewardFunction):
+    """Reward grounding CoT to FEA outcomes via forward prediction (§4.1).
+
+    Parses <predict>mass: …, fos: …</predict> tags from raw LLM outputs and
+    compares to the actual FEA result for that step. Returns normalised
+    agreement score × prediction_weight. Returns 0.0 when no tags are found.
+
+    Config: reward_fn: forward_prediction
+    Params: prediction_weight (default 0.10 per §6.2 μ).
+    """
+
+    def __init__(self, prediction_weight: float = 0.10) -> None:
+        self.prediction_weight = prediction_weight
+
+    def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
+        import re
+        scores: list[float] = []
+        for i, raw in enumerate(rollout.raw_outputs or []):
+            m = re.search(r"<predict>(.*?)</predict>", raw, re.DOTALL | re.IGNORECASE)
+            if m is None:
+                continue
+            if i + 1 >= len(rollout.state_history):
+                continue
+            score = self._compare(m.group(1), rollout.state_history[i + 1])
+            scores.append(score)
+        if not scores:
+            return 0.0
+        return self.prediction_weight * (sum(scores) / len(scores))
+
+    @staticmethod
+    def _parse_float(text: str, pattern: str) -> Optional[float]:
+        import re
+        m = re.search(pattern, text, re.IGNORECASE)
+        return _finite_float(m.group(1), 0.0) if m else None
+
+    def _compare(self, prediction_text: str, actual: dict) -> float:
+        mass_pred = self._parse_float(prediction_text, r"mass[:\s]+([0-9.]+)")
+        fos_pred = self._parse_float(prediction_text, r"fos[:\s]+([0-9.]+)")
+        if mass_pred is None and fos_pred is None:
+            return 0.0
+        n_terms = 0
+        score = 0.0
+        actual_mass = _finite_float(actual.get("mass"), 0.0)
+        if mass_pred is not None and actual_mass > 0:
+            score += max(0.0, 1.0 - abs(mass_pred - actual_mass) / actual_mass)
+            n_terms += 1
+        actual_fos = min(
+            max(0.0, _finite_float(actual.get("fos_buckling"), 0.0)),
+            max(0.0, _finite_float(actual.get("fos_yielding"), 0.0)),
+        )
+        if fos_pred is not None and actual_fos > 0:
+            score += max(0.0, 1.0 - abs(fos_pred - actual_fos) / actual_fos)
+            n_terms += 1
+        return score / n_terms if n_terms > 0 else 0.0
+
+    def name(self) -> str:
+        return "forward_prediction"
+
+
+class StagnationEscapeReward(RewardFunction):
+    """Bonus for breaking a stagnation plateau by switching action class (§4.3).
+
+    Detects stagnation: last window_size steps improved min-FOS by less than
+    plateau_tolerance. Rewards the step that breaks the plateau with a
+    different action class than the plateau's dominant class.
+    Self-gating: returns 0.0 outside stagnation.
+
+    Config: reward_fn: stagnation_escape
+    Params: escape_bonus (default 0.30 per §6.2 κ), window_size (4),
+            plateau_tolerance (0.02).
+    """
+
+    def __init__(
+        self,
+        escape_bonus: float = 0.30,
+        window_size: int = 4,
+        plateau_tolerance: float = 0.02,
+    ) -> None:
+        self.escape_bonus = escape_bonus
+        self.window_size = window_size
+        self.plateau_tolerance = plateau_tolerance
+
+    def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
+        history = rollout.state_history
+        actions = rollout.action_sequence
+        if len(history) < self.window_size + 1 or not actions:
+            return 0.0
+
+        def _min_fos(s: dict) -> float:
+            return min(
+                max(0.0, _finite_float(s.get("fos_buckling"), 0.0)),
+                max(0.0, _finite_float(s.get("fos_yielding"), 0.0)),
+            )
+
+        window_states = history[-(self.window_size + 1):-1]
+        fos_vals = [_min_fos(s) for s in window_states]
+        if max(fos_vals) - min(fos_vals) >= self.plateau_tolerance:
+            return 0.0  # not stagnant
+
+        window_actions = actions[-(self.window_size + 1):-1] if len(actions) > 1 else []
+        recent_action = actions[-1]
+        recent_type = _action_class(recent_action)
+        if not window_actions:
+            return 0.0
+        window_types = [_action_class(a) for a in window_actions]
+        dominant = max(set(window_types), key=window_types.count)
+        return self.escape_bonus if recent_type != dominant else 0.0
+
+    def name(self) -> str:
+        return "stagnation_escape"
+
+
+# ── Tree-signal rewards (§3 of plan_posterior_reward_walkthrough.md) ─────────
+
+
+class OnlineTreeAdvantageReward(RewardFunction):
+    """Tree-expanded advantage as training reward (§3.1).
+
+    When the trainer runs online MCTS (use_tree_expansion=True in config),
+    it stores the pre-computed tree advantage in rollout.tree_metrics under
+    the key "tree_advantage".  This reward simply reads that value.
+
+    Without tree expansion (the common case during initial training), it falls
+    back to the full-trajectory potential gain Φ(s_H)−Φ(s₀), which is the
+    D=∞ rollout estimate and a reasonable proxy.  Enable use_tree_expansion
+    to replace the proxy with the proper D=1, b=b lookahead advantage.
+
+    Domain-agnostic: uses only Φ via compute_potential.  The advantage is
+    expressed relative to the group mean by GRPO's group-normalisation, so
+    no extra baseline subtraction is needed here.
+
+    Config: reward_fn: tree_advantage
+    Params: alpha (5.0), gamma (0.99)
+    """
+
+    def __init__(self, alpha: float = 5.0, gamma: float = 0.99) -> None:
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
+        # Primary path: trainer populated tree_metrics["tree_advantage"]
+        if rollout.tree_metrics and "tree_advantage" in rollout.tree_metrics:
+            return _bounded_reward(rollout.tree_metrics["tree_advantage"])
+
+        # Fallback: full-trajectory Φ gain as D=∞ rollout estimate
+        from llm_finetune.training.rl.posterior.potential import compute_potential
+        if not rollout.initial_state or not rollout.final_state:
+            return 0.0
+        initial_mass = _finite_float(rollout.initial_state.get("mass"), 1.0)
+        phi_0 = compute_potential(
+            rollout.initial_state, initial_mass=initial_mass, alpha=self.alpha
+        )
+        phi_H = compute_potential(
+            rollout.final_state, initial_mass=initial_mass, alpha=self.alpha
+        )
+        return _bounded_reward(self.gamma * phi_H - phi_0)
+
+    def name(self) -> str:
+        return "tree_advantage"
+
+
+class StepNormalizedPhiReturn(RewardFunction):
+    """Phi gain per step — rewards efficient, large-scope actions (§3.5).
+
+    reward = (Φ(s_H) − Φ(s₀)) / n_steps
+
+    When GRPO normalises across the group, rollouts that achieve the same
+    total Φ gain in fewer steps rank higher.  This incentivises compound
+    actions that move the state far in a single step rather than many
+    small incremental moves.
+
+    Domain-agnostic: only Φ and step count are used.
+
+    Config: reward_fn: step_normalized_phi
+    Params: alpha (5.0)
+    """
+
+    def __init__(self, alpha: float = 5.0) -> None:
+        self.alpha = alpha
+
+    def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
+        if rollout.n_steps == 0:
+            return 0.0
+        from llm_finetune.training.rl.posterior.potential import compute_potential
+        initial_mass = _finite_float((rollout.initial_state or {}).get("mass"), 1.0)
+        phi_0 = compute_potential(
+            rollout.initial_state or {}, initial_mass=initial_mass, alpha=self.alpha
+        )
+        phi_H = compute_potential(
+            rollout.final_state or {}, initial_mass=initial_mass, alpha=self.alpha
+        )
+        return _bounded_reward((phi_H - phi_0) / rollout.n_steps)
+
+    def name(self) -> str:
+        return "step_normalized_phi"
+
+
+class InitialDifficultyWeightedReturn(RewardFunction):
+    """Scales base reward by initial-state difficulty (§4.2, generalised).
+
+    R′(τ) = R_base(τ) × (1 + λ × d(s₀))
+    d(s₀) = max(0, −Φ(s₀)) / difficulty_scale
+
+    States with deeply negative initial Φ (far from feasible, high violation)
+    get proportionally stronger gradient signal so that hard problems are not
+    under-weighted relative to easy ones during GRPO training.
+
+    Domain-agnostic: difficulty is derived solely from Φ(s₀), not from any
+    domain-specific quantity such as FOS or deflection.
+
+    Config: reward_fn: difficulty_weighted
+    Params: base_reward_fn ("lagrangian_potential"), lambda_difficulty (0.5),
+            difficulty_scale (10.0), alpha (5.0)
+    """
+
+    def __init__(
+        self,
+        base_reward_fn: str = "lagrangian_potential",
+        lambda_difficulty: float = 0.5,
+        difficulty_scale: float = 10.0,
+        alpha: float = 5.0,
+    ) -> None:
+        self.lambda_difficulty = lambda_difficulty
+        self.difficulty_scale = max(difficulty_scale, 1e-6)
+        self.alpha = alpha
+        # REWARD_REGISTRY is defined below; safe to access at instantiation time
+        # (this __init__ is only ever called after the full module is imported).
+        self._base_reward_fn_name = base_reward_fn
+        self._base: Optional[RewardFunction] = None
+
+    def _get_base(self) -> RewardFunction:
+        if self._base is None:
+            if self._base_reward_fn_name not in REWARD_REGISTRY:
+                raise ValueError(
+                    f"InitialDifficultyWeightedReturn: unknown base_reward_fn "
+                    f"{self._base_reward_fn_name!r}"
+                )
+            self._base = REWARD_REGISTRY[self._base_reward_fn_name]()
+        return self._base
+
+    def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
+        from llm_finetune.training.rl.posterior.potential import compute_potential
+        base_r = _bounded_reward(self._get_base().compute(rollout, problem_spec))
+        initial_mass = _finite_float((rollout.initial_state or {}).get("mass"), 1.0)
+        phi_0 = compute_potential(
+            rollout.initial_state or {}, initial_mass=initial_mass, alpha=self.alpha
+        )
+        d = max(0.0, -phi_0) / self.difficulty_scale
+        return _bounded_reward(base_r * (1.0 + self.lambda_difficulty * d))
+
+    def name(self) -> str:
+        return "difficulty_weighted"
 
 
 # ── Registry ──────────────────────────────────────────────────────────────────
@@ -360,6 +720,14 @@ REWARD_REGISTRY: dict[str, type[RewardFunction]] = {
     "step_efficiency": StepEfficiencyReward,
     "progress": ProgressReward,
     "composite": CompositeReward,
+    "lagrangian_potential": LagrangianPotentialReward,
+    "macro_completion": MacroCompletionReward,
+    "forward_prediction": ForwardPredictionReward,
+    "stagnation_escape": StagnationEscapeReward,
+    # Tree-signal rewards (§3): domain-agnostic, use Φ and tree_metrics
+    "tree_advantage": OnlineTreeAdvantageReward,
+    "step_normalized_phi": StepNormalizedPhiReturn,
+    "difficulty_weighted": InitialDifficultyWeightedReturn,
 }
 
 

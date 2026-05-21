@@ -7,6 +7,7 @@ defaults:
 model_name_or_path: Qwen/Qwen3-14B
 thinking_mode: true
 think_token: "<think>"
+device_map: auto
 
 # Qwen3 supports enable_thinking=True in apply_chat_template
 # Chat formatter will pass this automatically

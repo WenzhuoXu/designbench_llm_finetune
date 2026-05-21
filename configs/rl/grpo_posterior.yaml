@@ -1,0 +1,45 @@
+# GRPO config with posterior reward system
+# Implements §1-§4 of docs/plan_posterior_reward_walkthrough.md.
+# Default coefficients from §6.2.
+
+defaults:
+  - grpo_truss
+
+# Primary reward: Lagrangian potential (§1) + pattern signals (§2) + LLM-capability terms (§4)
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # §1  r_env = γΦ(s') - Φ(s); dense, policy-invariant
+  tree_advantage: 1.0           # §3.1 full-trajectory Φ gain (fallback path; no tree expansion needed)
+  step_normalized_phi: 0.50     # §3.5 Φ-gain/step: incentivises large-scope efficient actions
+  difficulty_weighted: 0.30     # §4.2 hard-problem upweighting; λ=0.5, difficulty_scale=10
+  macro_completion: 0.05        # §2.3 β₂: bonus for completing known action sequences
+  forward_prediction: 0.10      # §4.1 μ: grounds CoT to FEA outcomes via <predict> tags
+  stagnation_escape: 0.30       # §4.3 κ: escape plateau by switching action class
+  feasibility: 0.50             # terminal signal; Lagrangian already shapes this continuously
+  grammar_compliance: 0.10      # format compliance
+
+cost_fn: composite
+cost_weights:
+  dead_end_avoidance: 0.20      # §2.4 ξ: penalise monotone-worsening + all-local actions
+  constraint_violation: 1.0     # smooth FOS/mass violation penalty
+  token_budget: 0.10            # discourage excessive token use
+
+cost_coef: 0.1                  # reward -= cost_coef * cost
+
+# Lagrangian + discount hyperparameters (§6.2)
+posterior:
+  alpha: 5.0                    # Lagrange multiplier on constraint violations
+  gamma: 0.99                   # discount for potential shaping (keep endpoint dominant)
+
+# Tree-expansion advantage (§3). D=1, b=5 stratified — see docs/reward_rho_connection.md.
+use_tree_expansion: true
+tree_expansion:
+  depth: 1                      # §3.5 default: D=1 catches single-step myopia traps
+  branching: 5                  # §3.4 b=5 stratified: full action-class coverage at level 1
+  deeper_branching: 3           # §3.4 b'=3 for deeper levels
+  continuation: greedy          # greedy-on-Φ is cheap; swap to llm_sampled for lower σ_G
+
+# Keep DesignBench-specific infrastructure from grpo_truss
+max_steps: 20
+n_env_workers: 32
+group_size: 8

@@ -21,8 +21,8 @@ warmup_ratio: 0.05
 max_grad_norm: 1.0
 weight_decay: 0.01
 optimizer: adamw_torch_fused
-num_epochs: 1
-max_steps_train: -1
+num_epochs: 10                  # Cycle dataset up to 10× (stopped by max_steps_train)
+max_steps_train: 500            # Hard stop; cosine schedule decays over this horizon
 
 # Checkpointing
 save_steps: 50

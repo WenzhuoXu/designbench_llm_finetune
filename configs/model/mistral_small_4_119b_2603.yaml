@@ -1,0 +1,8 @@
+# Mistral Small 4 119B 2603 — newest official open-weight Mistral Small family
+# https://huggingface.co/mistralai/Mistral-Small-4-119B-2603
+
+defaults:
+  - base
+
+model_name_or_path: mistralai/Mistral-Small-4-119B-2603
+thinking_mode: false

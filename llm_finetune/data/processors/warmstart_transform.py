@@ -20,6 +20,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from llm_finetune.data.grammar import extract_action
+from llm_finetune.data.processors.chat_formatter import TRUSS_SYSTEM_PROMPT
 
 # Grammar action patterns (from DesignBench grammar)
 ACTION_PATTERN = re.compile(
@@ -53,10 +55,11 @@ class WarmstartTransform:
         [N]   assistant: <answer>...</answer>
 
     Output message sequence:
-        [0] system: problem description + initial state (merged)
-        [1] assistant: <think>description</think>\n<action>Y</action>
-        [2] user: [Simulation Result] FEA result
-        [3] assistant: <think>description</think>\n<action>Y</action>
+        [0] system: truss grammar instructions
+        [1] user: problem description + initial state (merged)
+        [2] assistant: <think>description</think>\n<action>Y</action>
+        [3] user: [Simulation Result] FEA result
+        [4] assistant: <think>description</think>\n<action>Y</action>
         ...
         [N-1] user: [Simulation Result] final FEA result
         [N]   assistant: <answer>...</answer>
@@ -78,15 +81,21 @@ class WarmstartTransform:
 
         result: list[dict] = []
 
-        # Merge messages[0] (problem) + messages[1] (initial state) into system
-        system_content = messages[0]["content"]
+        result.append({"role": "system", "content": TRUSS_SYSTEM_PROMPT})
+
+        # Merge messages[0] (problem) + messages[1] (initial state) into the
+        # first user turn. Chat templates, especially Qwen3's, use the last
+        # user turn to decide how to render assistant reasoning. A
+        # system→assistant first turn causes inconsistent stripping of
+        # <think> blocks and teaches a different first-action distribution.
+        user_content = messages[0]["content"]
         if len(messages) > 1 and messages[1]["role"] == "system":
-            system_content = system_content + "\n\n" + messages[1]["content"]
+            user_content = user_content + "\n\n" + messages[1]["content"]
             start_idx = 2
         else:
             start_idx = 1
 
-        result.append({"role": "system", "content": system_content})
+        result.append({"role": "user", "content": user_content})
 
         # Process remaining messages
         for i in range(start_idx, len(messages)):
@@ -148,10 +157,7 @@ class WarmstartTransform:
 
     def _extract_action(self, think_content: str) -> Optional[str]:
         """Extract grammar action line from shallow <think> content."""
-        action_match = ACTION_LINE_PATTERN.search(think_content)
-        if action_match:
-            return action_match.group(1).strip()
-        return None
+        return extract_action(think_content)
 
     def _extract_description(self, think_content: str) -> str:
         """Extract human-readable description from shallow <think> content.

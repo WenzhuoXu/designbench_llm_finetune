@@ -50,6 +50,7 @@ class PosteriorStateContext:
         return formatter.build_messages(
             problem_text=self.prompt_text or _spec_to_problem_text(self.problem_spec),
             action_history=history,
+            initial_fea_result=self.current_state if not history else None,
         )
 
     def to_summary(self) -> dict:

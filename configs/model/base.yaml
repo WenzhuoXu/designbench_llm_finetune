@@ -31,6 +31,22 @@ use_gradient_checkpointing: true
 # LoRA (optional) — disabled by default (full fine-tuning)
 use_lora: false
 
+# LoRA hyperparameters (used when use_lora: true)
+# Override per-field via CLI: model.lora.r=32, model.lora.lora_dropout=0.0, etc.
+lora:
+  r: 64
+  lora_alpha: 128
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  lora_dropout: 0.05
+  bias: none
+
 # Thinking mode (for reasoning models like Qwen3, DeepSeek-R1)
 thinking_mode: false
 think_token: null

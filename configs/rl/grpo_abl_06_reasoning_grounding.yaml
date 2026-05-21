@@ -1,0 +1,45 @@
+# §6.3 Step 6 — +Reasoning grounding (forward prediction)
+# Builds on step 5. Adds r_pred (μ=0.10) which rewards the LLM for including
+# <predict>mass: …, fos: …</predict> tags in its CoT that match the actual FEA
+# outcome for that step §4.1.
+#
+# This forces causal coupling between reasoning and action: a vague, post-hoc
+# CoT that does not commit to a prediction cannot earn r_pred.
+#
+# Verify via counterfactual perturbation: resample the CoT with different seeds
+# and check whether the action distribution shifts. If not, CoT is post-hoc and
+# forward_prediction_std should be near zero (no differentiation).
+#
+# Note: the model must be prompted with <predict> instructions for this term
+# to activate. Set prompt_suffix in the eval config accordingly.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env
+  tree_advantage: 1.0           # group-relative Φ advantage
+  macro_completion: 0.05        # §2.3 β₂
+  stagnation_escape: 0.30       # §4.3 κ
+  difficulty_weighted: 0.30     # §4.2
+  forward_prediction: 0.10      # §4.1 μ — requires <predict> tags in CoT
+
+cost_fn: composite
+cost_weights:
+  dead_end_avoidance: 0.20      # §2.4 ξ
+  constraint_violation: 1.0
+  token_budget: 0.10
+
+cost_coef: 0.1
+
+use_tree_expansion: true
+tree_expansion:
+  depth: 1
+  branching: 5
+  deeper_branching: 3
+  continuation: greedy
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99

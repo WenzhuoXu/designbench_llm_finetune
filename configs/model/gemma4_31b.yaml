@@ -1,0 +1,8 @@
+# Gemma 4 31B IT — newest official Gemma family (April 2, 2026)
+# https://huggingface.co/google/gemma-4-31B-it
+
+defaults:
+  - base
+
+model_name_or_path: google/gemma-4-31B-it
+thinking_mode: false

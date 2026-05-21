@@ -33,3 +33,10 @@ warmstart_eval_steps: 50           # Check readiness every N steps
 warmstart_format_threshold: 0.90   # Min grammar parse rate to be RL-ready
 warmstart_kl_threshold: 5.0        # Max KL divergence from base model (nats)
 warmstart_loss_delta_threshold: 0.05  # Stop when val loss improves < 5% per eval
+
+# Strict post-training gates enforced by scripts/check_format_compliance.py.
+gold_gates:
+  semantic_compliance_min: 0.95
+  executable_action_min: 0.95
+  single_action_min: 0.98
+  answer_spam_max: 0.02

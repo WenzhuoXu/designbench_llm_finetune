@@ -1,26 +1,25 @@
 #!/bin/bash
 #SBATCH --job-name=designbench_grpo
-#SBATCH --partition=GPU
+#SBATCH --partition=GPU-shared
 #SBATCH --account=mch250030p
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=8
-#SBATCH --gpus-per-node=h100-80:8
-#SBATCH --cpus-per-task=13
+#SBATCH --gres=gpu:h100-80:2
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=128G
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/slurm/%x_%j.out
 #SBATCH --error=logs/slurm/%x_%j.err
 #SBATCH --qos=gpu
 
 # ============================================================
-# DesignBench GRPO RL Training — 1 node × 8×H100-80GB
+# DesignBench GRPO RL Training — default 2×H100-80GB LoRA
 # ============================================================
 # Architecture:
-#   - vLLM server: launched on all 8 GPUs (tensor_parallel=8)
-#     for fast rollout generation (5-10x faster than HF generate)
+#   - Default uses HF generate, not vLLM, to keep 2-GPU runs available.
+#   - Enable vLLM explicitly with USE_VLLM=true for short validations.
 #   - GRPO training: DeepSpeed ZeRO-2 for actor update
 #   - FEA workers: 104 CPU cores for parallel rollout execution
 #
-# vLLM and training share the same 8 GPUs via time-multiplexing:
+# vLLM and training share GPUs via time-multiplexing when USE_VLLM=true:
 #   Phase 1: vLLM generates K rollouts per prompt (GPU-intensive)
 #   Phase 2: FEA executes rollouts (CPU-intensive, GPUs idle)
 #   Phase 3: GRPO updates actor weights (GPU-intensive)
@@ -57,10 +56,25 @@ RUN_NAME="${RUN_NAME:-${MODEL}_grpo_${RL_CONFIG}_${SLURM_JOB_ID}}"
 
 # If starting from an SFT checkpoint:
 CHECKPOINT="${CHECKPOINT:-}"
+GPUS="${GPUS:-2}"
+USE_VLLM="${USE_VLLM:-false}"
+
+if [ "$GPUS" -gt 4 ] && [ "${ALLOW_GT4_GPUS:-0}" != "1" ]; then
+  echo "ERROR: Refusing GPUS=$GPUS. Set ALLOW_GT4_GPUS=1 only after explicit approval."
+  exit 2
+fi
+
+if [ -z "$CHECKPOINT" ] && [ "${ALLOW_BASE_GRPO:-0}" != "1" ]; then
+  echo "ERROR: GRPO from a base model is disabled by default."
+  echo "Set CHECKPOINT=checkpoints/sft/<gold_run>/final, or set ALLOW_BASE_GRPO=1 for an explicit base-model experiment."
+  exit 2
+fi
 
 echo "Model: $MODEL"
 echo "RL config: $RL_CONFIG"
 echo "Checkpoint: ${CHECKPOINT:-'(base model)'}"
+echo "GPUs: $GPUS"
+echo "Use vLLM: $USE_VLLM"
 echo "Run name: $RUN_NAME"
 
 # ─── Environment ──────────────────────────────────────────────
@@ -83,11 +97,11 @@ mkdir -p logs/slurm logs/"$RUN_NAME"
 # Port 8000 is used for the OpenAI-compatible API.
 # If vLLM is unavailable, the trainer falls back to HF generate (slower).
 export VLLM_PORT=8000
-export VLLM_TENSOR_PARALLEL_SIZE=8
+export VLLM_TENSOR_PARALLEL_SIZE="$GPUS"
 
 # ─── FEA worker pool ───────────────────────────────────────────
-# 104 CPUs available (13 × 8); use most of them for FEA parallelism
-export N_FEA_WORKERS=32
+# 2 shared H100s usually provide 24 CPUs; leave room for trainer workers.
+export N_FEA_WORKERS="${N_FEA_WORKERS:-20}"
 
 # ─── Launch GRPO training ──────────────────────────────────────
 CHECKPOINT_ARGS=""
@@ -96,7 +110,7 @@ if [ -n "$CHECKPOINT" ]; then
 fi
 
 torchrun \
-  --nproc_per_node=8 \
+  --nproc_per_node="$GPUS" \
   --master_port=29501 \
   --master_addr=localhost \
   scripts/train_grpo.py \
@@ -105,7 +119,12 @@ torchrun \
     data="$DATA_CONFIG" \
     parallelism="$PARALLELISM" \
     run_name="$RUN_NAME" \
-    rl.use_vllm=true \
+    model.use_lora=true \
+    model.lora.r=32 \
+    model.lora.lora_alpha=64 \
+    model.lora.lora_dropout=0.0 \
+    model.device_map=null \
+    rl.use_vllm="$USE_VLLM" \
     rl.vllm_server_port="$VLLM_PORT" \
     rl.n_env_workers="$N_FEA_WORKERS" \
     logging.wandb_project=designbench-training \

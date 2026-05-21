@@ -31,7 +31,11 @@ DEFAULT_HF_CACHE = "/ocean/projects/mch250030p/wxu7/hf_models"
 # Models that support/require thinking tokens
 THINKING_MODELS = {
     "Qwen/Qwen3-14B",
+    "Qwen/Qwen3-30B-A3B-Thinking-2507",
     "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
+    "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "deepseek-ai/DeepSeek-R1-0528",
+    "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
     "microsoft/Phi-4-reasoning",
 }
 
@@ -58,8 +62,8 @@ def load_model_and_tokenizer(
     """
     model_id = cfg.model_name_or_path
     cache_dir = cfg.get("cache_dir", DEFAULT_HF_CACHE)
-    os.environ.setdefault("HF_HOME", cache_dir)
     os.environ.setdefault("TRANSFORMERS_CACHE", cache_dir)
+    os.environ.setdefault("HF_HUB_CACHE", cache_dir)
 
     log.info(f"Loading tokenizer: {model_id}")
     tokenizer = _load_tokenizer(model_id, cfg, cache_dir)

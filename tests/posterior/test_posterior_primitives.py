@@ -193,4 +193,5 @@ def test_tree_expansion_prefers_better_long_horizon_branch():
         stratified=False,
     )
     assert result.tree_best_action == "SCALE_PARAM(0, radius, 1.1)"
-    assert result.total_fea_calls >= 4
+    # depth=1, level1_branching=2 → 2 root transitions (one per candidate); no child FEA at depth-1=0
+    assert result.total_fea_calls >= 2

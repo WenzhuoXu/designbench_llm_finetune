@@ -139,7 +139,7 @@ def _run_training(cfg, local_logger, wandb_logger, run_name):
 
     # Build SFT target (research hook)
     data_cfg = cfg.get("data", {})
-    target_name = data_cfg.get("target_fn", "thinking_and_action")
+    target_name = data_cfg.get("target_fn", "gold_curriculum_warmstart")
     target_kwargs = OmegaConf.to_container(
         data_cfg.get("target_kwargs", {}), resolve=True
     ) if data_cfg.get("target_kwargs") else {}

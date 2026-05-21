@@ -11,13 +11,22 @@ train_jsonl: /ocean/projects/mch250030p/wxu7/DesignBench/data/sft/train.jsonl
 dev_jsonl: /ocean/projects/mch250030p/wxu7/DesignBench/data/sft/dev.jsonl
 
 # SFT target function (see training/sft/targets.py)
-# Options: warmstart_reasoning | full_sequence
+# Options: gold_curriculum_warmstart | warmstart_reasoning | full_sequence
+# gold_curriculum_warmstart: turn-sliced strict-grammar curriculum — recommended for GRPO warmstart
 # warmstart_reasoning: reformats messages (actions into <action> tags, roles remapped) — recommended for GRPO warmstart
 # full_sequence: supervise all non-masked tokens — simple baseline
-target_fn: warmstart_reasoning
+target_fn: gold_curriculum_warmstart
+target_kwargs:
+  curriculum_stage: 2
 
 # Filters
 min_trace_quality: 0.5          # Exclude low-quality traces
+
+# Gold warmstart data policy
+gold:
+  strict_grammar: true
+  turn_sliced: true
+  include_intermediate_feedback: true
 
 # Max sequence length (traces can be long with thinking tokens)
 max_seq_len: 8192

@@ -28,6 +28,8 @@ from abc import ABC, abstractmethod
 import torch
 from transformers import PreTrainedTokenizer
 
+from llm_finetune.data.grammar import find_actions, validate_action
+
 
 class SFTTarget(ABC):
     """Abstract base class for SFT supervision targets.
@@ -168,7 +170,152 @@ class WarmstartReasoningTarget(SFTTarget):
         return mask
 
 
+class GoldCurriculumWarmstartTarget(WarmstartReasoningTarget):
+    """Gold warmstart target for compute-efficient GRPO preparation.
+
+    This target turns each successful DesignBench trace into many one-turn SFT
+    examples. Each example contains the full context up to a single assistant
+    decision and supervises exactly that next response. The curriculum keeps
+    SFT light enough for LoRA/2-GPU runs while teaching strict executable action
+    syntax before GRPO.
+
+    Stages:
+      1. Action-only grammar and turn-taking.
+      2. Short reasoning plus one canonical action.
+      3. Stage 2 plus terminal answers, but only after feasible feedback.
+    """
+
+    def __init__(self, curriculum_stage: int = 2):
+        super().__init__()
+        self.curriculum_stage = int(curriculum_stage)
+
+    def get_loss_mask(
+        self,
+        input_ids: torch.Tensor,
+        labels: torch.Tensor,
+        tokenizer: PreTrainedTokenizer,
+    ) -> torch.Tensor:
+        """Supervise only the sliced target assistant turn and its stop token."""
+        mask = torch.zeros_like(labels)
+        full_text = tokenizer.decode(input_ids.tolist(), skip_special_tokens=False)
+
+        span = _final_assistant_content_span(full_text)
+        if span is None:
+            return super().get_loss_mask(input_ids, labels, tokenizer)
+
+        char_to_token = _build_char_to_token_map(input_ids, tokenizer)
+        span_start, span_end = span
+        for char_pos in range(span_start, span_end):
+            token_idx = char_to_token.get(char_pos)
+            if token_idx is not None and labels[token_idx].item() != -100:
+                mask[token_idx] = 1
+
+        return mask
+
+    def transform_example(self, example: dict, tokenizer: PreTrainedTokenizer) -> list[dict]:
+        messages = example.get("messages")
+        if not messages:
+            return []
+
+        transformed_messages = self._transform.transform_messages(messages)
+        turn_examples: list[dict] = []
+        action_step = 0
+
+        for idx, msg in enumerate(transformed_messages):
+            if msg.get("role") != "assistant":
+                continue
+
+            content = msg.get("content", "")
+            base_meta = {
+                "problem_id": example.get("problem_id", ""),
+                "trace_id": example.get("trace_id", ""),
+                "trace_quality": example.get("trace_quality", 1.0),
+                "strategy_type": example.get("strategy_type", ""),
+                "step_index": action_step,
+            }
+
+            if "<answer>" in content:
+                if self.curriculum_stage >= 3 and _previous_feedback_is_feasible(
+                    transformed_messages[:idx]
+                ):
+                    turn_examples.append({
+                        **base_meta,
+                        "messages": transformed_messages[: idx + 1],
+                        "gold_stage": "terminal_answer",
+                        "action_type": "ANSWER",
+                        "reaches_solution": True,
+                    })
+                continue
+
+            actions = find_actions(content)
+            if len(actions) != 1:
+                continue
+            validation = validate_action(actions[0])
+            if not validation.is_valid:
+                continue
+
+            action_step += 1
+            target_content = _gold_target_content(
+                content,
+                validation.action,
+                curriculum_stage=self.curriculum_stage,
+            )
+            turn_examples.append({
+                **base_meta,
+                "messages": transformed_messages[:idx] + [
+                    {"role": "assistant", "content": target_content}
+                ],
+                "gold_stage": (
+                    "action_only" if self.curriculum_stage <= 1 else "reasoned_action"
+                ),
+                "action": validation.action,
+                "canonical_action": validation.canonical_action,
+                "action_type": validation.action_type,
+                "reaches_solution": False,
+            })
+
+        return turn_examples
+
+
 # ── Utilities ────────────────────────────────────────────────────────────────
+
+def _gold_target_content(content: str, action: str, *, curriculum_stage: int) -> str:
+    if curriculum_stage <= 1:
+        return f"<action>{action}</action>"
+
+    think_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
+    if not think_match:
+        return f"<action>{action}</action>"
+    thinking = " ".join(think_match.group(1).strip().split())
+    if not thinking:
+        return f"<action>{action}</action>"
+    return f"<think>\n{thinking}\n</think>\n<action>{action}</action>"
+
+
+def _previous_feedback_is_feasible(messages: list[dict]) -> bool:
+    for msg in reversed(messages):
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content", "").upper()
+        if "INFEASIBLE" in content:
+            return False
+        return "FEASIBLE" in content
+    return False
+
+
+def _final_assistant_content_span(full_text: str) -> tuple[int, int] | None:
+    """Return the final assistant payload span, including the closing chat token."""
+    marker = "<|im_start|>assistant\n"
+    start = full_text.rfind(marker)
+    if start < 0:
+        return None
+
+    content_start = start + len(marker)
+    end_marker = "<|im_end|>"
+    end = full_text.find(end_marker, content_start)
+    if end < 0:
+        return content_start, len(full_text)
+    return content_start, end + len(end_marker)
 
 def _build_char_to_token_map(
     input_ids: torch.Tensor, tokenizer: PreTrainedTokenizer
@@ -187,6 +334,7 @@ def _build_char_to_token_map(
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 TARGET_REGISTRY: dict[str, type[SFTTarget]] = {
+    "gold_curriculum_warmstart": GoldCurriculumWarmstartTarget,
     "warmstart_reasoning": WarmstartReasoningTarget,
     "full_sequence": FullSequenceTarget,
 }

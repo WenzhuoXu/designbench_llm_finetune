@@ -1,0 +1,9 @@
+# DeepSeek-R1-Distill-Qwen-32B — practical single-GPU DeepSeek reasoning variant
+# https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+
+defaults:
+  - base
+
+model_name_or_path: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+thinking_mode: true
+think_token: "<think>"

@@ -1,0 +1,19 @@
+# §6.3 Step 1c — Baseline: r_env alone, α=10
+# r_env = γΦ(s') − Φ(s) is the only reward signal. No tree expansion.
+# Sweep point: high α — heavy feasibility penalty, risk of mass objective suppression.
+# If feasibility_rate is not monotone in α at convergence, revisit Φ calibration.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env only
+
+cost_fn: null
+
+use_tree_expansion: false
+
+posterior:
+  alpha: 10.0                   # Lagrange multiplier — high
+  gamma: 0.99

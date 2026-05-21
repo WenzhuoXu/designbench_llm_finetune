@@ -1,0 +1,9 @@
+# DeepSeek-R1-0528-Qwen3-8B — newer official R1 small reasoning release
+# https://huggingface.co/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
+
+defaults:
+  - base
+
+model_name_or_path: deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
+thinking_mode: true
+think_token: "<think>"

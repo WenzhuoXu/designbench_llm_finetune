@@ -1,0 +1,38 @@
+# §6.3 Step 4 — +Pattern signals (macro completion + dead-end avoidance)
+# Builds on step 2 (tree expansion). Adds the two GRPO-time modification-tree
+# signals from §2.3 and §2.4.
+#
+# macro_completion (β₂=0.05): bonus for completing known 2-step action-class
+#   sequences mined from gold traces (self-gating — silent on no match).
+# dead_end_avoidance (ξ=0.20): cost penalty for monotone-worsening + all-local
+#   action patterns matching dead-end signatures (§2.4, uses ρ_nn radius).
+#
+# Diagnostics: macro_completion_mean std should be non-zero (not saturated);
+#   dead_end_avoidance_mean should decrease over training.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env
+  tree_advantage: 1.0           # group-relative Φ advantage
+  macro_completion: 0.05        # §2.3 β₂
+
+cost_fn: composite
+cost_weights:
+  dead_end_avoidance: 0.20      # §2.4 ξ
+  constraint_violation: 1.0     # smooth FOS/mass violation penalty
+
+cost_coef: 0.1
+
+use_tree_expansion: true
+tree_expansion:
+  depth: 1
+  branching: 5
+  deeper_branching: 3
+  continuation: greedy
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99
