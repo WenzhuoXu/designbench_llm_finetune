@@ -1,0 +1,27 @@
+# §6.3 v2 depth ablation — +Tree expansion D=2.
+# Tests §3.3 prediction: D=2 adds ~5% ranking accuracy at 16× FEA cost vs D=1.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0
+  tree_advantage: 1.0
+
+cost_fn: null
+use_tree_expansion: true
+tree_expansion:
+  depth: 2
+  branching: 5
+  deeper_branching: 3
+  continuation: greedy
+
+learning_rate: 5.0e-6           # 10× grpo_base default; needed for LoRA to shift distribution
+max_steps_train: 200
+num_epochs: 100
+save_steps: 25
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99

@@ -1,0 +1,22 @@
+# §6.3 v2 Step 1b — r_env alone, α=5 (primary baseline)
+# PRIMARY BASELINE for all v2 comparisons.
+# Theory prediction (§7.1): feasibility_rate ≥ 90% at convergence with α ≥ 5.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env only: γΦ(s') − Φ(s)
+
+cost_fn: null
+use_tree_expansion: false
+
+learning_rate: 5.0e-6           # 10× grpo_base default; needed for LoRA to shift distribution
+max_steps_train: 200
+num_epochs: 100                 # allow cycling; scheduler uses max_steps_train when > 0
+save_steps: 25
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99

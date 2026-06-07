@@ -121,12 +121,19 @@ def build_grpo_trainer(
         )
 
     # Build reward function that calls the environment
+    # Shared mutable state for passing rho from compute_rewards to the
+    # training callback. Direct wandb.log(step=k) inside compute_rewards
+    # conflicts with TRL's WandbCallback step tracking and gets silently
+    # dropped; emitting from on_log uses the correct global_step.
+    _rho_state: dict = {"rho": 0.0}
+
     reward_callable = _build_reward_callable(
         reward_fn=reward_fn,
         cost_fn=cost_fn,
         env=env,
         wandb_logger=wandb_logger,
         rl_cfg=rl_cfg,
+        rho_state=_rho_state,
     )
 
     # Output directory
@@ -195,7 +202,7 @@ def build_grpo_trainer(
         remove_unused_columns=False,
     )
 
-    callbacks = _build_grpo_callbacks(wandb_logger, local_logger, cfg)
+    callbacks = _build_grpo_callbacks(wandb_logger, local_logger, cfg, _rho_state)
 
     # ref_model removed from TRL 1.0.0 constructor — created internally when beta != 0
     trainer = GRPOTrainer(
@@ -324,6 +331,7 @@ def _build_reward_callable(
     env,
     wandb_logger,
     rl_cfg: DictConfig,
+    rho_state: Optional[dict] = None,
 ):
     """Build a TRL-compatible reward function that calls TrussRolloutEnv.
 
@@ -473,8 +481,10 @@ def _build_reward_callable(
                 cost_stds = {k: _std(vs) for k, vs in merged_c.items()}
                 wandb_logger.log_cost_breakdown(step, cost_means, cost_stds)
 
-            # rho(t) training proxy
-            wandb_logger.log_rho(step, rho)
+            # rho(t) — stored in shared state, emitted from on_log callback
+            # so it uses global_step and avoids W&B step-conflict drops.
+            if rho_state is not None:
+                rho_state["rho"] = rho
 
         return rewards
 
@@ -493,7 +503,7 @@ def _get_deepspeed_config(cfg: DictConfig) -> Optional[str]:
     return None
 
 
-def _build_grpo_callbacks(wandb_logger, local_logger, cfg) -> list:
+def _build_grpo_callbacks(wandb_logger, local_logger, cfg, rho_state: Optional[dict] = None) -> list:
     """Build trainer callbacks for GRPO training logging."""
     try:
         from transformers import TrainerCallback
@@ -502,10 +512,14 @@ def _build_grpo_callbacks(wandb_logger, local_logger, cfg) -> list:
             def on_log(self, args, state, control, logs=None, **kwargs):
                 if logs is None:
                     return
+                # Inject rho into the log dict so it shares global_step and
+                # reaches both metrics.jsonl and W&B without step conflicts.
+                rho = rho_state["rho"] if rho_state is not None else 0.0
+                logs_with_rho = {**logs, "rho_tree_agreement": rho}
                 if local_logger is not None:
-                    local_logger.log_step(state.global_step, logs)
+                    local_logger.log_step(state.global_step, logs_with_rho)
                 if wandb_logger is not None and wandb_logger.is_active:
-                    wandb_logger.log_training_step(state.global_step, logs)
+                    wandb_logger.log_training_step(state.global_step, logs_with_rho)
 
             def on_save(self, args, state, control, **kwargs):
                 if wandb_logger is not None and wandb_logger.is_active:

@@ -36,3 +36,11 @@ wandb/
 # Local tooling caches
 .ipynb_checkpoints/
 .cache/
+
+# Paper drafts and figures (tracked separately)
+emnlp_2026/
+figures/
+
+# Stray output files
+output.file
+*.file

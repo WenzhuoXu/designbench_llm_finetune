@@ -1,0 +1,28 @@
+# §6.3 v2 Step 2 — +Tree expansion (D=1, b=5). PRIMARY THEORY TEST.
+# Watch eval/rho_tree_agreement (ρ(t)) in W&B.
+# Theory (§3.6): ρ(t) should rise monotonically and converge to ≥ 0.85.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0
+  tree_advantage: 1.0
+
+cost_fn: null
+use_tree_expansion: true
+tree_expansion:
+  depth: 1
+  branching: 5
+  deeper_branching: 3
+  continuation: greedy
+
+learning_rate: 5.0e-6           # 10× grpo_base default; needed for LoRA to shift distribution
+max_steps_train: 200
+num_epochs: 100
+save_steps: 25
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99
