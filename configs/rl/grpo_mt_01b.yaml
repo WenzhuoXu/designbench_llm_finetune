@@ -1,0 +1,33 @@
+# §6.3 S1 PRIMARY baseline — multi-turn GRPO, r_env only, α=5.
+# Multi-turn version of grpo_abl_v2_01b (the single-turn protocol was the Turn-0
+# blocker; see docs/ablation_ledger.md). DesignBench-native prompts (in-distribution).
+# max_turns / max_steps_train finalized from the canary-v3 step_time measurement.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env only: γΦ(s') − Φ(s)
+
+cost_fn: null
+use_tree_expansion: false
+
+# ── multi-turn rollout (batched; canary v5 validated: ~511s/step, no OOM) ───
+multi_turn: true
+max_turns: 5                    # 5 turns ≈ 511s/step → 100 steps ≈ 14h < 24h wall
+max_turn_tokens: 1536           # full reasoning + action (genuine CoT; ~75% terminate < cap)
+gen_batch_chunk: 8              # batched generation memory cap
+
+# ── training ────────────────────────────────────────────────────────
+learning_rate: 5.0e-6           # canary: policy moves multi-turn (kl 0.0137)
+max_steps_train: 100            # cosine T_max=100
+num_epochs: 100
+save_steps: 25
+group_size: 8
+temperature: 0.6                # base-model default; cleaner turn termination than 0.8
+top_p: 0.95
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99

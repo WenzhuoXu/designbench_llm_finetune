@@ -1,0 +1,38 @@
+# §6.3 S2 PRIMARY theory test — multi-turn GRPO + tree expansion (D=1, b=5).
+# Multi-turn version of grpo_abl_v2_02_tree. Watch eval/rho_tree_agreement (ρ(t)).
+# Theory (§3.6): ρ(t) rises → ≥0.85; Φ(s_H) ↑ vs S1.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0
+  tree_advantage: 1.0
+
+cost_fn: null
+use_tree_expansion: true
+tree_expansion:
+  depth: 1
+  branching: 5
+  deeper_branching: 3
+  continuation: greedy
+
+# ── multi-turn rollout (canary-validated) ──────────────────────────
+multi_turn: true
+max_turns: 5
+max_turn_tokens: 1536
+gen_batch_chunk: 8
+
+# ── training ────────────────────────────────────────────────────────
+learning_rate: 5.0e-6
+max_steps_train: 100
+num_epochs: 100
+save_steps: 25
+group_size: 8
+temperature: 0.6
+top_p: 0.95
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99

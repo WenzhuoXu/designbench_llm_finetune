@@ -5,10 +5,12 @@
 #SBATCH --gres=gpu:h100-80:1
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=64G
-#SBATCH --time=04:00:00
+#SBATCH --time=08:00:00
 #SBATCH --output=logs/slurm/%x_%j.out
 #SBATCH --error=logs/slurm/%x_%j.err
 #SBATCH --qos=gpu
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=wxu2@andrew.cmu.edu
 
 # ============================================================
 # Ablation Study v2 — checkpoint evaluation
@@ -45,15 +47,28 @@ export CUDA_DEVICE_ORDER=PCI_BUS_ID
 
 mkdir -p logs/slurm "results/eval/${RUN_NAME}"
 
+# Rollout protocol (default multi — matches the model's trained distribution and
+# master-doc §3). Override per-submit: ROLLOUT=single, MAX_PROBLEMS=25, etc.
+ROLLOUT="${ROLLOUT:-multi}"
+MAX_PROBLEMS="${MAX_PROBLEMS:-0}"
+MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-1024}"
+MAX_STEPS="${MAX_STEPS:-20}"
+FEW_SHOT_FLAG=""; [ "${FEW_SHOT:-0}" = "1" ] && FEW_SHOT_FLAG="--few-shot"
+EXTRACT_FLAG=""; [ "${EXTRACT_ACTION:-0}" = "1" ] && EXTRACT_FLAG="--extract-action"
+
 python scripts/eval_checkpoint.py \
   --checkpoint "${CHECKPOINT}" \
-  --model-config "configs/model/qwen3_14b.yaml" \
+  --model-config "${MODEL_CONFIG:-configs/model/qwen3_14b.yaml}" \
   --problems-dir "${DESIGNBENCH_DIR}/data/problems" \
   --output-dir "results/eval/${RUN_NAME}" \
   --wandb-project "designbench-training" \
   --wandb-run-name "eval_${RUN_NAME}" \
   --n-gpus 1 \
-  --max-steps 20 \
+  --rollout "${ROLLOUT}" \
+  --max-steps "${MAX_STEPS}" \
+  --max-new-tokens "${MAX_NEW_TOKENS}" \
+  --max-problems "${MAX_PROBLEMS}" \
+  ${FEW_SHOT_FLAG} ${EXTRACT_FLAG} \
   --temperature 0.0
 
 echo "============================================================"

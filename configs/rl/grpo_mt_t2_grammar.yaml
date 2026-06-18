@@ -1,0 +1,37 @@
+# Turn 2 — grammar-protected reward (addresses Turn-1 failure mode).
+# Turn-1 (01b, r_env only) gained feasibility (0→12%, FOS 0.41→1.42) but
+# reward-hacked format (grammar_success 1.0→0.44), capping feasibility since
+# ~56% of actions fail to parse. Add grammar_compliance to the reward so the
+# policy keeps the FOS gains AND stays parseable. ONE change vs the Turn-1
+# winner (plan §4). Base α = the best-feasibility α from the Turn-1 sweep
+# (default 5 = validated 01b; revise after 01a/01c eval if a different α wins).
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env (FOS shaping) — kept from Turn 1
+  grammar_compliance: 5.0       # protect parseable format ([0,1] reward; ~comparable to r_env scale)
+
+cost_fn: null
+use_tree_expansion: false
+
+# ── multi-turn rollout (Turn-1 validated) ───────────────────────────
+multi_turn: true
+max_turns: 5
+max_turn_tokens: 1536
+gen_batch_chunk: 8
+
+# ── training ────────────────────────────────────────────────────────
+learning_rate: 5.0e-6
+max_steps_train: 100
+num_epochs: 100
+save_steps: 25
+group_size: 8
+temperature: 0.6
+top_p: 0.95
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99

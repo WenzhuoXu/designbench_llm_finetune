@@ -204,8 +204,53 @@ def build_grpo_trainer(
 
     callbacks = _build_grpo_callbacks(wandb_logger, local_logger, cfg, _rho_state)
 
+    # Multi-turn rollouts via TRL's rollout_func hook (generate→FEA→generate,
+    # one action/turn). See docs/multiturn_grpo_design.md. Reconstructs the same
+    # formatter train_grpo.py used for the dataset so turn-0 prompts match.
+    rollout_func = None
+    if bool(rl_cfg.get("multi_turn", False)):
+        if use_vllm:
+            raise ValueError(
+                "rl.multi_turn=true requires rl.use_vllm=false (per-turn HF generate)."
+            )
+        from llm_finetune.data.processors.chat_formatter import (
+            ChatFormatter,
+            ThinkingMode,
+            MODEL_THINKING_MODE,
+        )
+        from llm_finetune.training.rl.multiturn_rollout import (
+            make_multiturn_rollout_func,
+            register_prompt_specs,
+        )
+        # Resolve thinking mode by MODEL FAMILY, not the checkpoint path. With a
+        # warmstart checkpoint, cfg.model.model_name_or_path is a local path not
+        # in MODEL_THINKING_MODE → would default to NONE and drop Qwen3's
+        # enable_thinking. The single-turn eval (base id → QWEN3) produced
+        # concise, well-terminated turns; matching it here is what makes turns
+        # stop at ~one action instead of running to max_turn_tokens.
+        _mid = cfg.model.model_name_or_path
+        _tm = MODEL_THINKING_MODE.get(_mid)
+        if _tm is None:
+            _low = str(_mid).lower()
+            if "qwen3" in _low:
+                _tm = ThinkingMode.QWEN3
+            elif "deepseek-r1" in _low or "deepseek_r1" in _low:
+                _tm = ThinkingMode.DEEPSEEK_R1
+        mt_formatter = ChatFormatter.from_model_id(_mid, tokenizer, thinking_mode=_tm)
+        log.info(f"Multi-turn rollout formatter thinking_mode={_tm}")
+        n_reg = register_prompt_specs(train_dataset)
+        rollout_func = make_multiturn_rollout_func(
+            mt_formatter, rl_cfg, base_model_id=cfg.model.model_name_or_path
+        )
+        log.info(
+            f"Multi-turn GRPO enabled (rollout_func): {n_reg} prompt specs registered, "
+            f"max_turns={rl_cfg.get('max_turns', rl_cfg.get('max_steps', 20))}, "
+            f"max_turn_tokens={rl_cfg.get('max_turn_tokens', 512)}, "
+            f"max_completion_length={grpo_config.max_completion_length}"
+        )
+
     # ref_model removed from TRL 1.0.0 constructor — created internally when beta != 0
-    trainer = GRPOTrainer(
+    trainer_kwargs = dict(
         model=model,
         processing_class=tokenizer,
         reward_funcs=[reward_callable],
@@ -213,6 +258,9 @@ def build_grpo_trainer(
         train_dataset=train_dataset,
         callbacks=callbacks,
     )
+    if rollout_func is not None:
+        trainer_kwargs["rollout_func"] = rollout_func
+    trainer = GRPOTrainer(**trainer_kwargs)
 
     log.info(
         f"GRPOTrainer built:\n"
@@ -361,9 +409,18 @@ def _build_reward_callable(
         n = len(completions)
         problem_specs: list[dict] = kwargs.get("problem_spec", [{}] * n)
 
-        # ── Phase 1: execute all rollouts ──────────────────────────────────
+        # ── Phase 1: obtain rollouts ───────────────────────────────────────
+        # Multi-turn path: the rollout_func already ran the generate→FEA loop
+        # and threaded the actual RolloutResult per completion via the
+        # 'rollout_result' extra field (TRL merges it 1:1 into reward kwargs).
+        # Single-turn path: parse the one completion via run_completion.
+        provided_rollouts = kwargs.get("rollout_result")
         rollout_data: list = []
         for i, (completion, spec) in enumerate(zip(completions, problem_specs)):
+            if (provided_rollouts is not None and i < len(provided_rollouts)
+                    and provided_rollouts[i] is not None):
+                rollout_data.append(provided_rollouts[i])
+                continue
             try:
                 rollout = env.run_completion(problem_spec=spec, completion=completion)
                 rollout_data.append(rollout)

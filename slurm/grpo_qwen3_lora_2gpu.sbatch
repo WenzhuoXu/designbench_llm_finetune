@@ -9,6 +9,8 @@
 #SBATCH --output=logs/slurm/%x_%j.out
 #SBATCH --error=logs/slurm/%x_%j.err
 #SBATCH --qos=gpu
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=wxu2@andrew.cmu.edu
 
 # ============================================================
 # Qwen3-14B GRPO with LoRA — 2×H100-80GB
@@ -117,13 +119,14 @@ torchrun \
     model.lora.lora_dropout=0.0 \
     model.device_map=null \
     rl.use_vllm=false \
-    rl.max_new_tokens=2048 \
+    rl.max_new_tokens="${MAX_NEW_TOKENS:-2048}" \
     rl.n_env_workers="$N_FEA_WORKERS" \
     logging.wandb_project=designbench-training \
     "logging.wandb_tags=[qwen3,lora,r32,posterior,2gpu]" \
     logging.wandb_enabled=true \
     logging.save_artifact_to_wandb=true \
     logging.gpu_stats_every_n_steps=20 \
+    logging.log_every_n_steps="${LOG_EVERY:-10}" \
     ${CHECKPOINT_ARGS}
 
 echo "============================================================"

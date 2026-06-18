@@ -1,0 +1,34 @@
+# Multi-turn GRPO CANARY — validates the rollout_func mechanism, not convergence.
+# See docs/multiturn_grpo_design.md §"Canary gate".
+# r_env only (Lagrangian potential), no tree expansion, short horizon, few steps.
+# Pass criteria: multi-turn rollouts execute (FEA stepping), kl>0 and grows,
+# clip_ratio/region_mean>0, grad_norm healthy, reward finite, rho logged, no OOM.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  lagrangian_potential: 1.0     # r_env only: γΦ(s') − Φ(s)
+
+cost_fn: null
+use_tree_expansion: false
+
+# ── multi-turn rollout ──────────────────────────────────────────────
+multi_turn: true
+max_turns: 5                    # short horizon for the canary
+max_turn_tokens: 1536           # full reasoning + action (turns are genuine CoT; can't truncate)
+gen_batch_chunk: 8              # batched generation: rollouts per generate() call (memory cap)
+temperature: 0.6
+top_p: 0.95
+
+# ── tiny training run (mechanism check only) ────────────────────────
+learning_rate: 5.0e-6
+max_steps_train: 4              # validate batched generation + measure step_time
+num_epochs: 100
+save_steps: 1000                # no checkpoint needed for the canary
+group_size: 8                   # match v2 (known-good TRL batch math on 2 GPUs)
+
+posterior:
+  alpha: 5.0
+  gamma: 0.99
