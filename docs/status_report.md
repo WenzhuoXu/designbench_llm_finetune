@@ -8,8 +8,13 @@ multi-turn grammar-action policy. Full audit trail in `docs/ablation_ledger.md`.
 
 ## 1. Executive summary — current status
 
+> **Robust-number note:** the headline champion feasibility is **54% on a 50-problem eval**
+> (the frequently-cited 68% was on the easier first 25 problems; 25-problem cells carry ±8%
+> noise and an easy-subset bias, so they are used below for *relative* comparison only).
+
 The project went from a **completely broken evaluation pipeline reporting ~0% feasibility**
-to a trained policy reaching **68% feasibility** on held-out truss problems. The gains came
+to a trained policy reaching **~54% feasibility (50 problems; 68% on the first 25)** on held-out
+truss problems. The gains came
 **not from the RL algorithm** but from fixing two things the algorithm was starved of:
 
 | stage | what changed | eval feasibility | mean FOS_buckling |

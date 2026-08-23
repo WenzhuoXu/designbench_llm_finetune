@@ -1,0 +1,287 @@
+{
+  "aggregate": {
+    "n_problems": 25,
+    "rollout": "multi",
+    "feasibility_rate": 0.12,
+    "mean_grammar_success_rate": 0.4614285714285713,
+    "mean_final_fos_buckling": 2.122928765286548,
+    "mean_steps": 18.28
+  },
+  "per_problem": [
+    {
+      "problem_id": "auto_problem_000",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.0,
+      "final_fos_yielding": 0.0,
+      "final_mass": 2648.248873991392,
+      "initial_fos_buckling": 0.4423688543440326,
+      "initial_mass": 102.55097367284999,
+      "grammar_success_rate": 0.65
+    },
+    {
+      "problem_id": "auto_problem_001",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 1.2943000318448052,
+      "final_fos_yielding": 8.09660464951104,
+      "final_mass": 431.7014473241474,
+      "initial_fos_buckling": 0.5056387497417834,
+      "initial_mass": 159.8696214964738,
+      "grammar_success_rate": 0.35
+    },
+    {
+      "problem_id": "auto_problem_002",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 1.0454202305629308,
+      "final_fos_yielding": 9.274669143907285,
+      "final_mass": 943.9199645478909,
+      "initial_fos_buckling": 0.08233840635602532,
+      "initial_mass": 119.04462349003113,
+      "grammar_success_rate": 0.55
+    },
+    {
+      "problem_id": "auto_problem_003",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 1.3070032568507952,
+      "final_fos_yielding": 3.475307951106533,
+      "final_mass": 38.476290596114026,
+      "initial_fos_buckling": 1.046099846577994,
+      "initial_mass": 29.861663273004538,
+      "grammar_success_rate": 0.55
+    },
+    {
+      "problem_id": "auto_problem_004",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 4.436633652162119,
+      "final_fos_yielding": 3.678718175091292e-14,
+      "final_mass": 781.4310940601156,
+      "initial_fos_buckling": 0.8426070916810109,
+      "initial_mass": 115.02770490102068,
+      "grammar_success_rate": 0.5
+    },
+    {
+      "problem_id": "auto_problem_005",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.03257256034318801,
+      "final_fos_yielding": 11.454643535657281,
+      "final_mass": 115.6254243965484,
+      "initial_fos_buckling": 0.38573591756974024,
+      "initial_mass": 22.478172183980742,
+      "grammar_success_rate": 0.4
+    },
+    {
+      "problem_id": "auto_problem_006",
+      "reaches_solution": true,
+      "n_steps": 5,
+      "final_fos_buckling": 2.6397994904390503,
+      "final_fos_yielding": 5.253494693527837,
+      "final_mass": 38.04990910527956,
+      "initial_fos_buckling": 1.2735222262826693,
+      "initial_mass": 32.42167759173191,
+      "grammar_success_rate": 0.6
+    },
+    {
+      "problem_id": "auto_problem_007",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.5732081209990432,
+      "final_fos_yielding": 3.5410073388791683,
+      "final_mass": 2860.1433254186595,
+      "initial_fos_buckling": 0.586081029679551,
+      "initial_mass": 210.00201069600644,
+      "grammar_success_rate": 0.5
+    },
+    {
+      "problem_id": "auto_problem_008",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 1.2383212682474753,
+      "final_fos_yielding": 2.913494731920752,
+      "final_mass": 951.9391738900329,
+      "initial_fos_buckling": 0.2635490720246673,
+      "initial_mass": 271.1693778127642,
+      "grammar_success_rate": 0.65
+    },
+    {
+      "problem_id": "auto_problem_009",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.6821368035526842,
+      "final_fos_yielding": 3.2763336643923417,
+      "final_mass": 797.7765925875291,
+      "initial_fos_buckling": 0.837587766776307,
+      "initial_mass": 161.23506333820066,
+      "grammar_success_rate": 0.75
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.24572862361067377,
+      "final_fos_yielding": 3.570846838775384,
+      "final_mass": 398.3824517967721,
+      "initial_fos_buckling": 0.25490535532826636,
+      "initial_mass": 258.74868215824443,
+      "grammar_success_rate": 0.1
+    },
+    {
+      "problem_id": "auto_problem_011",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 5.967907554412528,
+      "final_fos_yielding": 7.67360341978814,
+      "final_mass": 120.65685166763156,
+      "initial_fos_buckling": 0.9523153953948974,
+      "initial_mass": 54.435865208712286,
+      "grammar_success_rate": 0.55
+    },
+    {
+      "problem_id": "auto_problem_012",
+      "reaches_solution": true,
+      "n_steps": 5,
+      "final_fos_buckling": 1.6822782781204468,
+      "final_fos_yielding": 10.11546787846315,
+      "final_mass": 88.85649455545754,
+      "initial_fos_buckling": 1.0922749728178185,
+      "initial_mass": 59.49270796754338,
+      "grammar_success_rate": 0.6
+    },
+    {
+      "problem_id": "auto_problem_013",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.6567563930387722,
+      "final_fos_yielding": 5.610770701199561,
+      "final_mass": 1370.4686257003575,
+      "initial_fos_buckling": 0.522075950720773,
+      "initial_mass": 55.75465187089738,
+      "grammar_success_rate": 0.5
+    },
+    {
+      "problem_id": "auto_problem_014",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 1.307593806779793,
+      "final_fos_yielding": 7.581716614745403,
+      "final_mass": 1824.043780149159,
+      "initial_fos_buckling": 0.15146710975862232,
+      "initial_mass": 202.79222299571012,
+      "grammar_success_rate": 0.45
+    },
+    {
+      "problem_id": "auto_problem_015",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.0,
+      "final_fos_yielding": 0.0,
+      "final_mass": 3709.673331093382,
+      "initial_fos_buckling": 0.0,
+      "initial_mass": 3709.673331093382,
+      "grammar_success_rate": 0.45
+    },
+    {
+      "problem_id": "auto_problem_016",
+      "reaches_solution": true,
+      "n_steps": 7,
+      "final_fos_buckling": 1.8349393282949993,
+      "final_fos_yielding": 3.651644982148034,
+      "final_mass": 113.31927011106964,
+      "initial_fos_buckling": 0.8888960118280923,
+      "initial_mass": 92.73662074943785,
+      "grammar_success_rate": 0.2857142857142857
+    },
+    {
+      "problem_id": "auto_problem_017",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.0,
+      "final_fos_yielding": 0.0,
+      "final_mass": 4473.019860299665,
+      "initial_fos_buckling": 0.0,
+      "initial_mass": 4473.019860299665,
+      "grammar_success_rate": 0.6
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.1563590094767576,
+      "final_fos_yielding": 0.7450832680492959,
+      "final_mass": 1017.4103883284805,
+      "initial_fos_buckling": 0.0010055382943618405,
+      "initial_mass": 153.09452419756366,
+      "grammar_success_rate": 0.35
+    },
+    {
+      "problem_id": "auto_problem_019",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 9.783284294474289,
+      "final_fos_yielding": 15.0,
+      "final_mass": 274.404929547302,
+      "initial_fos_buckling": 1.0937234008397376,
+      "initial_mass": 78.02552872945091,
+      "grammar_success_rate": 0.5
+    },
+    {
+      "problem_id": "auto_problem_020",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 1.2968257592020944,
+      "final_fos_yielding": 5.314370624019202,
+      "final_mass": 238.1545530427793,
+      "initial_fos_buckling": 0.7117414571268157,
+      "initial_mass": 104.59779331899875,
+      "grammar_success_rate": 0.35
+    },
+    {
+      "problem_id": "auto_problem_021",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.8271075025964607,
+      "final_fos_yielding": 2.044479604450119,
+      "final_mass": 1171.87197845349,
+      "initial_fos_buckling": 1.0354668824208428,
+      "initial_mass": 266.0508670825402,
+      "grammar_success_rate": 0.35
+    },
+    {
+      "problem_id": "auto_problem_022",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 1.5002057616554818,
+      "final_fos_yielding": 5.168424590424976,
+      "final_mass": 2234.7035453375765,
+      "initial_fos_buckling": 0.22727840996385099,
+      "initial_mass": 176.10882887543656,
+      "grammar_success_rate": 0.45
+    },
+    {
+      "problem_id": "auto_problem_023",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 0.7373420073327374,
+      "final_fos_yielding": 6.012058288043731,
+      "final_mass": 79.58078445083643,
+      "initial_fos_buckling": 0.6575319614519877,
+      "initial_mass": 58.8062110215567,
+      "grammar_success_rate": 0.2
+    },
+    {
+      "problem_id": "auto_problem_024",
+      "reaches_solution": false,
+      "n_steps": 20,
+      "final_fos_buckling": 13.827495398166578,
+      "final_fos_yielding": 7.834673338563545,
+      "final_mass": 796.0302096230556,
+      "initial_fos_buckling": 0.31603433331496705,
+      "initial_mass": 128.73368200199195,
+      "grammar_success_rate": 0.3
+    }
+  ]
+}

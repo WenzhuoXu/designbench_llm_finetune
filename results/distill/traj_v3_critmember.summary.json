@@ -1,0 +1,51 @@
+{
+  "aggregate": {
+    "n_problems": 6,
+    "feasibility_rate": 0.6666666666666666,
+    "mean_final_fos_b": 1.0621723690972127
+  },
+  "per_problem": [
+    {
+      "problem_id": "auto_problem_000",
+      "feasible": true,
+      "n_steps": 7,
+      "init_fos_b": 0.4423688543440326,
+      "final_fos_b": 1.6936142677365802
+    },
+    {
+      "problem_id": "auto_problem_001",
+      "feasible": true,
+      "n_steps": 6,
+      "init_fos_b": 0.5056387497417834,
+      "final_fos_b": 1.5405544012962975
+    },
+    {
+      "problem_id": "auto_problem_002",
+      "feasible": false,
+      "n_steps": 12,
+      "init_fos_b": 0.08233840635602532,
+      "final_fos_b": 0.08233840635602532
+    },
+    {
+      "problem_id": "auto_problem_003",
+      "feasible": true,
+      "n_steps": 4,
+      "init_fos_b": 1.046099846577994,
+      "final_fos_b": 1.5237901090962704
+    },
+    {
+      "problem_id": "auto_problem_004",
+      "feasible": false,
+      "n_steps": 12,
+      "init_fos_b": 0.8426070916810109,
+      "final_fos_b": 0.0
+    },
+    {
+      "problem_id": "auto_problem_005",
+      "feasible": true,
+      "n_steps": 5,
+      "init_fos_b": 0.38573591756974024,
+      "final_fos_b": 1.5327370300981025
+    }
+  ]
+}

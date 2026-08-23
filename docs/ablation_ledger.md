@@ -550,6 +550,13 @@ balance, not a hard prompt imperative) — deferred.
 **Robust eval:** champion (mt_t3 GRPO+critmember final) on **50 problems** (job 41484986) to pin
 the headline number (25-problem est. ±8%). CHAMPION STANDS: GRPO+critical-member ≈ 68%.
 
+**ROBUST CHAMPION NUMBER: 54% on 50 problems (not 68%).** The 68% was on problems 0–24 (easier
+subset); the 50-problem eval gives **feasibility 0.54, grammar 0.66, FOS_b 1.32** — so 25-problem
+evals were optimistic + noisy (problems 25–49 solve less). Honest headline: GRPO+critical-member
+≈ **54%** (vs 12% naive GRPO, 0% warmstart). Still the dominant result; the 25-problem cell
+numbers stand for RELATIVE comparison but the absolute headline is 54%. (100-problem likely lower
+— includes degenerate huge-mass problems.) All jobs done; queue empty. Report updated.
+
 ### Turn 0 — Instrumentation + S0 baseline (2026-06-12)
 
 **State verification (plan §1) — corrections to the plan's premises:**
