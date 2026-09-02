@@ -1,0 +1,10 @@
+# T5bw — T5bo plus informativeness-weighted sampling. Isolates the SAMPLER.
+#
+# Identical to grpo_mt_t5bo_phionly_v2 in every respect; only the data config
+# differs (rl_problems_informative instead of rl_problems_split). If the arms
+# came back null because there were only ~66 informative gradient events in a
+# run, this is the cheapest fix: same problems, same reward, same steps, ~42%
+# more groups that can actually teach a feasibility ordering.
+
+defaults:
+  - grpo_mt_t5bo_phionly_v2

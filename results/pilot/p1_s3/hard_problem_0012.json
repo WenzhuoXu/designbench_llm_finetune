@@ -1,0 +1,268 @@
+{
+  "problem_id": "hard_problem_0012",
+  "description": "Truss optimization problem (ground structure variant 12)",
+  "topology": {
+    "joints": [
+      {
+        "id": 0,
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "support": "pinned"
+      },
+      {
+        "id": 1,
+        "position": [
+          7.179658413838221,
+          0.15753539978940106,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 2,
+        "position": [
+          13.792644973053424,
+          0.0,
+          0.0
+        ],
+        "support": "roller_y"
+      },
+      {
+        "id": 3,
+        "position": [
+          0.0,
+          2.0846258576265697,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 4,
+        "position": [
+          6.896322486526712,
+          2.0846258576265697,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 5,
+        "position": [
+          13.792644973053424,
+          2.0846258576265697,
+          0.0
+        ],
+        "support": null
+      }
+    ],
+    "members": [
+      {
+        "joints": [
+          0,
+          1
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.017100059352885708,
+          "t": 0.00456044588707657
+        }
+      },
+      {
+        "joints": [
+          1,
+          2
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.027290381428880957,
+          "t": 0.0030658402418309366
+        }
+      },
+      {
+        "joints": [
+          3,
+          4
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.029298193366063395,
+          "t": 0.004883032227677233
+        }
+      },
+      {
+        "joints": [
+          4,
+          5
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.05261865321090517,
+          "t": 0.00497356411306023
+        }
+      },
+      {
+        "joints": [
+          0,
+          3
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.01207563533802912,
+          "t": 0.004759796727422952
+        }
+      },
+      {
+        "joints": [
+          1,
+          4
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.0251075746444896,
+          "t": 0.00233809821959469
+        }
+      },
+      {
+        "joints": [
+          2,
+          5
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.01361664909091754,
+          "t": 0.004557218487385967
+        }
+      },
+      {
+        "joints": [
+          1,
+          3
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.0050534911617463665,
+          "t": 0.001226266252593202
+        }
+      },
+      {
+        "joints": [
+          1,
+          5
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.00763294770632239,
+          "t": 0.0024422328703431495
+        }
+      },
+      {
+        "joints": [
+          2,
+          4
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.1163295249619868,
+          "t": 0.019388254160331138
+        }
+      }
+    ]
+  },
+  "loading": [
+    {
+      "joint": 3,
+      "force": [
+        0.0,
+        -77555.43515510955,
+        0.0
+      ]
+    },
+    {
+      "joint": 4,
+      "force": [
+        0.0,
+        -73176.31729669365,
+        0.0
+      ]
+    },
+    {
+      "joint": 5,
+      "force": [
+        0.0,
+        -64541.23245759998,
+        0.0
+      ]
+    }
+  ],
+  "goals": {
+    "minimum_fos_buckling": 1.5,
+    "minimum_fos_yielding": 1.5,
+    "maximum_mass": 532.3179294081317
+  },
+  "optimization": {
+    "shape": "Pipe",
+    "shape_params": {
+      "r": {
+        "min": 0.005,
+        "max": 0.15,
+        "initial": 0.03
+      },
+      "t": {
+        "min": 0.001,
+        "max": 0.02,
+        "initial": 0.005
+      }
+    }
+  },
+  "_metadata": {
+    "optimal_mass": 483.92539037102875,
+    "generation_method": "ground_structure_lp_misallocated",
+    "degradation_steps": 11,
+    "certified_mass": 345.6609931221634,
+    "certified_aspect_min": 0.04,
+    "fixed_aspect_mass": 583.1808424786396,
+    "mass_slack": 1.4,
+    "stratum": "s3",
+    "degradation": {
+      "removed": 1,
+      "jittered": 1,
+      "n_down": 5,
+      "n_up": 4,
+      "down_ids": [
+        0,
+        1,
+        4,
+        6,
+        7
+      ],
+      "up_ids": [
+        3,
+        5,
+        8,
+        9
+      ],
+      "attempt": 0,
+      "min_fos": 0.05625866508064452,
+      "degraded_mass": 936.5459074553937
+    },
+    "difficulty": "medium",
+    "policy_solved": {
+      "greedy_critical": false,
+      "lookahead_v2_d1": true,
+      "lookahead_v2_d2": true
+    }
+  }
+}

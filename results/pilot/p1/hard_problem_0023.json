@@ -1,0 +1,426 @@
+{
+  "problem_id": "hard_problem_0023",
+  "description": "Truss optimization problem (ground structure variant 23)",
+  "topology": {
+    "joints": [
+      {
+        "id": 0,
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "support": "pinned"
+      },
+      {
+        "id": 1,
+        "position": [
+          2.296769285746576,
+          0.0,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 2,
+        "position": [
+          4.593538571493152,
+          0.0,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 3,
+        "position": [
+          6.890307857239728,
+          0.0,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 4,
+        "position": [
+          9.187077142986304,
+          0.0,
+          0.0
+        ],
+        "support": "roller_y"
+      },
+      {
+        "id": 5,
+        "position": [
+          0.0,
+          2.569286085433747,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 6,
+        "position": [
+          2.296769285746576,
+          2.569286085433747,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 7,
+        "position": [
+          4.593538571493152,
+          2.569286085433747,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 8,
+        "position": [
+          6.890307857239728,
+          2.569286085433747,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 9,
+        "position": [
+          9.187077142986304,
+          2.569286085433747,
+          0.0
+        ],
+        "support": null
+      }
+    ],
+    "members": [
+      {
+        "joints": [
+          0,
+          1
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.009149886548107234,
+          "t": 0.0012166801917018327
+        }
+      },
+      {
+        "joints": [
+          1,
+          2
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.009325603286456235,
+          "t": 0.0015542672144093727
+        }
+      },
+      {
+        "joints": [
+          2,
+          3
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.009519868971068495,
+          "t": 0.0027638901741442487
+        }
+      },
+      {
+        "joints": [
+          3,
+          4
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.01666834809617843,
+          "t": 0.0027780580160297387
+        }
+      },
+      {
+        "joints": [
+          5,
+          6
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.016082362114517582,
+          "t": 0.0026803936857529307
+        }
+      },
+      {
+        "joints": [
+          6,
+          7
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.03026451818600575,
+          "t": 0.0050440863643342925
+        }
+      },
+      {
+        "joints": [
+          7,
+          8
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.03197979802473562,
+          "t": 0.004410484050764107
+        }
+      },
+      {
+        "joints": [
+          8,
+          9
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.01124271328886346,
+          "t": 0.0018737855481439102
+        }
+      },
+      {
+        "joints": [
+          0,
+          5
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.05905483657667005,
+          "t": 0.009842472762778344
+        }
+      },
+      {
+        "joints": [
+          1,
+          6
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.005,
+          "t": 0.001
+        }
+      },
+      {
+        "joints": [
+          2,
+          7
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.005,
+          "t": 0.001
+        }
+      },
+      {
+        "joints": [
+          3,
+          8
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.02038567002838105,
+          "t": 0.003397611671396842
+        }
+      },
+      {
+        "joints": [
+          4,
+          9
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.01668877816778008,
+          "t": 0.004249594573333125
+        }
+      },
+      {
+        "joints": [
+          0,
+          6
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.034577272962485944,
+          "t": 0.003196379889817584
+        }
+      },
+      {
+        "joints": [
+          1,
+          5
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.007246842158367493,
+          "t": 0.001
+        }
+      },
+      {
+        "joints": [
+          1,
+          7
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.033252337749532616,
+          "t": 0.0055420562915887706
+        }
+      },
+      {
+        "joints": [
+          2,
+          6
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.01017744312092179,
+          "t": 0.0016962405201536319
+        }
+      },
+      {
+        "joints": [
+          2,
+          8
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.034373906129225855,
+          "t": 0.005728984354870977
+        }
+      },
+      {
+        "joints": [
+          3,
+          7
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.005,
+          "t": 0.001
+        }
+      },
+      {
+        "joints": [
+          3,
+          9
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.005,
+          "t": 0.001284113010663375
+        }
+      },
+      {
+        "joints": [
+          4,
+          8
+        ],
+        "material": "6061_T6_Aluminum",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.046669071937005376,
+          "t": 0.007778178656167563
+        }
+      }
+    ]
+  },
+  "loading": [
+    {
+      "joint": 5,
+      "force": [
+        0.0,
+        -79590.35088538207,
+        0.0
+      ]
+    },
+    {
+      "joint": 8,
+      "force": [
+        0.0,
+        -74189.56914520639,
+        0.0
+      ]
+    }
+  ],
+  "goals": {
+    "minimum_fos_buckling": 1.5,
+    "minimum_fos_yielding": 1.5,
+    "maximum_mass": 104.37112161833602
+  },
+  "optimization": {
+    "shape": "Pipe",
+    "shape_params": {
+      "r": {
+        "min": 0.005,
+        "max": 0.15,
+        "initial": 0.03
+      },
+      "t": {
+        "min": 0.001,
+        "max": 0.02,
+        "initial": 0.005
+      }
+    }
+  },
+  "_metadata": {
+    "optimal_mass": 94.88283783485092,
+    "generation_method": "ground_structure_lp_misallocated",
+    "degradation_steps": 12,
+    "certified_mass": 45.18230373088139,
+    "certified_aspect_min": 0.04,
+    "fixed_aspect_mass": 84.05184516924022,
+    "mass_slack": 2.1,
+    "stratum": "s1",
+    "degradation": {
+      "removed": 0,
+      "jittered": 0,
+      "n_down": 7,
+      "n_up": 5,
+      "down_ids": [
+        0,
+        1,
+        2,
+        6,
+        7,
+        10,
+        13
+      ],
+      "up_ids": [
+        8,
+        12,
+        14,
+        15,
+        19
+      ],
+      "attempt": 0,
+      "min_fos": 0.3808605578102663,
+      "degraded_mass": 93.35127808149899
+    },
+    "difficulty": null
+  }
+}

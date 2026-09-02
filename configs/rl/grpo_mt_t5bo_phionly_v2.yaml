@@ -1,0 +1,63 @@
+# T5bo — POTENTIAL-ONLY arm. The clean isolation of the central claim.
+#
+# T5a/T5b keep the champion's full (accidentally inherited) reward blend, which
+# answers "does fixing the potential improve the deployed system?". They cannot
+# answer the scientific question, because Phi_v1 and Phi_v2 have different
+# MAGNITUDES (~O(10-30) vs ~O(1-15)), so the potential's share of a composite sum
+# differs between the arms even though the declared weights are identical.
+#
+# Here the reward is the potential and nothing else. TRL runs GRPO with
+# scale_rewards='group': advantages are mean-centred and divided by the
+# within-group standard deviation, so the reward is used only up to an affine
+# transform. With a single term, scale cancels EXACTLY and the arms can differ in
+# one thing only -- the ORDER the potential induces over a group's 8 rollouts.
+#
+# That is the claim under test: under group-normalised GRPO, reward design
+# reduces to ordering design, and Phi_v1 orders infeasible-over-stiffened above
+# feasible-lean (-3.80 vs -9.02 on auto_problem_000) while Phi_v2 does not.
+# It is also the sharpest test of the theory front's Proposition 1: with no
+# terminal task reward the shaping IS the objective, so the run succeeds only if
+# the potential's argmax lies in the feasible set.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  # Hydra MERGES dict-valued keys, so grpo_truss.yaml's four terms arrive here
+  # whether or not they are wanted. Zeroing them explicitly is the only way to
+  # get a single-term reward; CompositeReward skips any component with weight 0.
+  # (This merge is defect D5: every mt_* config silently inherited these, so the
+  # champion's reward was never the "single dense term" the status report claims.)
+  feasibility: 0.0
+  fos_improvement: 0.0
+  grammar_compliance: 0.0
+  step_efficiency: 0.0
+  lagrangian_potential_v2: 1.0
+
+cost_fn: null
+use_tree_expansion: false
+
+multi_turn: true
+max_turns: 5
+max_turn_tokens: 1536
+gen_batch_chunk: 8
+
+learning_rate: 5.0e-6
+max_steps_train: 100
+num_epochs: 100
+save_steps: 25
+group_size: 8
+temperature: 0.6
+top_p: 0.95
+
+posterior:
+  alpha: 5.0
+  gamma: 1.0
+  tau: 0.05
+  objective_weight: 1.0
+
+lookahead_probe:
+  enabled: true
+  max_states_per_batch: 8
+  max_candidates: 48

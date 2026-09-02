@@ -1,0 +1,35 @@
+# T8 — the per-token channel. The experiment the theory actually asks for.
+#
+# T5c and T5co delivered the per-step counterfactual advantage as a SCALAR reward
+# term, summed over the trajectory. That cannot work, and the reason is
+# structural rather than empirical: GRPO computes one advantage per sequence and
+# broadcasts it to every token, so the signal it can carry lives in span{1}.
+# Decompose a per-token vector as
+#
+#     A^k = mean_t(A^k_t) * 1  +  A~^k        (A~^k orthogonal to 1)
+#
+# and the scalar form retains only the first component. No group-level affine
+# transform of any per-sequence reward can produce the second. The measurement
+# agrees: against its matched control the scalar form moved the policy's action
+# ranking by t = +0.67 over 14 paired steps, point estimate in the wrong direction.
+#
+# Here the advantage is delivered per token instead:
+#
+#     A_token = A_sequence + kappa * zscore(A_step)
+#
+# where A_step is the counterfactual advantage Phi(s_{t+1}) - E_c Phi(f(s_t,c))
+# written onto exactly the tokens the policy generated for turn t, and
+# environment tokens carry none. kappa = 0 reproduces stock GRPO exactly, so
+# T5bo is this arm's control and the pair isolates the delivery channel alone.
+
+defaults:
+  - grpo_mt_t5bo_phionly_v2
+
+# The trajectory-level reward stays exactly as T5bo's (Phi_v2 only); the per-step
+# term arrives through the advantage, not the reward.
+lookahead_kappa: 1.0
+
+lookahead_probe:
+  enabled: true
+  all_steps: true          # every turn must be probed or its tokens get no credit
+  max_candidates: 48

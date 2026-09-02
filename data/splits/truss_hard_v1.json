@@ -1,0 +1,2914 @@
+{
+ "name": "truss_hard_v1",
+ "seed": 20260827,
+ "eval_frac": 0.35,
+ "source": "/ocean/projects/mch250030p/wxu7/DesignBench/data/problems_hard",
+ "n_total": 580,
+ "train": [
+  "hard_problem_0000",
+  "hard_problem_0001",
+  "hard_problem_0004",
+  "hard_problem_0005",
+  "hard_problem_0007",
+  "hard_problem_0008",
+  "hard_problem_0009",
+  "hard_problem_0011",
+  "hard_problem_0012",
+  "hard_problem_0013",
+  "hard_problem_0014",
+  "hard_problem_0015",
+  "hard_problem_0016",
+  "hard_problem_0017",
+  "hard_problem_0020",
+  "hard_problem_0022",
+  "hard_problem_0023",
+  "hard_problem_0024",
+  "hard_problem_0025",
+  "hard_problem_0026",
+  "hard_problem_0029",
+  "hard_problem_0035",
+  "hard_problem_0036",
+  "hard_problem_0039",
+  "hard_problem_0040",
+  "hard_problem_0042",
+  "hard_problem_0044",
+  "hard_problem_0045",
+  "hard_problem_0046",
+  "hard_problem_0047",
+  "hard_problem_0049",
+  "hard_problem_0051",
+  "hard_problem_0052",
+  "hard_problem_0055",
+  "hard_problem_0056",
+  "hard_problem_0059",
+  "hard_problem_0063",
+  "hard_problem_0067",
+  "hard_problem_0068",
+  "hard_problem_0069",
+  "hard_problem_0070",
+  "hard_problem_0071",
+  "hard_problem_0073",
+  "hard_problem_0074",
+  "hard_problem_0075",
+  "hard_problem_0078",
+  "hard_problem_0079",
+  "hard_problem_0080",
+  "hard_problem_0081",
+  "hard_problem_0083",
+  "hard_problem_0084",
+  "hard_problem_0085",
+  "hard_problem_0086",
+  "hard_problem_0087",
+  "hard_problem_0088",
+  "hard_problem_0089",
+  "hard_problem_0090",
+  "hard_problem_0091",
+  "hard_problem_0092",
+  "hard_problem_0093",
+  "hard_problem_0094",
+  "hard_problem_0097",
+  "hard_problem_0099",
+  "hard_problem_0101",
+  "hard_problem_0102",
+  "hard_problem_0103",
+  "hard_problem_0105",
+  "hard_problem_0106",
+  "hard_problem_0108",
+  "hard_problem_0109",
+  "hard_problem_0110",
+  "hard_problem_0111",
+  "hard_problem_0114",
+  "hard_problem_0116",
+  "hard_problem_0117",
+  "hard_problem_0118",
+  "hard_problem_0119",
+  "hard_problem_0120",
+  "hard_problem_0122",
+  "hard_problem_0123",
+  "hard_problem_0124",
+  "hard_problem_0125",
+  "hard_problem_0126",
+  "hard_problem_0127",
+  "hard_problem_0128",
+  "hard_problem_0129",
+  "hard_problem_0131",
+  "hard_problem_0134",
+  "hard_problem_0136",
+  "hard_problem_0138",
+  "hard_problem_0140",
+  "hard_problem_0141",
+  "hard_problem_0142",
+  "hard_problem_0144",
+  "hard_problem_0145",
+  "hard_problem_0146",
+  "hard_problem_0147",
+  "hard_problem_0149",
+  "hard_problem_0151",
+  "hard_problem_0152",
+  "hard_problem_0153",
+  "hard_problem_0156",
+  "hard_problem_0157",
+  "hard_problem_0158",
+  "hard_problem_0159",
+  "hard_problem_0163",
+  "hard_problem_0166",
+  "hard_problem_0167",
+  "hard_problem_0169",
+  "hard_problem_0171",
+  "hard_problem_0173",
+  "hard_problem_0175",
+  "hard_problem_0176",
+  "hard_problem_0177",
+  "hard_problem_0178",
+  "hard_problem_0180",
+  "hard_problem_0181",
+  "hard_problem_0182",
+  "hard_problem_0184",
+  "hard_problem_0186",
+  "hard_problem_0187",
+  "hard_problem_0189",
+  "hard_problem_0191",
+  "hard_problem_0193",
+  "hard_problem_0194",
+  "hard_problem_0195",
+  "hard_problem_0196",
+  "hard_problem_0198",
+  "hard_problem_0199",
+  "hard_problem_0201",
+  "hard_problem_0202",
+  "hard_problem_0203",
+  "hard_problem_0205",
+  "hard_problem_0207",
+  "hard_problem_0208",
+  "hard_problem_0210",
+  "hard_problem_0211",
+  "hard_problem_0212",
+  "hard_problem_0213",
+  "hard_problem_0214",
+  "hard_problem_0215",
+  "hard_problem_0216",
+  "hard_problem_0218",
+  "hard_problem_0220",
+  "hard_problem_0223",
+  "hard_problem_0224",
+  "hard_problem_0226",
+  "hard_problem_0227",
+  "hard_problem_0229",
+  "hard_problem_0230",
+  "hard_problem_0231",
+  "hard_problem_0233",
+  "hard_problem_0234",
+  "hard_problem_0235",
+  "hard_problem_0236",
+  "hard_problem_0237",
+  "hard_problem_0239",
+  "hard_problem_0240",
+  "hard_problem_0242",
+  "hard_problem_0244",
+  "hard_problem_0245",
+  "hard_problem_0246",
+  "hard_problem_0247",
+  "hard_problem_0248",
+  "hard_problem_0249",
+  "hard_problem_0252",
+  "hard_problem_0253",
+  "hard_problem_0254",
+  "hard_problem_0255",
+  "hard_problem_0256",
+  "hard_problem_0257",
+  "hard_problem_0260",
+  "hard_problem_0261",
+  "hard_problem_0264",
+  "hard_problem_0266",
+  "hard_problem_0268",
+  "hard_problem_0269",
+  "hard_problem_0270",
+  "hard_problem_0271",
+  "hard_problem_0272",
+  "hard_problem_0273",
+  "hard_problem_0275",
+  "hard_problem_0276",
+  "hard_problem_0277",
+  "hard_problem_0278",
+  "hard_problem_0279",
+  "hard_problem_0281",
+  "hard_problem_0282",
+  "hard_problem_0283",
+  "hard_problem_0286",
+  "hard_problem_0288",
+  "hard_problem_0289",
+  "hard_problem_0290",
+  "hard_problem_0293",
+  "hard_problem_0297",
+  "hard_problem_0298",
+  "hard_problem_0300",
+  "hard_problem_0301",
+  "hard_problem_0307",
+  "hard_problem_0310",
+  "hard_problem_0315",
+  "hard_problem_0316",
+  "hard_problem_0317",
+  "hard_problem_0318",
+  "hard_problem_0319",
+  "hard_problem_0321",
+  "hard_problem_0323",
+  "hard_problem_0324",
+  "hard_problem_0325",
+  "hard_problem_0326",
+  "hard_problem_0327",
+  "hard_problem_0328",
+  "hard_problem_0329",
+  "hard_problem_0330",
+  "hard_problem_0333",
+  "hard_problem_0334",
+  "hard_problem_0335",
+  "hard_problem_0337",
+  "hard_problem_0338",
+  "hard_problem_0339",
+  "hard_problem_0340",
+  "hard_problem_0341",
+  "hard_problem_0342",
+  "hard_problem_0345",
+  "hard_problem_0347",
+  "hard_problem_0349",
+  "hard_problem_0350",
+  "hard_problem_0352",
+  "hard_problem_0354",
+  "hard_problem_0355",
+  "hard_problem_0356",
+  "hard_problem_0357",
+  "hard_problem_0358",
+  "hard_problem_0359",
+  "hard_problem_0360",
+  "hard_problem_0362",
+  "hard_problem_0363",
+  "hard_problem_0364",
+  "hard_problem_0365",
+  "hard_problem_0367",
+  "hard_problem_0368",
+  "hard_problem_0370",
+  "hard_problem_0371",
+  "hard_problem_0372",
+  "hard_problem_0375",
+  "hard_problem_0376",
+  "hard_problem_0377",
+  "hard_problem_0378",
+  "hard_problem_0379",
+  "hard_problem_0380",
+  "hard_problem_0381",
+  "hard_problem_0383",
+  "hard_problem_0384",
+  "hard_problem_0385",
+  "hard_problem_0386",
+  "hard_problem_0387",
+  "hard_problem_0388",
+  "hard_problem_0389",
+  "hard_problem_0391",
+  "hard_problem_0392",
+  "hard_problem_0393",
+  "hard_problem_0394",
+  "hard_problem_0397",
+  "hard_problem_0398",
+  "hard_problem_0400",
+  "hard_problem_0401",
+  "hard_problem_0402",
+  "hard_problem_0403",
+  "hard_problem_0405",
+  "hard_problem_0407",
+  "hard_problem_0408",
+  "hard_problem_0410",
+  "hard_problem_0412",
+  "hard_problem_0413",
+  "hard_problem_0414",
+  "hard_problem_0415",
+  "hard_problem_0416",
+  "hard_problem_0417",
+  "hard_problem_0419",
+  "hard_problem_0421",
+  "hard_problem_0423",
+  "hard_problem_0426",
+  "hard_problem_0429",
+  "hard_problem_0431",
+  "hard_problem_0432",
+  "hard_problem_0433",
+  "hard_problem_0435",
+  "hard_problem_0436",
+  "hard_problem_0437",
+  "hard_problem_0439",
+  "hard_problem_0440",
+  "hard_problem_0441",
+  "hard_problem_0443",
+  "hard_problem_0444",
+  "hard_problem_0450",
+  "hard_problem_0451",
+  "hard_problem_0452",
+  "hard_problem_0453",
+  "hard_problem_0454",
+  "hard_problem_0456",
+  "hard_problem_0458",
+  "hard_problem_0459",
+  "hard_problem_0461",
+  "hard_problem_0464",
+  "hard_problem_0467",
+  "hard_problem_0468",
+  "hard_problem_0469",
+  "hard_problem_0470",
+  "hard_problem_0471",
+  "hard_problem_0473",
+  "hard_problem_0474",
+  "hard_problem_0475",
+  "hard_problem_0478",
+  "hard_problem_0479",
+  "hard_problem_0480",
+  "hard_problem_0481",
+  "hard_problem_0484",
+  "hard_problem_0486",
+  "hard_problem_0487",
+  "hard_problem_0488",
+  "hard_problem_0489",
+  "hard_problem_0491",
+  "hard_problem_0492",
+  "hard_problem_0494",
+  "hard_problem_0496",
+  "hard_problem_0498",
+  "hard_problem_0500",
+  "hard_problem_0501",
+  "hard_problem_0502",
+  "hard_problem_0503",
+  "hard_problem_0507",
+  "hard_problem_0508",
+  "hard_problem_0510",
+  "hard_problem_0514",
+  "hard_problem_0515",
+  "hard_problem_0516",
+  "hard_problem_0517",
+  "hard_problem_0518",
+  "hard_problem_0519",
+  "hard_problem_0521",
+  "hard_problem_0522",
+  "hard_problem_0523",
+  "hard_problem_0525",
+  "hard_problem_0526",
+  "hard_problem_0527",
+  "hard_problem_0528",
+  "hard_problem_0529",
+  "hard_problem_0530",
+  "hard_problem_0532",
+  "hard_problem_0533",
+  "hard_problem_0535",
+  "hard_problem_0536",
+  "hard_problem_0538",
+  "hard_problem_0539",
+  "hard_problem_0540",
+  "hard_problem_0541",
+  "hard_problem_0542",
+  "hard_problem_0543",
+  "hard_problem_0544",
+  "hard_problem_0546",
+  "hard_problem_0547",
+  "hard_problem_0548",
+  "hard_problem_0552",
+  "hard_problem_0554",
+  "hard_problem_0555",
+  "hard_problem_0556",
+  "hard_problem_0558",
+  "hard_problem_0559",
+  "hard_problem_0561",
+  "hard_problem_0564",
+  "hard_problem_0565",
+  "hard_problem_0568",
+  "hard_problem_0569",
+  "hard_problem_0574",
+  "hard_problem_0575",
+  "hard_problem_0577",
+  "hard_problem_0578",
+  "hard_problem_0579"
+ ],
+ "eval": [
+  "hard_problem_0002",
+  "hard_problem_0003",
+  "hard_problem_0006",
+  "hard_problem_0010",
+  "hard_problem_0018",
+  "hard_problem_0019",
+  "hard_problem_0021",
+  "hard_problem_0027",
+  "hard_problem_0028",
+  "hard_problem_0030",
+  "hard_problem_0031",
+  "hard_problem_0032",
+  "hard_problem_0033",
+  "hard_problem_0034",
+  "hard_problem_0037",
+  "hard_problem_0038",
+  "hard_problem_0041",
+  "hard_problem_0043",
+  "hard_problem_0048",
+  "hard_problem_0050",
+  "hard_problem_0053",
+  "hard_problem_0054",
+  "hard_problem_0057",
+  "hard_problem_0058",
+  "hard_problem_0060",
+  "hard_problem_0061",
+  "hard_problem_0062",
+  "hard_problem_0064",
+  "hard_problem_0065",
+  "hard_problem_0066",
+  "hard_problem_0072",
+  "hard_problem_0076",
+  "hard_problem_0077",
+  "hard_problem_0082",
+  "hard_problem_0095",
+  "hard_problem_0096",
+  "hard_problem_0098",
+  "hard_problem_0100",
+  "hard_problem_0104",
+  "hard_problem_0107",
+  "hard_problem_0112",
+  "hard_problem_0113",
+  "hard_problem_0115",
+  "hard_problem_0121",
+  "hard_problem_0130",
+  "hard_problem_0132",
+  "hard_problem_0133",
+  "hard_problem_0135",
+  "hard_problem_0137",
+  "hard_problem_0139",
+  "hard_problem_0143",
+  "hard_problem_0148",
+  "hard_problem_0150",
+  "hard_problem_0154",
+  "hard_problem_0155",
+  "hard_problem_0160",
+  "hard_problem_0161",
+  "hard_problem_0162",
+  "hard_problem_0164",
+  "hard_problem_0165",
+  "hard_problem_0168",
+  "hard_problem_0170",
+  "hard_problem_0172",
+  "hard_problem_0174",
+  "hard_problem_0179",
+  "hard_problem_0183",
+  "hard_problem_0185",
+  "hard_problem_0188",
+  "hard_problem_0190",
+  "hard_problem_0192",
+  "hard_problem_0197",
+  "hard_problem_0200",
+  "hard_problem_0204",
+  "hard_problem_0206",
+  "hard_problem_0209",
+  "hard_problem_0217",
+  "hard_problem_0219",
+  "hard_problem_0221",
+  "hard_problem_0222",
+  "hard_problem_0225",
+  "hard_problem_0228",
+  "hard_problem_0232",
+  "hard_problem_0238",
+  "hard_problem_0241",
+  "hard_problem_0243",
+  "hard_problem_0250",
+  "hard_problem_0251",
+  "hard_problem_0258",
+  "hard_problem_0259",
+  "hard_problem_0262",
+  "hard_problem_0263",
+  "hard_problem_0265",
+  "hard_problem_0267",
+  "hard_problem_0274",
+  "hard_problem_0280",
+  "hard_problem_0284",
+  "hard_problem_0285",
+  "hard_problem_0287",
+  "hard_problem_0291",
+  "hard_problem_0292",
+  "hard_problem_0294",
+  "hard_problem_0295",
+  "hard_problem_0296",
+  "hard_problem_0299",
+  "hard_problem_0302",
+  "hard_problem_0303",
+  "hard_problem_0304",
+  "hard_problem_0305",
+  "hard_problem_0306",
+  "hard_problem_0308",
+  "hard_problem_0309",
+  "hard_problem_0311",
+  "hard_problem_0312",
+  "hard_problem_0313",
+  "hard_problem_0314",
+  "hard_problem_0320",
+  "hard_problem_0322",
+  "hard_problem_0331",
+  "hard_problem_0332",
+  "hard_problem_0336",
+  "hard_problem_0343",
+  "hard_problem_0344",
+  "hard_problem_0346",
+  "hard_problem_0348",
+  "hard_problem_0351",
+  "hard_problem_0353",
+  "hard_problem_0361",
+  "hard_problem_0366",
+  "hard_problem_0369",
+  "hard_problem_0373",
+  "hard_problem_0374",
+  "hard_problem_0382",
+  "hard_problem_0390",
+  "hard_problem_0395",
+  "hard_problem_0396",
+  "hard_problem_0399",
+  "hard_problem_0404",
+  "hard_problem_0406",
+  "hard_problem_0409",
+  "hard_problem_0411",
+  "hard_problem_0418",
+  "hard_problem_0420",
+  "hard_problem_0422",
+  "hard_problem_0424",
+  "hard_problem_0425",
+  "hard_problem_0427",
+  "hard_problem_0428",
+  "hard_problem_0430",
+  "hard_problem_0434",
+  "hard_problem_0438",
+  "hard_problem_0442",
+  "hard_problem_0445",
+  "hard_problem_0446",
+  "hard_problem_0447",
+  "hard_problem_0448",
+  "hard_problem_0449",
+  "hard_problem_0455",
+  "hard_problem_0457",
+  "hard_problem_0460",
+  "hard_problem_0462",
+  "hard_problem_0463",
+  "hard_problem_0465",
+  "hard_problem_0466",
+  "hard_problem_0472",
+  "hard_problem_0476",
+  "hard_problem_0477",
+  "hard_problem_0482",
+  "hard_problem_0483",
+  "hard_problem_0485",
+  "hard_problem_0490",
+  "hard_problem_0493",
+  "hard_problem_0495",
+  "hard_problem_0497",
+  "hard_problem_0499",
+  "hard_problem_0504",
+  "hard_problem_0505",
+  "hard_problem_0506",
+  "hard_problem_0509",
+  "hard_problem_0511",
+  "hard_problem_0512",
+  "hard_problem_0513",
+  "hard_problem_0520",
+  "hard_problem_0524",
+  "hard_problem_0531",
+  "hard_problem_0534",
+  "hard_problem_0537",
+  "hard_problem_0545",
+  "hard_problem_0549",
+  "hard_problem_0550",
+  "hard_problem_0551",
+  "hard_problem_0553",
+  "hard_problem_0557",
+  "hard_problem_0560",
+  "hard_problem_0562",
+  "hard_problem_0563",
+  "hard_problem_0566",
+  "hard_problem_0567",
+  "hard_problem_0570",
+  "hard_problem_0571",
+  "hard_problem_0572",
+  "hard_problem_0573",
+  "hard_problem_0576"
+ ],
+ "records": {
+  "hard_problem_0000": {
+   "difficulty": "medium",
+   "optimal_mass": 58.02965922836189
+  },
+  "hard_problem_0001": {
+   "difficulty": "easy",
+   "optimal_mass": 28.987797121174683
+  },
+  "hard_problem_0002": {
+   "difficulty": "medium",
+   "optimal_mass": 207.7316274347021
+  },
+  "hard_problem_0003": {
+   "difficulty": "easy",
+   "optimal_mass": 34.662948752993515
+  },
+  "hard_problem_0004": {
+   "difficulty": "easy",
+   "optimal_mass": 32.9268965084143
+  },
+  "hard_problem_0005": {
+   "difficulty": "medium",
+   "optimal_mass": 36.926739568650774
+  },
+  "hard_problem_0006": {
+   "difficulty": "hard",
+   "optimal_mass": 49.941969940065086
+  },
+  "hard_problem_0007": {
+   "difficulty": "medium",
+   "optimal_mass": 27.957473432339928
+  },
+  "hard_problem_0008": {
+   "difficulty": "open",
+   "optimal_mass": 147.16472211497856
+  },
+  "hard_problem_0009": {
+   "difficulty": "medium",
+   "optimal_mass": 16.343455738489325
+  },
+  "hard_problem_0010": {
+   "difficulty": "medium",
+   "optimal_mass": 122.90572974880102
+  },
+  "hard_problem_0011": {
+   "difficulty": "medium",
+   "optimal_mass": 85.0892065023005
+  },
+  "hard_problem_0012": {
+   "difficulty": "easy",
+   "optimal_mass": 8.846961713002608
+  },
+  "hard_problem_0013": {
+   "difficulty": "open",
+   "optimal_mass": 260.6222612039821
+  },
+  "hard_problem_0014": {
+   "difficulty": "medium",
+   "optimal_mass": 90.3058221326246
+  },
+  "hard_problem_0015": {
+   "difficulty": "easy",
+   "optimal_mass": 74.31856346303786
+  },
+  "hard_problem_0016": {
+   "difficulty": "open",
+   "optimal_mass": 74.40953007497393
+  },
+  "hard_problem_0017": {
+   "difficulty": "medium",
+   "optimal_mass": 316.08699856932225
+  },
+  "hard_problem_0018": {
+   "difficulty": "medium",
+   "optimal_mass": 80.18582937945504
+  },
+  "hard_problem_0019": {
+   "difficulty": "easy",
+   "optimal_mass": 38.05907073486008
+  },
+  "hard_problem_0020": {
+   "difficulty": "hard",
+   "optimal_mass": 73.61868406426309
+  },
+  "hard_problem_0021": {
+   "difficulty": "easy",
+   "optimal_mass": 52.41813367459716
+  },
+  "hard_problem_0022": {
+   "difficulty": "medium",
+   "optimal_mass": 18.20123363452815
+  },
+  "hard_problem_0023": {
+   "difficulty": "open",
+   "optimal_mass": 190.73133802075034
+  },
+  "hard_problem_0024": {
+   "difficulty": "medium",
+   "optimal_mass": 64.13706905328814
+  },
+  "hard_problem_0025": {
+   "difficulty": "open",
+   "optimal_mass": 153.9497043725231
+  },
+  "hard_problem_0026": {
+   "difficulty": "medium",
+   "optimal_mass": 145.24890221702756
+  },
+  "hard_problem_0027": {
+   "difficulty": "easy",
+   "optimal_mass": 93.70074325353039
+  },
+  "hard_problem_0028": {
+   "difficulty": "medium",
+   "optimal_mass": 48.450928216736045
+  },
+  "hard_problem_0029": {
+   "difficulty": "medium",
+   "optimal_mass": 146.81004824295314
+  },
+  "hard_problem_0030": {
+   "difficulty": "easy",
+   "optimal_mass": 263.74540782859486
+  },
+  "hard_problem_0031": {
+   "difficulty": "medium",
+   "optimal_mass": 291.4767280721728
+  },
+  "hard_problem_0032": {
+   "difficulty": "easy",
+   "optimal_mass": 20.6630559908685
+  },
+  "hard_problem_0033": {
+   "difficulty": "open",
+   "optimal_mass": 147.7302981922747
+  },
+  "hard_problem_0034": {
+   "difficulty": "open",
+   "optimal_mass": 182.49570382360866
+  },
+  "hard_problem_0035": {
+   "difficulty": "open",
+   "optimal_mass": 60.05996053529906
+  },
+  "hard_problem_0036": {
+   "difficulty": "open",
+   "optimal_mass": 78.05437713875827
+  },
+  "hard_problem_0037": {
+   "difficulty": "medium",
+   "optimal_mass": 223.79068555570979
+  },
+  "hard_problem_0038": {
+   "difficulty": "open",
+   "optimal_mass": 66.68098021188005
+  },
+  "hard_problem_0039": {
+   "difficulty": "medium",
+   "optimal_mass": 130.18738520042922
+  },
+  "hard_problem_0040": {
+   "difficulty": "medium",
+   "optimal_mass": 237.98789829292198
+  },
+  "hard_problem_0041": {
+   "difficulty": "medium",
+   "optimal_mass": 17.065908113276787
+  },
+  "hard_problem_0042": {
+   "difficulty": "easy",
+   "optimal_mass": 39.988407230467715
+  },
+  "hard_problem_0043": {
+   "difficulty": "medium",
+   "optimal_mass": 30.01826583289654
+  },
+  "hard_problem_0044": {
+   "difficulty": "medium",
+   "optimal_mass": 13.915739530836774
+  },
+  "hard_problem_0045": {
+   "difficulty": "medium",
+   "optimal_mass": 160.5586808505237
+  },
+  "hard_problem_0046": {
+   "difficulty": "medium",
+   "optimal_mass": 297.5550515755953
+  },
+  "hard_problem_0047": {
+   "difficulty": "medium",
+   "optimal_mass": 115.78439216948823
+  },
+  "hard_problem_0048": {
+   "difficulty": "medium",
+   "optimal_mass": 158.57433391550654
+  },
+  "hard_problem_0049": {
+   "difficulty": "medium",
+   "optimal_mass": 166.78249077203907
+  },
+  "hard_problem_0050": {
+   "difficulty": "open",
+   "optimal_mass": 120.42514018378782
+  },
+  "hard_problem_0051": {
+   "difficulty": "open",
+   "optimal_mass": 55.213408061906996
+  },
+  "hard_problem_0052": {
+   "difficulty": "easy",
+   "optimal_mass": 20.242370726356953
+  },
+  "hard_problem_0053": {
+   "difficulty": "hard",
+   "optimal_mass": 50.45051334180748
+  },
+  "hard_problem_0054": {
+   "difficulty": "open",
+   "optimal_mass": 84.02858484251253
+  },
+  "hard_problem_0055": {
+   "difficulty": "medium",
+   "optimal_mass": 82.60436755181803
+  },
+  "hard_problem_0056": {
+   "difficulty": "medium",
+   "optimal_mass": 161.56359341291
+  },
+  "hard_problem_0057": {
+   "difficulty": "medium",
+   "optimal_mass": 82.1305898568733
+  },
+  "hard_problem_0058": {
+   "difficulty": "medium",
+   "optimal_mass": 149.0112527051645
+  },
+  "hard_problem_0059": {
+   "difficulty": "easy",
+   "optimal_mass": 48.35028736416015
+  },
+  "hard_problem_0060": {
+   "difficulty": "medium",
+   "optimal_mass": 115.41626307870615
+  },
+  "hard_problem_0061": {
+   "difficulty": "open",
+   "optimal_mass": 52.67978113112886
+  },
+  "hard_problem_0062": {
+   "difficulty": "medium",
+   "optimal_mass": 88.94800995401721
+  },
+  "hard_problem_0063": {
+   "difficulty": "hard",
+   "optimal_mass": 47.78871604669151
+  },
+  "hard_problem_0064": {
+   "difficulty": "medium",
+   "optimal_mass": 355.30613846252663
+  },
+  "hard_problem_0065": {
+   "difficulty": "hard",
+   "optimal_mass": 121.98931287891924
+  },
+  "hard_problem_0066": {
+   "difficulty": "medium",
+   "optimal_mass": 151.0104085593679
+  },
+  "hard_problem_0067": {
+   "difficulty": "medium",
+   "optimal_mass": 218.72969746008224
+  },
+  "hard_problem_0068": {
+   "difficulty": "hard",
+   "optimal_mass": 93.64744053519132
+  },
+  "hard_problem_0069": {
+   "difficulty": "medium",
+   "optimal_mass": 103.04711500560887
+  },
+  "hard_problem_0070": {
+   "difficulty": "medium",
+   "optimal_mass": 232.31635781123336
+  },
+  "hard_problem_0071": {
+   "difficulty": "medium",
+   "optimal_mass": 59.11977990570907
+  },
+  "hard_problem_0072": {
+   "difficulty": "medium",
+   "optimal_mass": 406.3282007063565
+  },
+  "hard_problem_0073": {
+   "difficulty": "medium",
+   "optimal_mass": 99.21427114011995
+  },
+  "hard_problem_0074": {
+   "difficulty": "medium",
+   "optimal_mass": 88.45824239194555
+  },
+  "hard_problem_0075": {
+   "difficulty": "medium",
+   "optimal_mass": 80.89683958341377
+  },
+  "hard_problem_0076": {
+   "difficulty": "open",
+   "optimal_mass": 20.762386841546522
+  },
+  "hard_problem_0077": {
+   "difficulty": "medium",
+   "optimal_mass": 352.4597316681722
+  },
+  "hard_problem_0078": {
+   "difficulty": "medium",
+   "optimal_mass": 238.03776783037833
+  },
+  "hard_problem_0079": {
+   "difficulty": "medium",
+   "optimal_mass": 19.901332764219006
+  },
+  "hard_problem_0080": {
+   "difficulty": "medium",
+   "optimal_mass": 108.2526367357253
+  },
+  "hard_problem_0081": {
+   "difficulty": "medium",
+   "optimal_mass": 56.09052516376084
+  },
+  "hard_problem_0082": {
+   "difficulty": "medium",
+   "optimal_mass": 153.54818336156816
+  },
+  "hard_problem_0083": {
+   "difficulty": "easy",
+   "optimal_mass": 30.50194985350241
+  },
+  "hard_problem_0084": {
+   "difficulty": "medium",
+   "optimal_mass": 135.84875050543158
+  },
+  "hard_problem_0085": {
+   "difficulty": "open",
+   "optimal_mass": 130.5223068173565
+  },
+  "hard_problem_0086": {
+   "difficulty": "easy",
+   "optimal_mass": 302.7393480814345
+  },
+  "hard_problem_0087": {
+   "difficulty": "medium",
+   "optimal_mass": 92.6447611764803
+  },
+  "hard_problem_0088": {
+   "difficulty": "medium",
+   "optimal_mass": 33.80823758944861
+  },
+  "hard_problem_0089": {
+   "difficulty": "medium",
+   "optimal_mass": 92.19995903829731
+  },
+  "hard_problem_0090": {
+   "difficulty": "open",
+   "optimal_mass": 68.35195436182696
+  },
+  "hard_problem_0091": {
+   "difficulty": "easy",
+   "optimal_mass": 19.162355970885574
+  },
+  "hard_problem_0092": {
+   "difficulty": "easy",
+   "optimal_mass": 609.1139055167877
+  },
+  "hard_problem_0093": {
+   "difficulty": "medium",
+   "optimal_mass": 435.7530151513158
+  },
+  "hard_problem_0094": {
+   "difficulty": "easy",
+   "optimal_mass": 533.7927809240368
+  },
+  "hard_problem_0095": {
+   "difficulty": "open",
+   "optimal_mass": 110.03263220017926
+  },
+  "hard_problem_0096": {
+   "difficulty": "open",
+   "optimal_mass": 250.49505414936212
+  },
+  "hard_problem_0097": {
+   "difficulty": "easy",
+   "optimal_mass": 65.84999247586656
+  },
+  "hard_problem_0098": {
+   "difficulty": "open",
+   "optimal_mass": 84.20658943597022
+  },
+  "hard_problem_0099": {
+   "difficulty": "medium",
+   "optimal_mass": 394.94880327044626
+  },
+  "hard_problem_0100": {
+   "difficulty": "medium",
+   "optimal_mass": 63.68013374631357
+  },
+  "hard_problem_0101": {
+   "difficulty": "open",
+   "optimal_mass": 125.99372301897017
+  },
+  "hard_problem_0102": {
+   "difficulty": "hard",
+   "optimal_mass": 36.712622161380835
+  },
+  "hard_problem_0103": {
+   "difficulty": "medium",
+   "optimal_mass": 141.1954843685485
+  },
+  "hard_problem_0104": {
+   "difficulty": "hard",
+   "optimal_mass": 97.68739882665442
+  },
+  "hard_problem_0105": {
+   "difficulty": "open",
+   "optimal_mass": 44.8845920599616
+  },
+  "hard_problem_0106": {
+   "difficulty": "medium",
+   "optimal_mass": 230.4177319177104
+  },
+  "hard_problem_0107": {
+   "difficulty": "medium",
+   "optimal_mass": 322.5037706295023
+  },
+  "hard_problem_0108": {
+   "difficulty": "medium",
+   "optimal_mass": 19.070973676975285
+  },
+  "hard_problem_0109": {
+   "difficulty": "hard",
+   "optimal_mass": 211.6551709797776
+  },
+  "hard_problem_0110": {
+   "difficulty": "medium",
+   "optimal_mass": 28.204689141666552
+  },
+  "hard_problem_0111": {
+   "difficulty": "medium",
+   "optimal_mass": 42.62794525861795
+  },
+  "hard_problem_0112": {
+   "difficulty": "medium",
+   "optimal_mass": 99.28896061816447
+  },
+  "hard_problem_0113": {
+   "difficulty": "open",
+   "optimal_mass": 80.98179147526953
+  },
+  "hard_problem_0114": {
+   "difficulty": "medium",
+   "optimal_mass": 77.2407730896611
+  },
+  "hard_problem_0115": {
+   "difficulty": "medium",
+   "optimal_mass": 52.640733594168644
+  },
+  "hard_problem_0116": {
+   "difficulty": "medium",
+   "optimal_mass": 168.7379949685278
+  },
+  "hard_problem_0117": {
+   "difficulty": "medium",
+   "optimal_mass": 244.59876979762998
+  },
+  "hard_problem_0118": {
+   "difficulty": "medium",
+   "optimal_mass": 69.1057211182
+  },
+  "hard_problem_0119": {
+   "difficulty": "medium",
+   "optimal_mass": 235.08905134225796
+  },
+  "hard_problem_0120": {
+   "difficulty": "open",
+   "optimal_mass": 80.61301373995566
+  },
+  "hard_problem_0121": {
+   "difficulty": "medium",
+   "optimal_mass": 271.7172067521507
+  },
+  "hard_problem_0122": {
+   "difficulty": "open",
+   "optimal_mass": 109.99285719374235
+  },
+  "hard_problem_0123": {
+   "difficulty": "hard",
+   "optimal_mass": 92.2373273168696
+  },
+  "hard_problem_0124": {
+   "difficulty": "medium",
+   "optimal_mass": 243.54534568116833
+  },
+  "hard_problem_0125": {
+   "difficulty": "easy",
+   "optimal_mass": 33.28070573854305
+  },
+  "hard_problem_0126": {
+   "difficulty": "open",
+   "optimal_mass": 81.80186293187887
+  },
+  "hard_problem_0127": {
+   "difficulty": "medium",
+   "optimal_mass": 172.0910288311514
+  },
+  "hard_problem_0128": {
+   "difficulty": "medium",
+   "optimal_mass": 27.465776828359346
+  },
+  "hard_problem_0129": {
+   "difficulty": "medium",
+   "optimal_mass": 114.64151481711876
+  },
+  "hard_problem_0130": {
+   "difficulty": "easy",
+   "optimal_mass": 100.8847170818395
+  },
+  "hard_problem_0131": {
+   "difficulty": "easy",
+   "optimal_mass": 53.96297613633668
+  },
+  "hard_problem_0132": {
+   "difficulty": "medium",
+   "optimal_mass": 138.72994970565165
+  },
+  "hard_problem_0133": {
+   "difficulty": "medium",
+   "optimal_mass": 247.5229054512312
+  },
+  "hard_problem_0134": {
+   "difficulty": "medium",
+   "optimal_mass": 202.42030066974837
+  },
+  "hard_problem_0135": {
+   "difficulty": "open",
+   "optimal_mass": 110.55662358626722
+  },
+  "hard_problem_0136": {
+   "difficulty": "medium",
+   "optimal_mass": 190.36973035006721
+  },
+  "hard_problem_0137": {
+   "difficulty": "medium",
+   "optimal_mass": 85.83476123803774
+  },
+  "hard_problem_0138": {
+   "difficulty": "medium",
+   "optimal_mass": 55.97506219574577
+  },
+  "hard_problem_0139": {
+   "difficulty": "medium",
+   "optimal_mass": 8.453162287904972
+  },
+  "hard_problem_0140": {
+   "difficulty": "open",
+   "optimal_mass": 43.75622262964676
+  },
+  "hard_problem_0141": {
+   "difficulty": "medium",
+   "optimal_mass": 167.08213537039717
+  },
+  "hard_problem_0142": {
+   "difficulty": "medium",
+   "optimal_mass": 387.1548326226289
+  },
+  "hard_problem_0143": {
+   "difficulty": "hard",
+   "optimal_mass": 54.916142646224465
+  },
+  "hard_problem_0144": {
+   "difficulty": "medium",
+   "optimal_mass": 54.75125918597228
+  },
+  "hard_problem_0145": {
+   "difficulty": "open",
+   "optimal_mass": 34.706753965210176
+  },
+  "hard_problem_0146": {
+   "difficulty": "medium",
+   "optimal_mass": 200.5282511117759
+  },
+  "hard_problem_0147": {
+   "difficulty": "medium",
+   "optimal_mass": 150.12222617279085
+  },
+  "hard_problem_0148": {
+   "difficulty": "medium",
+   "optimal_mass": 256.4985841539965
+  },
+  "hard_problem_0149": {
+   "difficulty": "medium",
+   "optimal_mass": 20.58347367419711
+  },
+  "hard_problem_0150": {
+   "difficulty": "medium",
+   "optimal_mass": 75.8368671079396
+  },
+  "hard_problem_0151": {
+   "difficulty": "medium",
+   "optimal_mass": 219.03944092647782
+  },
+  "hard_problem_0152": {
+   "difficulty": "medium",
+   "optimal_mass": 134.44087812658105
+  },
+  "hard_problem_0153": {
+   "difficulty": "medium",
+   "optimal_mass": 130.19950813233592
+  },
+  "hard_problem_0154": {
+   "difficulty": "open",
+   "optimal_mass": 126.08603919889065
+  },
+  "hard_problem_0155": {
+   "difficulty": "easy",
+   "optimal_mass": 79.04974269413009
+  },
+  "hard_problem_0156": {
+   "difficulty": "medium",
+   "optimal_mass": 118.2462340179086
+  },
+  "hard_problem_0157": {
+   "difficulty": "medium",
+   "optimal_mass": 209.1121143583882
+  },
+  "hard_problem_0158": {
+   "difficulty": "medium",
+   "optimal_mass": 79.99272670713182
+  },
+  "hard_problem_0159": {
+   "difficulty": "open",
+   "optimal_mass": 156.3229102321131
+  },
+  "hard_problem_0160": {
+   "difficulty": "easy",
+   "optimal_mass": 534.5174725737164
+  },
+  "hard_problem_0161": {
+   "difficulty": "medium",
+   "optimal_mass": 113.94211809656095
+  },
+  "hard_problem_0162": {
+   "difficulty": "hard",
+   "optimal_mass": 216.1499131888456
+  },
+  "hard_problem_0163": {
+   "difficulty": "medium",
+   "optimal_mass": 73.75411013780814
+  },
+  "hard_problem_0164": {
+   "difficulty": "medium",
+   "optimal_mass": 222.58333478262037
+  },
+  "hard_problem_0165": {
+   "difficulty": "medium",
+   "optimal_mass": 140.88769423444865
+  },
+  "hard_problem_0166": {
+   "difficulty": "medium",
+   "optimal_mass": 510.91029699081065
+  },
+  "hard_problem_0167": {
+   "difficulty": "open",
+   "optimal_mass": 56.326364812502284
+  },
+  "hard_problem_0168": {
+   "difficulty": "medium",
+   "optimal_mass": 35.389973090056934
+  },
+  "hard_problem_0169": {
+   "difficulty": "medium",
+   "optimal_mass": 29.017383792392867
+  },
+  "hard_problem_0170": {
+   "difficulty": "medium",
+   "optimal_mass": 135.56512518481
+  },
+  "hard_problem_0171": {
+   "difficulty": "medium",
+   "optimal_mass": 188.62728145477084
+  },
+  "hard_problem_0172": {
+   "difficulty": "open",
+   "optimal_mass": 85.76660881516868
+  },
+  "hard_problem_0173": {
+   "difficulty": "open",
+   "optimal_mass": 36.65585559942177
+  },
+  "hard_problem_0174": {
+   "difficulty": "medium",
+   "optimal_mass": 149.71556986780226
+  },
+  "hard_problem_0175": {
+   "difficulty": "medium",
+   "optimal_mass": 45.96845914596769
+  },
+  "hard_problem_0176": {
+   "difficulty": "hard",
+   "optimal_mass": 74.8823416008753
+  },
+  "hard_problem_0177": {
+   "difficulty": "medium",
+   "optimal_mass": 94.60756100904023
+  },
+  "hard_problem_0178": {
+   "difficulty": "medium",
+   "optimal_mass": 206.07152170478378
+  },
+  "hard_problem_0179": {
+   "difficulty": "medium",
+   "optimal_mass": 79.28532778453481
+  },
+  "hard_problem_0180": {
+   "difficulty": "easy",
+   "optimal_mass": 24.34622603617117
+  },
+  "hard_problem_0181": {
+   "difficulty": "medium",
+   "optimal_mass": 149.3505117627565
+  },
+  "hard_problem_0182": {
+   "difficulty": "medium",
+   "optimal_mass": 166.29551030508932
+  },
+  "hard_problem_0183": {
+   "difficulty": "hard",
+   "optimal_mass": 63.76982012129206
+  },
+  "hard_problem_0184": {
+   "difficulty": "medium",
+   "optimal_mass": 205.70102827373742
+  },
+  "hard_problem_0185": {
+   "difficulty": "open",
+   "optimal_mass": 107.15026231566797
+  },
+  "hard_problem_0186": {
+   "difficulty": "medium",
+   "optimal_mass": 101.5831174401336
+  },
+  "hard_problem_0187": {
+   "difficulty": "medium",
+   "optimal_mass": 69.73460763043232
+  },
+  "hard_problem_0188": {
+   "difficulty": "medium",
+   "optimal_mass": 220.98742344292992
+  },
+  "hard_problem_0189": {
+   "difficulty": "medium",
+   "optimal_mass": 335.9062613981933
+  },
+  "hard_problem_0190": {
+   "difficulty": "medium",
+   "optimal_mass": 78.93665570222088
+  },
+  "hard_problem_0191": {
+   "difficulty": "medium",
+   "optimal_mass": 202.69306251980694
+  },
+  "hard_problem_0192": {
+   "difficulty": "medium",
+   "optimal_mass": 115.20115238551496
+  },
+  "hard_problem_0193": {
+   "difficulty": "medium",
+   "optimal_mass": 28.55193836073252
+  },
+  "hard_problem_0194": {
+   "difficulty": "medium",
+   "optimal_mass": 102.37787798372237
+  },
+  "hard_problem_0195": {
+   "difficulty": "easy",
+   "optimal_mass": 22.01165520176768
+  },
+  "hard_problem_0196": {
+   "difficulty": "medium",
+   "optimal_mass": 109.62413953868412
+  },
+  "hard_problem_0197": {
+   "difficulty": "medium",
+   "optimal_mass": 74.41547238508439
+  },
+  "hard_problem_0198": {
+   "difficulty": "medium",
+   "optimal_mass": 198.68159008885553
+  },
+  "hard_problem_0199": {
+   "difficulty": "medium",
+   "optimal_mass": 307.8915035838369
+  },
+  "hard_problem_0200": {
+   "difficulty": "open",
+   "optimal_mass": 112.96761759773784
+  },
+  "hard_problem_0201": {
+   "difficulty": "open",
+   "optimal_mass": 50.79348864100571
+  },
+  "hard_problem_0202": {
+   "difficulty": "easy",
+   "optimal_mass": 28.03937670043531
+  },
+  "hard_problem_0203": {
+   "difficulty": "open",
+   "optimal_mass": 102.84505261635273
+  },
+  "hard_problem_0204": {
+   "difficulty": "medium",
+   "optimal_mass": 177.96141845608074
+  },
+  "hard_problem_0205": {
+   "difficulty": "medium",
+   "optimal_mass": 190.09154221959443
+  },
+  "hard_problem_0206": {
+   "difficulty": "medium",
+   "optimal_mass": 254.94366911286093
+  },
+  "hard_problem_0207": {
+   "difficulty": "open",
+   "optimal_mass": 10.351310707366578
+  },
+  "hard_problem_0208": {
+   "difficulty": "medium",
+   "optimal_mass": 92.98235018125723
+  },
+  "hard_problem_0209": {
+   "difficulty": "medium",
+   "optimal_mass": 293.12793755893483
+  },
+  "hard_problem_0210": {
+   "difficulty": "medium",
+   "optimal_mass": 107.60575518908574
+  },
+  "hard_problem_0211": {
+   "difficulty": "medium",
+   "optimal_mass": 111.93541452242526
+  },
+  "hard_problem_0212": {
+   "difficulty": "medium",
+   "optimal_mass": 99.5845507456194
+  },
+  "hard_problem_0213": {
+   "difficulty": "medium",
+   "optimal_mass": 192.43824104603576
+  },
+  "hard_problem_0214": {
+   "difficulty": "open",
+   "optimal_mass": 95.34626146758559
+  },
+  "hard_problem_0215": {
+   "difficulty": "open",
+   "optimal_mass": 95.43633457681378
+  },
+  "hard_problem_0216": {
+   "difficulty": "easy",
+   "optimal_mass": 106.13004565705589
+  },
+  "hard_problem_0217": {
+   "difficulty": "medium",
+   "optimal_mass": 136.98321163418535
+  },
+  "hard_problem_0218": {
+   "difficulty": "medium",
+   "optimal_mass": 225.03693082658594
+  },
+  "hard_problem_0219": {
+   "difficulty": "medium",
+   "optimal_mass": 130.5163395176763
+  },
+  "hard_problem_0220": {
+   "difficulty": "medium",
+   "optimal_mass": 391.76114020684946
+  },
+  "hard_problem_0221": {
+   "difficulty": "medium",
+   "optimal_mass": 89.46761536180271
+  },
+  "hard_problem_0222": {
+   "difficulty": "medium",
+   "optimal_mass": 118.4539610352322
+  },
+  "hard_problem_0223": {
+   "difficulty": "medium",
+   "optimal_mass": 104.18224510663401
+  },
+  "hard_problem_0224": {
+   "difficulty": "medium",
+   "optimal_mass": 13.040948447029235
+  },
+  "hard_problem_0225": {
+   "difficulty": "medium",
+   "optimal_mass": 41.70958865820972
+  },
+  "hard_problem_0226": {
+   "difficulty": "easy",
+   "optimal_mass": 32.51237818187437
+  },
+  "hard_problem_0227": {
+   "difficulty": "medium",
+   "optimal_mass": 44.351008573135054
+  },
+  "hard_problem_0228": {
+   "difficulty": "medium",
+   "optimal_mass": 147.28950097555793
+  },
+  "hard_problem_0229": {
+   "difficulty": "medium",
+   "optimal_mass": 270.82935278827426
+  },
+  "hard_problem_0230": {
+   "difficulty": "medium",
+   "optimal_mass": 292.91740514058046
+  },
+  "hard_problem_0231": {
+   "difficulty": "medium",
+   "optimal_mass": 50.57078119840237
+  },
+  "hard_problem_0232": {
+   "difficulty": "open",
+   "optimal_mass": 44.65000631704989
+  },
+  "hard_problem_0233": {
+   "difficulty": "medium",
+   "optimal_mass": 140.12295756148046
+  },
+  "hard_problem_0234": {
+   "difficulty": "easy",
+   "optimal_mass": 400.1703960420465
+  },
+  "hard_problem_0235": {
+   "difficulty": "medium",
+   "optimal_mass": 212.8716850075251
+  },
+  "hard_problem_0236": {
+   "difficulty": "medium",
+   "optimal_mass": 187.8080248440054
+  },
+  "hard_problem_0237": {
+   "difficulty": "open",
+   "optimal_mass": 34.58661636605336
+  },
+  "hard_problem_0238": {
+   "difficulty": "medium",
+   "optimal_mass": 266.67761194728877
+  },
+  "hard_problem_0239": {
+   "difficulty": "medium",
+   "optimal_mass": 578.7625993204008
+  },
+  "hard_problem_0240": {
+   "difficulty": "medium",
+   "optimal_mass": 137.86641204535408
+  },
+  "hard_problem_0241": {
+   "difficulty": "medium",
+   "optimal_mass": 252.48378046603946
+  },
+  "hard_problem_0242": {
+   "difficulty": "medium",
+   "optimal_mass": 123.88314162390868
+  },
+  "hard_problem_0243": {
+   "difficulty": "open",
+   "optimal_mass": 34.87293908219872
+  },
+  "hard_problem_0244": {
+   "difficulty": "easy",
+   "optimal_mass": 8.550392203187577
+  },
+  "hard_problem_0245": {
+   "difficulty": "medium",
+   "optimal_mass": 220.8965732909551
+  },
+  "hard_problem_0246": {
+   "difficulty": "open",
+   "optimal_mass": 101.41640037352687
+  },
+  "hard_problem_0247": {
+   "difficulty": "medium",
+   "optimal_mass": 255.91813110901123
+  },
+  "hard_problem_0248": {
+   "difficulty": "hard",
+   "optimal_mass": 69.54360006902613
+  },
+  "hard_problem_0249": {
+   "difficulty": "medium",
+   "optimal_mass": 228.9906301617885
+  },
+  "hard_problem_0250": {
+   "difficulty": "open",
+   "optimal_mass": 152.37694018952564
+  },
+  "hard_problem_0251": {
+   "difficulty": "medium",
+   "optimal_mass": 258.2808324925457
+  },
+  "hard_problem_0252": {
+   "difficulty": "open",
+   "optimal_mass": 81.83657193886422
+  },
+  "hard_problem_0253": {
+   "difficulty": "hard",
+   "optimal_mass": 98.27530157255862
+  },
+  "hard_problem_0254": {
+   "difficulty": "medium",
+   "optimal_mass": 89.309851225146
+  },
+  "hard_problem_0255": {
+   "difficulty": "medium",
+   "optimal_mass": 126.88632818331547
+  },
+  "hard_problem_0256": {
+   "difficulty": "medium",
+   "optimal_mass": 34.58890917818005
+  },
+  "hard_problem_0257": {
+   "difficulty": "open",
+   "optimal_mass": 55.81918518754688
+  },
+  "hard_problem_0258": {
+   "difficulty": "open",
+   "optimal_mass": 103.31947954105893
+  },
+  "hard_problem_0259": {
+   "difficulty": "easy",
+   "optimal_mass": 32.6754693046086
+  },
+  "hard_problem_0260": {
+   "difficulty": "hard",
+   "optimal_mass": 121.21879380176198
+  },
+  "hard_problem_0261": {
+   "difficulty": "medium",
+   "optimal_mass": 92.10991442849365
+  },
+  "hard_problem_0262": {
+   "difficulty": "medium",
+   "optimal_mass": 258.10554013088176
+  },
+  "hard_problem_0263": {
+   "difficulty": "medium",
+   "optimal_mass": 294.48954881971594
+  },
+  "hard_problem_0264": {
+   "difficulty": "easy",
+   "optimal_mass": 31.917222880768175
+  },
+  "hard_problem_0265": {
+   "difficulty": "medium",
+   "optimal_mass": 425.37328631618294
+  },
+  "hard_problem_0266": {
+   "difficulty": "medium",
+   "optimal_mass": 21.47200428131534
+  },
+  "hard_problem_0267": {
+   "difficulty": "medium",
+   "optimal_mass": 33.80634253530667
+  },
+  "hard_problem_0268": {
+   "difficulty": "hard",
+   "optimal_mass": 52.4642225904737
+  },
+  "hard_problem_0269": {
+   "difficulty": "easy",
+   "optimal_mass": 290.044722620583
+  },
+  "hard_problem_0270": {
+   "difficulty": "medium",
+   "optimal_mass": 260.5372423071585
+  },
+  "hard_problem_0271": {
+   "difficulty": "medium",
+   "optimal_mass": 404.15997250957236
+  },
+  "hard_problem_0272": {
+   "difficulty": "medium",
+   "optimal_mass": 133.78459951242175
+  },
+  "hard_problem_0273": {
+   "difficulty": "easy",
+   "optimal_mass": 134.69072545737293
+  },
+  "hard_problem_0274": {
+   "difficulty": "open",
+   "optimal_mass": 218.51345970484917
+  },
+  "hard_problem_0275": {
+   "difficulty": "medium",
+   "optimal_mass": 250.60987470411362
+  },
+  "hard_problem_0276": {
+   "difficulty": "medium",
+   "optimal_mass": 19.706077020773893
+  },
+  "hard_problem_0277": {
+   "difficulty": "hard",
+   "optimal_mass": 222.9589528750225
+  },
+  "hard_problem_0278": {
+   "difficulty": "medium",
+   "optimal_mass": 285.6274741939718
+  },
+  "hard_problem_0279": {
+   "difficulty": "medium",
+   "optimal_mass": 758.4183292340005
+  },
+  "hard_problem_0280": {
+   "difficulty": "medium",
+   "optimal_mass": 170.30819431938835
+  },
+  "hard_problem_0281": {
+   "difficulty": "hard",
+   "optimal_mass": 179.99470231417723
+  },
+  "hard_problem_0282": {
+   "difficulty": "medium",
+   "optimal_mass": 49.47503385050982
+  },
+  "hard_problem_0283": {
+   "difficulty": "medium",
+   "optimal_mass": 160.14063531567137
+  },
+  "hard_problem_0284": {
+   "difficulty": "medium",
+   "optimal_mass": 50.16472177567624
+  },
+  "hard_problem_0285": {
+   "difficulty": "easy",
+   "optimal_mass": 70.20532752808462
+  },
+  "hard_problem_0286": {
+   "difficulty": "medium",
+   "optimal_mass": 170.33483465343724
+  },
+  "hard_problem_0287": {
+   "difficulty": "hard",
+   "optimal_mass": 410.6767792157958
+  },
+  "hard_problem_0288": {
+   "difficulty": "hard",
+   "optimal_mass": 92.6144367229386
+  },
+  "hard_problem_0289": {
+   "difficulty": "medium",
+   "optimal_mass": 246.81220180556406
+  },
+  "hard_problem_0290": {
+   "difficulty": "medium",
+   "optimal_mass": 345.3531055324152
+  },
+  "hard_problem_0291": {
+   "difficulty": "medium",
+   "optimal_mass": 24.462300402409713
+  },
+  "hard_problem_0292": {
+   "difficulty": "medium",
+   "optimal_mass": 283.80444832620435
+  },
+  "hard_problem_0293": {
+   "difficulty": "easy",
+   "optimal_mass": 32.55689425235301
+  },
+  "hard_problem_0294": {
+   "difficulty": "medium",
+   "optimal_mass": 311.129258970926
+  },
+  "hard_problem_0295": {
+   "difficulty": "medium",
+   "optimal_mass": 301.9388875595628
+  },
+  "hard_problem_0296": {
+   "difficulty": "easy",
+   "optimal_mass": 84.10419683656025
+  },
+  "hard_problem_0297": {
+   "difficulty": "open",
+   "optimal_mass": 170.5605789358003
+  },
+  "hard_problem_0298": {
+   "difficulty": "medium",
+   "optimal_mass": 97.95915404120669
+  },
+  "hard_problem_0299": {
+   "difficulty": "hard",
+   "optimal_mass": 52.224946228680786
+  },
+  "hard_problem_0300": {
+   "difficulty": "open",
+   "optimal_mass": 126.03370230815449
+  },
+  "hard_problem_0301": {
+   "difficulty": "open",
+   "optimal_mass": 292.52133752697944
+  },
+  "hard_problem_0302": {
+   "difficulty": "easy",
+   "optimal_mass": 25.361912731351175
+  },
+  "hard_problem_0303": {
+   "difficulty": "medium",
+   "optimal_mass": 20.820945259965665
+  },
+  "hard_problem_0304": {
+   "difficulty": "easy",
+   "optimal_mass": 86.96159060157152
+  },
+  "hard_problem_0305": {
+   "difficulty": "medium",
+   "optimal_mass": 175.44859986483175
+  },
+  "hard_problem_0306": {
+   "difficulty": "medium",
+   "optimal_mass": 249.41928011470344
+  },
+  "hard_problem_0307": {
+   "difficulty": "medium",
+   "optimal_mass": 58.423974172001444
+  },
+  "hard_problem_0308": {
+   "difficulty": "open",
+   "optimal_mass": 207.0310730314266
+  },
+  "hard_problem_0309": {
+   "difficulty": "medium",
+   "optimal_mass": 178.47779898420245
+  },
+  "hard_problem_0310": {
+   "difficulty": "easy",
+   "optimal_mass": 54.594181197630036
+  },
+  "hard_problem_0311": {
+   "difficulty": "medium",
+   "optimal_mass": 85.16560420517038
+  },
+  "hard_problem_0312": {
+   "difficulty": "medium",
+   "optimal_mass": 277.2865045842069
+  },
+  "hard_problem_0313": {
+   "difficulty": "medium",
+   "optimal_mass": 127.4799333998203
+  },
+  "hard_problem_0314": {
+   "difficulty": "open",
+   "optimal_mass": 105.5236669241644
+  },
+  "hard_problem_0315": {
+   "difficulty": "medium",
+   "optimal_mass": 182.09038663334476
+  },
+  "hard_problem_0316": {
+   "difficulty": "medium",
+   "optimal_mass": 105.18104159467707
+  },
+  "hard_problem_0317": {
+   "difficulty": "medium",
+   "optimal_mass": 106.23924272913762
+  },
+  "hard_problem_0318": {
+   "difficulty": "medium",
+   "optimal_mass": 86.4058674820959
+  },
+  "hard_problem_0319": {
+   "difficulty": "medium",
+   "optimal_mass": 143.58627822100715
+  },
+  "hard_problem_0320": {
+   "difficulty": "medium",
+   "optimal_mass": 170.3120187881069
+  },
+  "hard_problem_0321": {
+   "difficulty": "medium",
+   "optimal_mass": 19.939836541782793
+  },
+  "hard_problem_0322": {
+   "difficulty": "open",
+   "optimal_mass": 296.4826908614074
+  },
+  "hard_problem_0323": {
+   "difficulty": "medium",
+   "optimal_mass": 179.6237403158928
+  },
+  "hard_problem_0324": {
+   "difficulty": "open",
+   "optimal_mass": 130.82669223550963
+  },
+  "hard_problem_0325": {
+   "difficulty": "medium",
+   "optimal_mass": 284.5937011793079
+  },
+  "hard_problem_0326": {
+   "difficulty": "open",
+   "optimal_mass": 122.70680304867027
+  },
+  "hard_problem_0327": {
+   "difficulty": "open",
+   "optimal_mass": 140.52190470091386
+  },
+  "hard_problem_0328": {
+   "difficulty": "medium",
+   "optimal_mass": 108.56614144259568
+  },
+  "hard_problem_0329": {
+   "difficulty": "open",
+   "optimal_mass": 162.78636756635728
+  },
+  "hard_problem_0330": {
+   "difficulty": "medium",
+   "optimal_mass": 104.34836633374599
+  },
+  "hard_problem_0331": {
+   "difficulty": "medium",
+   "optimal_mass": 19.191100737772857
+  },
+  "hard_problem_0332": {
+   "difficulty": "medium",
+   "optimal_mass": 169.58317099220048
+  },
+  "hard_problem_0333": {
+   "difficulty": "medium",
+   "optimal_mass": 55.83803028909109
+  },
+  "hard_problem_0334": {
+   "difficulty": "medium",
+   "optimal_mass": 67.2950924199437
+  },
+  "hard_problem_0335": {
+   "difficulty": "medium",
+   "optimal_mass": 299.7213362390087
+  },
+  "hard_problem_0336": {
+   "difficulty": "medium",
+   "optimal_mass": 242.4899483998676
+  },
+  "hard_problem_0337": {
+   "difficulty": "open",
+   "optimal_mass": 120.20151342061104
+  },
+  "hard_problem_0338": {
+   "difficulty": "open",
+   "optimal_mass": 97.35232338784506
+  },
+  "hard_problem_0339": {
+   "difficulty": "medium",
+   "optimal_mass": 68.75648972931786
+  },
+  "hard_problem_0340": {
+   "difficulty": "open",
+   "optimal_mass": 96.43794485233572
+  },
+  "hard_problem_0341": {
+   "difficulty": "medium",
+   "optimal_mass": 69.93569500216148
+  },
+  "hard_problem_0342": {
+   "difficulty": "open",
+   "optimal_mass": 195.22261855383908
+  },
+  "hard_problem_0343": {
+   "difficulty": "medium",
+   "optimal_mass": 230.33083509602287
+  },
+  "hard_problem_0344": {
+   "difficulty": "medium",
+   "optimal_mass": 210.13576532242365
+  },
+  "hard_problem_0345": {
+   "difficulty": "easy",
+   "optimal_mass": 34.72624785552997
+  },
+  "hard_problem_0346": {
+   "difficulty": "medium",
+   "optimal_mass": 310.727134607802
+  },
+  "hard_problem_0347": {
+   "difficulty": "medium",
+   "optimal_mass": 31.318158337221018
+  },
+  "hard_problem_0348": {
+   "difficulty": "hard",
+   "optimal_mass": 265.42078987428994
+  },
+  "hard_problem_0349": {
+   "difficulty": "hard",
+   "optimal_mass": 10.30517546203825
+  },
+  "hard_problem_0350": {
+   "difficulty": "open",
+   "optimal_mass": 70.85894481222644
+  },
+  "hard_problem_0351": {
+   "difficulty": "hard",
+   "optimal_mass": 239.1169308171527
+  },
+  "hard_problem_0352": {
+   "difficulty": "medium",
+   "optimal_mass": 32.88147677481694
+  },
+  "hard_problem_0353": {
+   "difficulty": "medium",
+   "optimal_mass": 240.2338368190732
+  },
+  "hard_problem_0354": {
+   "difficulty": "medium",
+   "optimal_mass": 213.70627107599128
+  },
+  "hard_problem_0355": {
+   "difficulty": "medium",
+   "optimal_mass": 242.36501169810768
+  },
+  "hard_problem_0356": {
+   "difficulty": "open",
+   "optimal_mass": 68.39126447099711
+  },
+  "hard_problem_0357": {
+   "difficulty": "medium",
+   "optimal_mass": 288.6641518602631
+  },
+  "hard_problem_0358": {
+   "difficulty": "medium",
+   "optimal_mass": 217.47762756157107
+  },
+  "hard_problem_0359": {
+   "difficulty": "medium",
+   "optimal_mass": 33.4781295960808
+  },
+  "hard_problem_0360": {
+   "difficulty": "easy",
+   "optimal_mass": 43.634986356833686
+  },
+  "hard_problem_0361": {
+   "difficulty": "open",
+   "optimal_mass": 101.77598937973079
+  },
+  "hard_problem_0362": {
+   "difficulty": "medium",
+   "optimal_mass": 107.77163632940037
+  },
+  "hard_problem_0363": {
+   "difficulty": "medium",
+   "optimal_mass": 208.60139555563697
+  },
+  "hard_problem_0364": {
+   "difficulty": "open",
+   "optimal_mass": 79.41833708142212
+  },
+  "hard_problem_0365": {
+   "difficulty": "easy",
+   "optimal_mass": 23.57082212263578
+  },
+  "hard_problem_0366": {
+   "difficulty": "medium",
+   "optimal_mass": 13.691470058828289
+  },
+  "hard_problem_0367": {
+   "difficulty": "medium",
+   "optimal_mass": 56.019191014857235
+  },
+  "hard_problem_0368": {
+   "difficulty": "medium",
+   "optimal_mass": 83.78311908108624
+  },
+  "hard_problem_0369": {
+   "difficulty": "easy",
+   "optimal_mass": 72.58759334180446
+  },
+  "hard_problem_0370": {
+   "difficulty": "medium",
+   "optimal_mass": 199.62828791943596
+  },
+  "hard_problem_0371": {
+   "difficulty": "open",
+   "optimal_mass": 159.30198251460368
+  },
+  "hard_problem_0372": {
+   "difficulty": "open",
+   "optimal_mass": 52.83506236934375
+  },
+  "hard_problem_0373": {
+   "difficulty": "hard",
+   "optimal_mass": 44.04585127919902
+  },
+  "hard_problem_0374": {
+   "difficulty": "hard",
+   "optimal_mass": 70.99110199490119
+  },
+  "hard_problem_0375": {
+   "difficulty": "hard",
+   "optimal_mass": 17.434125674858635
+  },
+  "hard_problem_0376": {
+   "difficulty": "medium",
+   "optimal_mass": 170.32678499984797
+  },
+  "hard_problem_0377": {
+   "difficulty": "medium",
+   "optimal_mass": 222.435065271637
+  },
+  "hard_problem_0378": {
+   "difficulty": "medium",
+   "optimal_mass": 78.5561819065221
+  },
+  "hard_problem_0379": {
+   "difficulty": "easy",
+   "optimal_mass": 29.417893559160035
+  },
+  "hard_problem_0380": {
+   "difficulty": "hard",
+   "optimal_mass": 70.65017070313452
+  },
+  "hard_problem_0381": {
+   "difficulty": "medium",
+   "optimal_mass": 193.5999832302606
+  },
+  "hard_problem_0382": {
+   "difficulty": "open",
+   "optimal_mass": 216.27558910926456
+  },
+  "hard_problem_0383": {
+   "difficulty": "medium",
+   "optimal_mass": 61.91122921833267
+  },
+  "hard_problem_0384": {
+   "difficulty": "medium",
+   "optimal_mass": 161.2801955336624
+  },
+  "hard_problem_0385": {
+   "difficulty": "medium",
+   "optimal_mass": 91.24206676680097
+  },
+  "hard_problem_0386": {
+   "difficulty": "medium",
+   "optimal_mass": 240.54373203173938
+  },
+  "hard_problem_0387": {
+   "difficulty": "medium",
+   "optimal_mass": 9.069940504272076
+  },
+  "hard_problem_0388": {
+   "difficulty": "open",
+   "optimal_mass": 184.9808837275922
+  },
+  "hard_problem_0389": {
+   "difficulty": "medium",
+   "optimal_mass": 89.05963456519237
+  },
+  "hard_problem_0390": {
+   "difficulty": "medium",
+   "optimal_mass": 162.5975092359585
+  },
+  "hard_problem_0391": {
+   "difficulty": "medium",
+   "optimal_mass": 179.31685238444044
+  },
+  "hard_problem_0392": {
+   "difficulty": "medium",
+   "optimal_mass": 44.1336997880428
+  },
+  "hard_problem_0393": {
+   "difficulty": "medium",
+   "optimal_mass": 238.82331639790078
+  },
+  "hard_problem_0394": {
+   "difficulty": "medium",
+   "optimal_mass": 225.85811740532085
+  },
+  "hard_problem_0395": {
+   "difficulty": "medium",
+   "optimal_mass": 117.6079082225021
+  },
+  "hard_problem_0396": {
+   "difficulty": "medium",
+   "optimal_mass": 17.351549636967235
+  },
+  "hard_problem_0397": {
+   "difficulty": "medium",
+   "optimal_mass": 104.409427108693
+  },
+  "hard_problem_0398": {
+   "difficulty": "medium",
+   "optimal_mass": 187.8267940192072
+  },
+  "hard_problem_0399": {
+   "difficulty": "medium",
+   "optimal_mass": 193.99663344598082
+  },
+  "hard_problem_0400": {
+   "difficulty": "medium",
+   "optimal_mass": 156.78921145252616
+  },
+  "hard_problem_0401": {
+   "difficulty": "medium",
+   "optimal_mass": 192.5742229950805
+  },
+  "hard_problem_0402": {
+   "difficulty": "open",
+   "optimal_mass": 162.3387294917211
+  },
+  "hard_problem_0403": {
+   "difficulty": "medium",
+   "optimal_mass": 91.03073629634042
+  },
+  "hard_problem_0404": {
+   "difficulty": "medium",
+   "optimal_mass": 126.22104318324337
+  },
+  "hard_problem_0405": {
+   "difficulty": "easy",
+   "optimal_mass": 44.762260093782125
+  },
+  "hard_problem_0406": {
+   "difficulty": "medium",
+   "optimal_mass": 45.97225183077077
+  },
+  "hard_problem_0407": {
+   "difficulty": "medium",
+   "optimal_mass": 388.15049443514306
+  },
+  "hard_problem_0408": {
+   "difficulty": "hard",
+   "optimal_mass": 164.44236151252437
+  },
+  "hard_problem_0409": {
+   "difficulty": "medium",
+   "optimal_mass": 25.38888860263244
+  },
+  "hard_problem_0410": {
+   "difficulty": "medium",
+   "optimal_mass": 182.47387491932668
+  },
+  "hard_problem_0411": {
+   "difficulty": "medium",
+   "optimal_mass": 29.774886334390718
+  },
+  "hard_problem_0412": {
+   "difficulty": "easy",
+   "optimal_mass": 41.08511785081031
+  },
+  "hard_problem_0413": {
+   "difficulty": "medium",
+   "optimal_mass": 215.1354095882449
+  },
+  "hard_problem_0414": {
+   "difficulty": "open",
+   "optimal_mass": 159.32101162825344
+  },
+  "hard_problem_0415": {
+   "difficulty": "medium",
+   "optimal_mass": 28.07199159323015
+  },
+  "hard_problem_0416": {
+   "difficulty": "medium",
+   "optimal_mass": 170.95651069181955
+  },
+  "hard_problem_0417": {
+   "difficulty": "hard",
+   "optimal_mass": 85.65910293372482
+  },
+  "hard_problem_0418": {
+   "difficulty": "medium",
+   "optimal_mass": 184.0700834983811
+  },
+  "hard_problem_0419": {
+   "difficulty": "open",
+   "optimal_mass": 64.01597888705881
+  },
+  "hard_problem_0420": {
+   "difficulty": "medium",
+   "optimal_mass": 115.42542997720071
+  },
+  "hard_problem_0421": {
+   "difficulty": "medium",
+   "optimal_mass": 168.1691644996645
+  },
+  "hard_problem_0422": {
+   "difficulty": "medium",
+   "optimal_mass": 238.56732509465587
+  },
+  "hard_problem_0423": {
+   "difficulty": "medium",
+   "optimal_mass": 100.89747858007077
+  },
+  "hard_problem_0424": {
+   "difficulty": "hard",
+   "optimal_mass": 394.42022569864855
+  },
+  "hard_problem_0425": {
+   "difficulty": "open",
+   "optimal_mass": 277.2900401944108
+  },
+  "hard_problem_0426": {
+   "difficulty": "medium",
+   "optimal_mass": 162.00270776892023
+  },
+  "hard_problem_0427": {
+   "difficulty": "open",
+   "optimal_mass": 27.70581663617991
+  },
+  "hard_problem_0428": {
+   "difficulty": "medium",
+   "optimal_mass": 34.46104291113949
+  },
+  "hard_problem_0429": {
+   "difficulty": "medium",
+   "optimal_mass": 114.23943054074559
+  },
+  "hard_problem_0430": {
+   "difficulty": "medium",
+   "optimal_mass": 86.99716147408046
+  },
+  "hard_problem_0431": {
+   "difficulty": "medium",
+   "optimal_mass": 253.31823526746723
+  },
+  "hard_problem_0432": {
+   "difficulty": "medium",
+   "optimal_mass": 84.54251451714191
+  },
+  "hard_problem_0433": {
+   "difficulty": "open",
+   "optimal_mass": 37.597975266051215
+  },
+  "hard_problem_0434": {
+   "difficulty": "easy",
+   "optimal_mass": 101.5689503951013
+  },
+  "hard_problem_0435": {
+   "difficulty": "medium",
+   "optimal_mass": 75.26416810091398
+  },
+  "hard_problem_0436": {
+   "difficulty": "medium",
+   "optimal_mass": 108.19056056064596
+  },
+  "hard_problem_0437": {
+   "difficulty": "medium",
+   "optimal_mass": 74.13406678026352
+  },
+  "hard_problem_0438": {
+   "difficulty": "medium",
+   "optimal_mass": 242.6266631154834
+  },
+  "hard_problem_0439": {
+   "difficulty": "medium",
+   "optimal_mass": 16.774512188967712
+  },
+  "hard_problem_0440": {
+   "difficulty": "medium",
+   "optimal_mass": 369.0753960893654
+  },
+  "hard_problem_0441": {
+   "difficulty": "open",
+   "optimal_mass": 82.37220463372137
+  },
+  "hard_problem_0442": {
+   "difficulty": "medium",
+   "optimal_mass": 67.18166085754821
+  },
+  "hard_problem_0443": {
+   "difficulty": "hard",
+   "optimal_mass": 149.08138521320984
+  },
+  "hard_problem_0444": {
+   "difficulty": "open",
+   "optimal_mass": 265.7684445790687
+  },
+  "hard_problem_0445": {
+   "difficulty": "open",
+   "optimal_mass": 138.13622144207386
+  },
+  "hard_problem_0446": {
+   "difficulty": "easy",
+   "optimal_mass": 44.11978948420852
+  },
+  "hard_problem_0447": {
+   "difficulty": "medium",
+   "optimal_mass": 216.5756033935904
+  },
+  "hard_problem_0448": {
+   "difficulty": "medium",
+   "optimal_mass": 46.39056952152024
+  },
+  "hard_problem_0449": {
+   "difficulty": "medium",
+   "optimal_mass": 134.15346250450827
+  },
+  "hard_problem_0450": {
+   "difficulty": "medium",
+   "optimal_mass": 115.52991371006533
+  },
+  "hard_problem_0451": {
+   "difficulty": "open",
+   "optimal_mass": 271.9560574293876
+  },
+  "hard_problem_0452": {
+   "difficulty": "medium",
+   "optimal_mass": 208.27864422188105
+  },
+  "hard_problem_0453": {
+   "difficulty": "hard",
+   "optimal_mass": 148.9629921299199
+  },
+  "hard_problem_0454": {
+   "difficulty": "hard",
+   "optimal_mass": 94.01394794814475
+  },
+  "hard_problem_0455": {
+   "difficulty": "medium",
+   "optimal_mass": 259.43001206039605
+  },
+  "hard_problem_0456": {
+   "difficulty": "easy",
+   "optimal_mass": 399.4389427490563
+  },
+  "hard_problem_0457": {
+   "difficulty": "medium",
+   "optimal_mass": 161.93371040021665
+  },
+  "hard_problem_0458": {
+   "difficulty": "open",
+   "optimal_mass": 187.83564325455487
+  },
+  "hard_problem_0459": {
+   "difficulty": "easy",
+   "optimal_mass": 36.78882022529506
+  },
+  "hard_problem_0460": {
+   "difficulty": "medium",
+   "optimal_mass": 12.998732711372407
+  },
+  "hard_problem_0461": {
+   "difficulty": "open",
+   "optimal_mass": 240.37865446428228
+  },
+  "hard_problem_0462": {
+   "difficulty": "medium",
+   "optimal_mass": 83.44023966972375
+  },
+  "hard_problem_0463": {
+   "difficulty": "open",
+   "optimal_mass": 192.14525121425874
+  },
+  "hard_problem_0464": {
+   "difficulty": "medium",
+   "optimal_mass": 52.17342365706877
+  },
+  "hard_problem_0465": {
+   "difficulty": "medium",
+   "optimal_mass": 7.227840329544298
+  },
+  "hard_problem_0466": {
+   "difficulty": "medium",
+   "optimal_mass": 131.9632612258682
+  },
+  "hard_problem_0467": {
+   "difficulty": "hard",
+   "optimal_mass": 75.35924285982281
+  },
+  "hard_problem_0468": {
+   "difficulty": "medium",
+   "optimal_mass": 139.5518108182059
+  },
+  "hard_problem_0469": {
+   "difficulty": "medium",
+   "optimal_mass": 383.4423407934733
+  },
+  "hard_problem_0470": {
+   "difficulty": "medium",
+   "optimal_mass": 164.66926031866566
+  },
+  "hard_problem_0471": {
+   "difficulty": "open",
+   "optimal_mass": 107.22903022320365
+  },
+  "hard_problem_0472": {
+   "difficulty": "medium",
+   "optimal_mass": 102.55795411583021
+  },
+  "hard_problem_0473": {
+   "difficulty": "open",
+   "optimal_mass": 63.027650286241844
+  },
+  "hard_problem_0474": {
+   "difficulty": "medium",
+   "optimal_mass": 226.90202747878863
+  },
+  "hard_problem_0475": {
+   "difficulty": "medium",
+   "optimal_mass": 21.114161738553317
+  },
+  "hard_problem_0476": {
+   "difficulty": "medium",
+   "optimal_mass": 345.3698538880207
+  },
+  "hard_problem_0477": {
+   "difficulty": "open",
+   "optimal_mass": 25.739261078559878
+  },
+  "hard_problem_0478": {
+   "difficulty": "medium",
+   "optimal_mass": 91.12022688502448
+  },
+  "hard_problem_0479": {
+   "difficulty": "easy",
+   "optimal_mass": 344.2706023474852
+  },
+  "hard_problem_0480": {
+   "difficulty": "medium",
+   "optimal_mass": 107.69761034568694
+  },
+  "hard_problem_0481": {
+   "difficulty": "open",
+   "optimal_mass": 67.68606195195055
+  },
+  "hard_problem_0482": {
+   "difficulty": "medium",
+   "optimal_mass": 253.62955659214157
+  },
+  "hard_problem_0483": {
+   "difficulty": "medium",
+   "optimal_mass": 83.14440202259628
+  },
+  "hard_problem_0484": {
+   "difficulty": "hard",
+   "optimal_mass": 160.95711742257134
+  },
+  "hard_problem_0485": {
+   "difficulty": "medium",
+   "optimal_mass": 125.71133670621408
+  },
+  "hard_problem_0486": {
+   "difficulty": "medium",
+   "optimal_mass": 171.85085822183285
+  },
+  "hard_problem_0487": {
+   "difficulty": "medium",
+   "optimal_mass": 99.18546196212797
+  },
+  "hard_problem_0488": {
+   "difficulty": "hard",
+   "optimal_mass": 41.28192150300942
+  },
+  "hard_problem_0489": {
+   "difficulty": "medium",
+   "optimal_mass": 13.225931690520223
+  },
+  "hard_problem_0490": {
+   "difficulty": "open",
+   "optimal_mass": 82.25641038578634
+  },
+  "hard_problem_0491": {
+   "difficulty": "open",
+   "optimal_mass": 131.70202369250944
+  },
+  "hard_problem_0492": {
+   "difficulty": "medium",
+   "optimal_mass": 13.126033943316981
+  },
+  "hard_problem_0493": {
+   "difficulty": "easy",
+   "optimal_mass": 82.73898518121015
+  },
+  "hard_problem_0494": {
+   "difficulty": "medium",
+   "optimal_mass": 58.300321534572085
+  },
+  "hard_problem_0495": {
+   "difficulty": "medium",
+   "optimal_mass": 78.37680972690914
+  },
+  "hard_problem_0496": {
+   "difficulty": "open",
+   "optimal_mass": 123.32432994723344
+  },
+  "hard_problem_0497": {
+   "difficulty": "medium",
+   "optimal_mass": 94.20179265705535
+  },
+  "hard_problem_0498": {
+   "difficulty": "easy",
+   "optimal_mass": 25.73940793574694
+  },
+  "hard_problem_0499": {
+   "difficulty": "medium",
+   "optimal_mass": 143.26373780540544
+  },
+  "hard_problem_0500": {
+   "difficulty": "open",
+   "optimal_mass": 96.41964110888384
+  },
+  "hard_problem_0501": {
+   "difficulty": "medium",
+   "optimal_mass": 220.53207825855452
+  },
+  "hard_problem_0502": {
+   "difficulty": "medium",
+   "optimal_mass": 21.943664915750478
+  },
+  "hard_problem_0503": {
+   "difficulty": "medium",
+   "optimal_mass": 146.78598278159643
+  },
+  "hard_problem_0504": {
+   "difficulty": "hard",
+   "optimal_mass": 13.082460981122463
+  },
+  "hard_problem_0505": {
+   "difficulty": "medium",
+   "optimal_mass": 187.29020319099112
+  },
+  "hard_problem_0506": {
+   "difficulty": "medium",
+   "optimal_mass": 689.4282886764277
+  },
+  "hard_problem_0507": {
+   "difficulty": "medium",
+   "optimal_mass": 231.3259421487387
+  },
+  "hard_problem_0508": {
+   "difficulty": "open",
+   "optimal_mass": 273.6945102981875
+  },
+  "hard_problem_0509": {
+   "difficulty": "easy",
+   "optimal_mass": 62.63982269663654
+  },
+  "hard_problem_0510": {
+   "difficulty": "medium",
+   "optimal_mass": 119.35222708288325
+  },
+  "hard_problem_0511": {
+   "difficulty": "easy",
+   "optimal_mass": 195.52212483265419
+  },
+  "hard_problem_0512": {
+   "difficulty": "medium",
+   "optimal_mass": 206.6857601826013
+  },
+  "hard_problem_0513": {
+   "difficulty": "open",
+   "optimal_mass": 85.69598873512668
+  },
+  "hard_problem_0514": {
+   "difficulty": "hard",
+   "optimal_mass": 123.08340319165114
+  },
+  "hard_problem_0515": {
+   "difficulty": "medium",
+   "optimal_mass": 128.94814259206248
+  },
+  "hard_problem_0516": {
+   "difficulty": "medium",
+   "optimal_mass": 70.58265460135638
+  },
+  "hard_problem_0517": {
+   "difficulty": "open",
+   "optimal_mass": 182.14610620838985
+  },
+  "hard_problem_0518": {
+   "difficulty": "medium",
+   "optimal_mass": 122.54600516725188
+  },
+  "hard_problem_0519": {
+   "difficulty": "hard",
+   "optimal_mass": 129.3579566966621
+  },
+  "hard_problem_0520": {
+   "difficulty": "medium",
+   "optimal_mass": 194.418323710601
+  },
+  "hard_problem_0521": {
+   "difficulty": "medium",
+   "optimal_mass": 97.91944240089389
+  },
+  "hard_problem_0522": {
+   "difficulty": "medium",
+   "optimal_mass": 397.67616726893925
+  },
+  "hard_problem_0523": {
+   "difficulty": "medium",
+   "optimal_mass": 50.77338226933752
+  },
+  "hard_problem_0524": {
+   "difficulty": "easy",
+   "optimal_mass": 41.19173621207444
+  },
+  "hard_problem_0525": {
+   "difficulty": "hard",
+   "optimal_mass": 48.83453080043904
+  },
+  "hard_problem_0526": {
+   "difficulty": "medium",
+   "optimal_mass": 22.518389317172858
+  },
+  "hard_problem_0527": {
+   "difficulty": "medium",
+   "optimal_mass": 256.4820443507748
+  },
+  "hard_problem_0528": {
+   "difficulty": "medium",
+   "optimal_mass": 72.1463169296306
+  },
+  "hard_problem_0529": {
+   "difficulty": "medium",
+   "optimal_mass": 188.16538387043428
+  },
+  "hard_problem_0530": {
+   "difficulty": "hard",
+   "optimal_mass": 113.50023995218024
+  },
+  "hard_problem_0531": {
+   "difficulty": "medium",
+   "optimal_mass": 156.3636026229726
+  },
+  "hard_problem_0532": {
+   "difficulty": "medium",
+   "optimal_mass": 13.262387948705497
+  },
+  "hard_problem_0533": {
+   "difficulty": "medium",
+   "optimal_mass": 121.37694553307894
+  },
+  "hard_problem_0534": {
+   "difficulty": "medium",
+   "optimal_mass": 204.20247196541266
+  },
+  "hard_problem_0535": {
+   "difficulty": "open",
+   "optimal_mass": 107.10569066852212
+  },
+  "hard_problem_0536": {
+   "difficulty": "easy",
+   "optimal_mass": 20.005709385172693
+  },
+  "hard_problem_0537": {
+   "difficulty": "medium",
+   "optimal_mass": 229.6949992907672
+  },
+  "hard_problem_0538": {
+   "difficulty": "open",
+   "optimal_mass": 116.61646770250952
+  },
+  "hard_problem_0539": {
+   "difficulty": "easy",
+   "optimal_mass": 136.99089239791584
+  },
+  "hard_problem_0540": {
+   "difficulty": "medium",
+   "optimal_mass": 128.03834280310264
+  },
+  "hard_problem_0541": {
+   "difficulty": "medium",
+   "optimal_mass": 120.72644818952864
+  },
+  "hard_problem_0542": {
+   "difficulty": "easy",
+   "optimal_mass": 89.57525920327758
+  },
+  "hard_problem_0543": {
+   "difficulty": "easy",
+   "optimal_mass": 86.28753487000304
+  },
+  "hard_problem_0544": {
+   "difficulty": "open",
+   "optimal_mass": 115.27543218455253
+  },
+  "hard_problem_0545": {
+   "difficulty": "open",
+   "optimal_mass": 45.253090441420234
+  },
+  "hard_problem_0546": {
+   "difficulty": "medium",
+   "optimal_mass": 148.3704135181496
+  },
+  "hard_problem_0547": {
+   "difficulty": "open",
+   "optimal_mass": 109.23872617243988
+  },
+  "hard_problem_0548": {
+   "difficulty": "medium",
+   "optimal_mass": 34.133328826796735
+  },
+  "hard_problem_0549": {
+   "difficulty": "medium",
+   "optimal_mass": 213.30829552401988
+  },
+  "hard_problem_0550": {
+   "difficulty": "easy",
+   "optimal_mass": 18.305331152926303
+  },
+  "hard_problem_0551": {
+   "difficulty": "medium",
+   "optimal_mass": 74.92956126409766
+  },
+  "hard_problem_0552": {
+   "difficulty": "easy",
+   "optimal_mass": 30.475235368821252
+  },
+  "hard_problem_0553": {
+   "difficulty": "medium",
+   "optimal_mass": 102.50333861758463
+  },
+  "hard_problem_0554": {
+   "difficulty": "medium",
+   "optimal_mass": 116.93477808920794
+  },
+  "hard_problem_0555": {
+   "difficulty": "easy",
+   "optimal_mass": 187.43008100648456
+  },
+  "hard_problem_0556": {
+   "difficulty": "open",
+   "optimal_mass": 152.1206542803429
+  },
+  "hard_problem_0557": {
+   "difficulty": "easy",
+   "optimal_mass": 47.89462374528611
+  },
+  "hard_problem_0558": {
+   "difficulty": "medium",
+   "optimal_mass": 24.79818817469098
+  },
+  "hard_problem_0559": {
+   "difficulty": "easy",
+   "optimal_mass": 26.907043781208912
+  },
+  "hard_problem_0560": {
+   "difficulty": "medium",
+   "optimal_mass": 106.20736391361709
+  },
+  "hard_problem_0561": {
+   "difficulty": "medium",
+   "optimal_mass": 116.29765186603225
+  },
+  "hard_problem_0562": {
+   "difficulty": "medium",
+   "optimal_mass": 128.15228773857118
+  },
+  "hard_problem_0563": {
+   "difficulty": "medium",
+   "optimal_mass": 393.11978870524416
+  },
+  "hard_problem_0564": {
+   "difficulty": "open",
+   "optimal_mass": 182.71107001846136
+  },
+  "hard_problem_0565": {
+   "difficulty": "medium",
+   "optimal_mass": 144.34560757548687
+  },
+  "hard_problem_0566": {
+   "difficulty": "medium",
+   "optimal_mass": 43.17689778908285
+  },
+  "hard_problem_0567": {
+   "difficulty": "medium",
+   "optimal_mass": 135.436719415187
+  },
+  "hard_problem_0568": {
+   "difficulty": "medium",
+   "optimal_mass": 101.0900594116482
+  },
+  "hard_problem_0569": {
+   "difficulty": "medium",
+   "optimal_mass": 63.863435453666824
+  },
+  "hard_problem_0570": {
+   "difficulty": "open",
+   "optimal_mass": 117.39163097646109
+  },
+  "hard_problem_0571": {
+   "difficulty": "open",
+   "optimal_mass": 163.5475411869437
+  },
+  "hard_problem_0572": {
+   "difficulty": "medium",
+   "optimal_mass": 138.75821743717103
+  },
+  "hard_problem_0573": {
+   "difficulty": "open",
+   "optimal_mass": 180.53037030518837
+  },
+  "hard_problem_0574": {
+   "difficulty": "open",
+   "optimal_mass": 122.72393678678095
+  },
+  "hard_problem_0575": {
+   "difficulty": "open",
+   "optimal_mass": 185.95979364602385
+  },
+  "hard_problem_0576": {
+   "difficulty": "open",
+   "optimal_mass": 166.58242520725588
+  },
+  "hard_problem_0577": {
+   "difficulty": "open",
+   "optimal_mass": 78.39772131487024
+  },
+  "hard_problem_0578": {
+   "difficulty": "medium",
+   "optimal_mass": 354.5540961377171
+  },
+  "hard_problem_0579": {
+   "difficulty": "medium",
+   "optimal_mass": 105.27285122991027
+  }
+ },
+ "note": "Stratified on MEASURED difficulty (search_ladder solve rates), not on generation params. All 580 verified non-degenerate against the RAW simulator."
+}

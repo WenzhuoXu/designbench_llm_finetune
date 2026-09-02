@@ -1,0 +1,82 @@
+# T5b TREATMENT — champion configuration with the GOAL-ALIGNED potential.
+#
+# One change from T5a: the shaping potential. Phi_v1 hardcodes a constraint set
+# that no DesignBench problem actually has (deflection <= 0.01 m on the 100
+# mass-constrained problems, which have no deflection goal) and never prices the
+# mass cap that they do have, so it ranks an infeasible over-stiffened design
+# (mass 900 > cap 265, FOS 6/8, Phi = -4.42) ABOVE a feasible lean one
+# (mass 250, FOS 1.55/1.60, Phi = -18.09). Phi_v2 is the negated Lagrangian of
+# the program read from each problem's own goals.
+#
+# This matters more than a reward-magnitude change: TRL 1.0.0 runs GRPO with
+# scale_rewards='group', so advantages are invariant to affine transforms of the
+# reward. Only the ORDER that Phi induces over a group's K rollouts reaches the
+# gradient, and Phi_v1 orders infeasible-heavy above feasible-lean. No value of
+# alpha can repair an ordering error.
+#
+# Offline prediction (scripts/search_ladder.py, 130 problems, no LLM): the same
+# one-step lookahead reaches 67% feasible under Phi_v1 and 88% under Phi_v2,
+# solving a strict superset (+21, -0). If the potential is what the study was
+# missing, this run should move feasibility and, more sharply, mass at
+# feasibility.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+# Written out in full ON PURPOSE. Hydra merges dict-valued keys, so every mt_*
+# config silently inherited grpo_truss.yaml's four reward terms on top of the one
+# it declared: the champion's reward was never the "single dense reward term"
+# the status report describes, but
+#   feasibility 1.0 + fos_improvement 0.5 + grammar_compliance 0.1
+#   + step_efficiency 0.1 + lagrangian_potential 1.0.
+# (One casualty: the grammar-reward ablation, which "added" a term that was
+# already present at 0.1 in every run.) These weights reproduce that effective
+# blend exactly, so the A/B changes the potential and nothing else.
+reward_weights:
+  feasibility: 1.0
+  fos_improvement: 0.5
+  grammar_compliance: 0.1
+  step_efficiency: 0.1
+  lagrangian_potential_v2: 1.0  # r_env = gamma*Phi_v2(s') - Phi_v2(s)   [goal-aligned potential]
+cost_fn: null
+use_tree_expansion: false
+
+multi_turn: true
+max_turns: 5
+max_turn_tokens: 1536
+gen_batch_chunk: 8
+
+learning_rate: 5.0e-6
+max_steps_train: 100
+num_epochs: 100
+save_steps: 25
+group_size: 8
+temperature: 0.6
+top_p: 0.95
+
+posterior:
+  alpha: 5.0                    # same constraint price as the champion
+  # gamma = 1.0 for the shaping term. With gamma < 1 the shaping return is
+  # (gamma^H)Phi(s_H) - Phi(s_0), and where Phi < 0 -- i.e. anywhere infeasible --
+  # simply surviving longer raises it: a no-op turn paid +0.25 and a five-turn
+  # stall +1.27 on a typical infeasible truss state, which is a direct reward for
+  # burning the turn budget. At gamma = 1.0 the return is exactly
+  # Phi(s_H) - Phi(s_0): progress only. Turn economy is priced separately by
+  # step_efficiency.
+  gamma: 1.0
+  tau: 0.05                     # hinge softness (relative units)
+  objective_weight: 1.0         # weight on mass / mass_ref
+
+# Lookahead probe — the diagnostic the study has been missing.
+# At up to max_states_per_batch visited states per batch, rank the candidate
+# actions by the design program's potential and locate the action the policy
+# actually took. Logs lookahead/{rho,regret,rank_frac,margin,sigma,reliable_frac}.
+# The legacy `rho_tree_agreement` compares two orderings of the same group of
+# trajectories and cannot move; this compares the policy's action against
+# counterfactuals at the state it chose from. ~0.13 s per measured state at 48
+# candidates, against a ~500 s step. Diagnostic only: it never touches the reward.
+lookahead_probe:
+  enabled: true
+  max_states_per_batch: 8
+  max_candidates: 48

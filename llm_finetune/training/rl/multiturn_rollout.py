@@ -27,7 +27,9 @@ Contract (verified against the installed TRL 1.0.0 source, NOT the docstring):
 
 from __future__ import annotations
 
+import copy
 import logging
+import random
 from typing import Any, Callable, Optional
 
 log = logging.getLogger(__name__)
@@ -117,6 +119,107 @@ def _generate_batch(trainer, input_ids_list, gen_cfg, eos_ids, chunk):
     return results
 
 
+def _build_glue_fn(formatter, tok, eos_ids):
+    """Return ``glue(fea_text, gen_ids) -> list[int]``: the tokens between turns.
+
+    The rollout used to obtain these by re-rendering the whole conversation and
+    diffing against the running ids. That silently produced NOTHING. Qwen3's chat
+    template strips ``<think>...</think>`` from every non-final assistant message,
+    so the re-render is not a prefix extension of the running sequence, the
+    ``len(next_ids) > len(run)`` guard fell through to ``delta = []``, and the
+    completion became gen(turn0) ++ gen(turn1) ++ ... with **no FEA feedback and
+    no chat-template glue at all**. ``env_mask`` stayed all-ones, so TRL's
+    environment-token masking -- the entire reason this rollout_func exists --
+    never fired, and every token of turns >= 1 was scored under a context that did
+    not exist at sampling time. The champion run logged 9176 of those warnings: it
+    fired on essentially every transition.
+
+    Derive the separator ONCE from the template instead. Render a probe
+    conversation whose assistant turn is followed by a user turn -- the same
+    position a rollout's assistant turn is in -- so the template applies exactly
+    the transition it will apply during training, and read off everything after
+    the assistant's own content. Template-agnostic: no chat tokens are hardcoded.
+    """
+    ASSISTANT_MARK = "\x02ASSISTANT\x02"
+    FEA_MARK = "\x02FEA\x02"
+    probe = [{"role": "system", "content": "S"}, {"role": "user", "content": "U"}]
+
+    def _fail(reason: str):
+        log.warning(f"[mt-rollout] could not derive chat glue ({reason}); "
+                    "inter-turn tokens would be omitted -- refusing to train blind")
+        return None
+
+    opened = formatter.apply_template(probe, add_generation_prompt=True, tokenize=False)
+    with_user = formatter.apply_template(
+        probe
+        + [{"role": "assistant", "content": ASSISTANT_MARK},
+           {"role": "user", "content": FEA_MARK}],
+        add_generation_prompt=True, tokenize=False,
+    )
+    if not with_user.startswith(opened):
+        return _fail("generation prompt is not a prefix of the next-turn render")
+    tail = with_user[len(opened):]
+    if ASSISTANT_MARK not in tail or FEA_MARK not in tail:
+        return _fail("probe markers did not survive the template")
+    glue_template = tail[tail.index(ASSISTANT_MARK) + len(ASSISTANT_MARK):]
+    if not glue_template.endswith(opened[opened.rindex("<") :]) and not glue_template:
+        return _fail("empty glue")
+    eos_set = set(eos_ids)
+
+    def glue(fea_text: str, gen_ids: list) -> list:
+        ids = tok(glue_template.replace(FEA_MARK, fea_text),
+                  add_special_tokens=False)["input_ids"]
+        # The model usually emits the turn terminator itself; do not double it.
+        if gen_ids and ids and gen_ids[-1] in eos_set and ids[0] == gen_ids[-1]:
+            ids = ids[1:]
+        return ids
+
+    return glue
+
+
+def _probe_here(pre_truss, st, analyze_fn, apply_fn, probe_state_fn, candidates_fn,
+                max_candidates, rng, alpha, tau, gamma):
+    """Rank the candidate actions at the pre-action state and place the policy's choice.
+
+    ``pre_truss`` is a snapshot taken before the policy's action was applied, so
+    the counterfactuals branch from the same state the policy chose from.
+    Failures are swallowed: a diagnostic must never take down a training step.
+    """
+    try:
+        cands = candidates_fn(pre_truss, st.get("bounds") or {},
+                              max_candidates=max_candidates, rng=rng)
+        if len(cands) < 2:
+            return None
+        goals = st["goals"]
+
+        def transition(action: str):
+            trial = copy.deepcopy(pre_truss)
+            try:
+                apply_fn(trial, action)
+            except Exception:
+                return None
+            return analyze_fn(trial, goals)
+
+        result = probe_state_fn(
+            program=st["program"], candidates=cands, transition=transition,
+            policy_next_state=st.get("state"),
+            alpha=alpha, tau=tau, gamma=gamma, depth=1,
+        )
+        if result is None:
+            return None
+        return {
+            "rho": result.rho, "regret": result.regret, "rank_frac": result.rank_frac,
+            "margin": result.margin, "sigma": result.sigma,
+            "reliable": bool(result.reliable), "n_candidates": result.n_candidates,
+            "policy_phi": result.policy_phi, "baseline_phi": result.baseline_phi,
+            "best_phi": result.best_phi,
+            "advantage": result.policy_phi - result.baseline_phi,
+        }
+    except Exception as exc:  # noqa: BLE001
+        log.debug(f"[mt-rollout] lookahead probe failed: {exc}")
+        return None
+
+
 def make_multiturn_rollout_func(
     formatter,
     rl_cfg,
@@ -129,7 +232,26 @@ def make_multiturn_rollout_func(
     from llm_finetune.envs.truss_env import (
         _analyze_truss, _apply_action, _load_truss_and_goals, parse_grammar_action,
     )
+    from llm_finetune.training.rl.posterior.lookahead_probe import (
+        probe_state, truss_candidate_actions, truss_param_bounds,
+    )
+    from llm_finetune.training.rl.posterior.potential import program_from_truss_spec
     from llm_finetune.training.rl.rewards import RolloutResult
+
+    # Lookahead probe: at a bounded number of visited states per batch, rank the
+    # candidate actions by the design program's potential and locate the action
+    # the policy actually took in that order. This replaces the rho of
+    # grpo_trainer.py:345, which is an identity under tree mode and a 1/K coin
+    # flip otherwise. See posterior/lookahead_probe.py.
+    probe_cfg = dict(rl_cfg.get("lookahead_probe", {}) or {})
+    probe_enabled = bool(probe_cfg.get("enabled", False))
+    probe_states_per_batch = int(probe_cfg.get("max_states_per_batch", 6))
+    probe_all_steps = bool(probe_cfg.get("all_steps", False))
+    probe_max_candidates = int(probe_cfg.get("max_candidates", 48))
+    posterior_cfg = dict(rl_cfg.get("posterior", {}) or {})
+    probe_alpha = float(posterior_cfg.get("alpha", 5.0))
+    probe_gamma = float(posterior_cfg.get("gamma", 0.99))
+    probe_tau = float(posterior_cfg.get("tau", 0.05))
 
     max_turns = int(rl_cfg.get("max_turns", rl_cfg.get("max_steps", 20)))
     max_new_tokens = int(rl_cfg.get("max_turn_tokens", 1536))
@@ -153,6 +275,8 @@ def make_multiturn_rollout_func(
         def apply_tpl(msgs):
             return list(formatter.apply_template(msgs, add_generation_prompt=True, tokenize=True))
 
+        glue_fn = _build_glue_fn(formatter, tok, eos_ids)
+
         # ── init one rollout state per prompt entry (1:1 with N=B*G) ─────────
         R: list[dict] = []
         for prompt in prompts:
@@ -167,7 +291,11 @@ def make_multiturn_rollout_func(
                     st.update(truss=truss, goals=goals, initial_state=init, state=init,
                               action_history=[], state_history=[init], action_sequence=[],
                               raw_outputs=[], token_counts=[], parse_success=[], n_fea=0,
-                              comp_ids=[], comp_logps=[], comp_mask=[])
+                              comp_ids=[], comp_logps=[], comp_mask=[], probes=[],
+                              tok_adv=[], turn_spans=[])
+                    if probe_enabled:
+                        st["program"] = program_from_truss_spec(spec, initial_mass=init.get("mass"))
+                        st["bounds"] = truss_param_bounds(spec)
                     st["running_ids"] = apply_tpl(
                         designbench_prompt.build_messages(spec, init, [], formatter))
                     st["prompt_ids"] = list(st["running_ids"])
@@ -178,6 +306,13 @@ def make_multiturn_rollout_func(
             R.append(st)
 
         _dbg = {"logged": False}
+        # One shared probe budget for the whole batch keeps the added simulator
+        # cost independent of batch size (~0.13 s per measured state at 64
+        # candidates, against a ~500 s training step).
+        probe_budget = [
+            (10 ** 9 if probe_all_steps else probe_states_per_batch) if probe_enabled else 0
+        ]
+        probe_rng = random.Random(1234)
 
         # ── turn-major batched loop ──────────────────────────────────────────
         for turn in range(max_turns):
@@ -193,9 +328,19 @@ def make_multiturn_rollout_func(
                     st["done"] = True
                     continue
                 st["running_ids"] = st["running_ids"] + gen_ids
+                # Record where this turn's MODEL tokens sit in the completion, so a
+                # per-step advantage can be written onto exactly those positions
+                # later. GRPO broadcasts one scalar per sequence; a per-step signal
+                # summed into that scalar is projected onto span{1}, which is why
+                # the scalar-sum form of the lookahead advantage could not move the
+                # gradient. Per-token delivery is the only channel for per-step
+                # credit.
+                span_start = len(st["comp_ids"])
                 st["comp_ids"] += gen_ids
                 st["comp_logps"] += logps
                 st["comp_mask"] += [1] * len(gen_ids)
+                st["tok_adv"] += [0.0] * len(gen_ids)
+                st["turn_spans"].append((span_start, span_start + len(gen_ids)))
                 text = tok.decode(gen_ids, skip_special_tokens=True)
                 if not _dbg["logged"]:
                     log.info(f"[mt-rollout SAMPLE pid={st['spec'].get('problem_id')} turn={turn} "
@@ -212,6 +357,12 @@ def make_multiturn_rollout_func(
                     st["action_sequence"].append(text.strip()[:80])
                     st["action_history"].append({"action": text.strip()[:120], "fea_result": st["state"], "thinking": thinking})
                 else:
+                    do_probe = (
+                        probe_enabled
+                        and probe_budget[0] > 0
+                        and st.get("program") is not None
+                    )
+                    pre_truss = copy.deepcopy(st["truss"]) if do_probe else None
                     try:
                         st["truss"] = _apply_action(st["truss"], parsed)
                         st["state"] = _analyze_truss(st["truss"], st["goals"])
@@ -220,6 +371,23 @@ def make_multiturn_rollout_func(
                     except Exception as e:  # noqa: BLE001
                         log.debug(f"[mt-rollout] action {parsed!r} failed: {e}")
                         st["parse_success"].append(False)
+                    if pre_truss is not None:
+                        probe_budget[0] -= 1
+                        result = _probe_here(
+                            pre_truss, st, _analyze_truss, _apply_action,
+                            probe_state, truss_candidate_actions,
+                            probe_max_candidates, probe_rng,
+                            probe_alpha, probe_tau, probe_gamma,
+                        )
+                        if result is not None:
+                            st["probes"].append(result)
+                            # Write this turn's counterfactual advantage onto the
+                            # tokens the policy actually generated for it.
+                            if st["turn_spans"]:
+                                lo, hi = st["turn_spans"][-1]
+                                adv = float(result.get("advantage", 0.0))
+                                for _i in range(lo, min(hi, len(st["tok_adv"]))):
+                                    st["tok_adv"][_i] = adv
                     st["action_sequence"].append(parsed)
                     st["action_history"].append({"action": parsed, "fea_result": st["state"], "thinking": thinking})
                 st["state_history"].append(st["state"])
@@ -227,29 +395,36 @@ def make_multiturn_rollout_func(
                 if st["state"].get("is_feasible", False) or turn == max_turns - 1:
                     st["done"] = True
                     continue
-                # inter-turn glue (DesignBench format), env tokens (no grad)
-                next_ids = apply_tpl(designbench_prompt.build_messages(
-                    st["spec"], st["initial_state"], st["action_history"], formatter))
-                run = st["running_ids"]
-                if len(next_ids) > len(run) and next_ids[:len(run)] == run:
-                    delta = next_ids[len(run):]
+                # Inter-turn glue: the assistant terminator, the FEA result as a
+                # user turn, and the next generation prompt. Environment tokens,
+                # so env_mask=0 (TRL pops it as tool_mask and gives them no
+                # gradient) and logprob 0.0.
+                fea_text = ("[Simulation Result]\nSTRUCTURAL ANALYSIS RESULT:\n"
+                            + designbench_prompt.format_eval_result(st["state"]))
+                if glue_fn is None:
+                    delta = []
+                    if turn == 0:
+                        log.warning("[mt-rollout] no chat glue available; turns >= 1 "
+                                    "are being trained without FEA feedback in context")
                 else:
-                    log.warning(f"[mt-rollout] prefix mismatch pid={st['spec'].get('problem_id')} turn={turn}")
-                    delta = next_ids[len(run):] if len(next_ids) > len(run) else []
+                    delta = glue_fn(fea_text, gen_ids)
                 st["comp_ids"] += delta
                 st["comp_logps"] += [0.0] * len(delta)
                 st["comp_mask"] += [0] * len(delta)
-                st["running_ids"] = next_ids
+                st["tok_adv"] += [0.0] * len(delta)      # environment tokens carry no credit
+                st["running_ids"] = st["running_ids"] + delta
 
         # ── assemble outputs (1:1 with prompts) ──────────────────────────────
         out: dict[str, list] = {"prompt_ids": [], "completion_ids": [], "logprobs": [],
-                                "env_mask": [], "rollout_result": []}
+                                "env_mask": [], "rollout_result": [],
+                                "step_token_advantages": []}
         eos0 = tok.eos_token_id or tok.pad_token_id or 0
         for prompt, st in zip(prompts, R):
             if not st.get("ok") or not st.get("comp_ids"):
                 out["prompt_ids"].append(st.get("prompt_ids") or tok(prompt, add_special_tokens=False)["input_ids"])
                 out["completion_ids"].append([eos0]); out["logprobs"].append([0.0])
                 out["env_mask"].append([1]); out["rollout_result"].append(None)
+                out["step_token_advantages"].append([0.0])
                 continue
             rr = RolloutResult(
                 problem_id=st["spec"].get("problem_id", ""), action_sequence=st["action_sequence"],
@@ -259,11 +434,28 @@ def make_multiturn_rollout_func(
                 reaches_solution=bool(st["state"].get("is_feasible", False)),
                 n_fea_calls=st["n_fea"], n_steps=len(st["action_sequence"]),
             )
+            if st.get("probes"):
+                rr.tree_metrics["lookahead_probes"] = list(st["probes"])
             out["prompt_ids"].append(st["prompt_ids"])
             out["completion_ids"].append(st["comp_ids"])
             out["logprobs"].append(st["comp_logps"])
             out["env_mask"].append(st["comp_mask"])
             out["rollout_result"].append(rr)
+            tok_adv = st.get("tok_adv") or [0.0] * len(st["comp_ids"])
+            if len(tok_adv) != len(st["comp_ids"]):     # never ship a misaligned vector
+                log.warning("[mt-rollout] tok_adv length %d != completion length %d; padding",
+                            len(tok_adv), len(st["comp_ids"]))
+                tok_adv = (tok_adv + [0.0] * len(st["comp_ids"]))[: len(st["comp_ids"])]
+            # Credit must land only on tokens the MODEL generated. A non-zero value
+            # on an environment token would train the policy on text it never chose.
+            stray = sum(1 for a, m in zip(tok_adv, st["comp_mask"]) if a != 0.0 and m == 0)
+            if stray and not _dbg.get("stray_warned"):
+                log.warning("[mt-rollout] %d per-token advantages fell on environment "
+                            "tokens; zeroing them", stray)
+                _dbg["stray_warned"] = True
+            if stray:
+                tok_adv = [a if m == 1 else 0.0 for a, m in zip(tok_adv, st["comp_mask"])]
+            out["step_token_advantages"].append(tok_adv)
         return out
 
     return rollout_func

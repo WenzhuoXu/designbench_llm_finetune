@@ -1,0 +1,422 @@
+{
+  "problem_id": "hard_problem_0039",
+  "description": "Truss optimization problem (ground structure variant 39)",
+  "topology": {
+    "joints": [
+      {
+        "id": 0,
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "support": "pinned"
+      },
+      {
+        "id": 1,
+        "position": [
+          3.0453013749311193,
+          0.0,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 2,
+        "position": [
+          6.090602749862239,
+          0.0,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 3,
+        "position": [
+          9.135904124793358,
+          0.0,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 4,
+        "position": [
+          12.181205499724477,
+          0.0,
+          0.0
+        ],
+        "support": "roller_y"
+      },
+      {
+        "id": 5,
+        "position": [
+          0.0,
+          1.9894977739211601,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 6,
+        "position": [
+          3.0453013749311193,
+          1.9894977739211601,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 7,
+        "position": [
+          6.090602749862239,
+          1.9894977739211601,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 8,
+        "position": [
+          9.135904124793358,
+          1.9894977739211601,
+          0.0
+        ],
+        "support": null
+      },
+      {
+        "id": 9,
+        "position": [
+          12.599059754436473,
+          1.5659872037495566,
+          0.0
+        ],
+        "support": null
+      }
+    ],
+    "members": [
+      {
+        "joints": [
+          0,
+          1
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.005865166299651676,
+          "t": 0.001
+        }
+      },
+      {
+        "joints": [
+          1,
+          2
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.02359582986019319,
+          "t": 0.0022628574347581653
+        }
+      },
+      {
+        "joints": [
+          2,
+          3
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.010900715058422302,
+          "t": 0.004025412212353385
+        }
+      },
+      {
+        "joints": [
+          3,
+          4
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.012838132229202682,
+          "t": 0.0047549505948631466
+        }
+      },
+      {
+        "joints": [
+          6,
+          7
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.03201606124689205,
+          "t": 0.002549787910343519
+        }
+      },
+      {
+        "joints": [
+          7,
+          8
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.01530047024240383,
+          "t": 0.00523986114818372
+        }
+      },
+      {
+        "joints": [
+          8,
+          9
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.04019823141842658,
+          "t": 0.004225195703771413
+        }
+      },
+      {
+        "joints": [
+          0,
+          5
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.05214413618837224,
+          "t": 0.008690689364728707
+        }
+      },
+      {
+        "joints": [
+          1,
+          6
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.005,
+          "t": 0.001
+        }
+      },
+      {
+        "joints": [
+          2,
+          7
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.007304548247659166,
+          "t": 0.0027936015115686184
+        }
+      },
+      {
+        "joints": [
+          3,
+          8
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.005282374937680667,
+          "t": 0.001
+        }
+      },
+      {
+        "joints": [
+          4,
+          9
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.006468111482548645,
+          "t": 0.0030764239494922214
+        }
+      },
+      {
+        "joints": [
+          0,
+          6
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.0536844550767972,
+          "t": 0.005560053933596538
+        }
+      },
+      {
+        "joints": [
+          1,
+          5
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.00785731531050123,
+          "t": 0.002188253448401067
+        }
+      },
+      {
+        "joints": [
+          1,
+          7
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.01176132707699669,
+          "t": 0.0019602211794994486
+        }
+      },
+      {
+        "joints": [
+          2,
+          6
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.020662954378016393,
+          "t": 0.0034438257296693993
+        }
+      },
+      {
+        "joints": [
+          2,
+          8
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.006787675152532152,
+          "t": 0.001
+        }
+      },
+      {
+        "joints": [
+          3,
+          7
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.03359504344493745,
+          "t": 0.009632668326577328
+        }
+      },
+      {
+        "joints": [
+          3,
+          9
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.013339370636709112,
+          "t": 0.0010268039395359568
+        }
+      },
+      {
+        "joints": [
+          4,
+          8
+        ],
+        "material": "A36_Steel",
+        "shape": {
+          "type": "Pipe",
+          "r": 0.02970729944574582,
+          "t": 0.010086793566519961
+        }
+      }
+    ]
+  },
+  "loading": [
+    {
+      "joint": 7,
+      "force": [
+        0.0,
+        -62439.258226798775,
+        0.0
+      ]
+    },
+    {
+      "joint": 5,
+      "force": [
+        0.0,
+        -56462.63590186312,
+        0.0
+      ]
+    }
+  ],
+  "goals": {
+    "minimum_fos_buckling": 1.5,
+    "minimum_fos_yielding": 1.5,
+    "maximum_mass": 172.09160155947032
+  },
+  "optimization": {
+    "shape": "Pipe",
+    "shape_params": {
+      "r": {
+        "min": 0.005,
+        "max": 0.15,
+        "initial": 0.03
+      },
+      "t": {
+        "min": 0.001,
+        "max": 0.02,
+        "initial": 0.005
+      }
+    }
+  },
+  "_metadata": {
+    "optimal_mass": 156.44691050860936,
+    "generation_method": "ground_structure_lp_misallocated",
+    "degradation_steps": 22,
+    "certified_mass": 148.99705762724702,
+    "certified_aspect_min": 0.04,
+    "fixed_aspect_mass": 249.0904285789066,
+    "mass_slack": 1.05,
+    "stratum": "s5",
+    "degradation": {
+      "removed": 1,
+      "jittered": 1,
+      "n_down": 12,
+      "n_up": 8,
+      "down_ids": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10,
+        11,
+        14,
+        16,
+        18
+      ],
+      "up_ids": [
+        3,
+        6,
+        7,
+        12,
+        13,
+        15,
+        17,
+        19
+      ],
+      "attempt": 0,
+      "min_fos": 0.031473035749908,
+      "degraded_mass": 282.1371941631261
+    },
+    "difficulty": null
+  }
+}

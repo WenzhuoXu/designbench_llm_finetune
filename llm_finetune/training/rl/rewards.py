@@ -407,7 +407,14 @@ class LagrangianPotentialReward(RewardFunction):
         initial_mass = _finite_float((rollout.initial_state or {}).get("mass"), 1.0)
         total = 0.0
         for t in range(len(history) - 1):
-            total += compute_step_reward(
+            # gamma**t is REQUIRED for the sum to telescope to gamma^H*Phi(s_H) -
+            # Phi(s_0). Without it the return is a path integral, and a no-op step
+            # pays (1-gamma)*|Phi| > 0 wherever Phi < 0 -- a reward for stalling
+            # in violation, proportional to how bad the violation is (+0.25 per
+            # wasted turn on a typical infeasible truss state, +1.27 over five).
+            # With gamma=1.0 (the default in the T5 configs) the shaping return is
+            # exactly Phi(s_H) - Phi(s_0): progress, with no bonus for elapsed time.
+            total += (self.gamma ** t) * compute_step_reward(
                 history[t],
                 history[t + 1],
                 initial_mass=initial_mass,
@@ -712,6 +719,122 @@ class InitialDifficultyWeightedReturn(RewardFunction):
 
 
 # ── Registry ──────────────────────────────────────────────────────────────────
+class LagrangianPotentialV2Reward(RewardFunction):
+    """Goal-aligned potential shaping r = gamma*Phi2(s') - Phi2(s) (v2).
+
+    Same shaping form as ``lagrangian_potential`` but with the potential read
+    from the problem's OWN goals instead of a hardcoded constraint set. See the
+    v2 block in ``posterior/potential.py`` for why that matters: the shipped
+    potential prices a deflection limit that 100/130 DesignBench problems do not
+    have, never prices the mass cap that they DO have, and never saturates, so
+    its argmax is an over-stiffened over-mass design.
+
+    Offline evidence (scripts/search_ladder.py, all 130 problems, no LLM):
+    one-step lookahead guided by Phi_v1 reaches feasibility on 67% of the
+    mass-constrained family; the same search guided by Phi_v2 reaches 88% and
+    solves a strict superset (21 problems gained, 0 lost).
+
+    Config: reward_fn: lagrangian_potential_v2
+    Params: alpha (5.0), gamma (0.99), tau (0.05), objective_weight (1.0)
+    """
+
+    def __init__(
+        self,
+        alpha: float = 5.0,
+        gamma: float = 0.99,
+        tau: float = 0.05,
+        objective_weight: float = 1.0,
+    ) -> None:
+        self.alpha = alpha
+        self.gamma = gamma
+        self.tau = tau
+        self.objective_weight = objective_weight
+
+    def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
+        from llm_finetune.training.rl.posterior.potential import (
+            compute_step_reward_v2,
+            constraints_from_spec,
+        )
+        history = rollout.state_history
+        if len(history) < 2:
+            return 0.0
+        initial_mass = _finite_float((rollout.initial_state or {}).get("mass"), 1.0)
+        cons = constraints_from_spec(problem_spec or {}, initial_mass=initial_mass)
+        total = 0.0
+        for t in range(len(history) - 1):
+            # See LagrangianPotentialReward: gamma**t makes the sum telescope, so
+            # a step that changes nothing is worth exactly nothing.
+            total += (self.gamma ** t) * compute_step_reward_v2(
+                history[t],
+                history[t + 1],
+                cons,
+                gamma=self.gamma,
+                alpha=self.alpha,
+                tau=self.tau,
+                objective_weight=self.objective_weight,
+            )
+        return _bounded_reward(total)
+
+    def name(self) -> str:
+        return "lagrangian_potential_v2"
+
+
+class LookaheadAdvantageReward(RewardFunction):
+    """Sum of per-step counterfactual advantages -- the framework's actual claim.
+
+        R(tau) = sum_t [ Phi(s_{t+1}) - E_c Phi(f(s_t, c)) ]
+
+    At each visited state the multi-turn rollout ranks a candidate action set by
+    simulating one step and scoring the successors with the design program's
+    potential (posterior/lookahead_probe.py). This reward credits the action the
+    policy took by how far it beat the mean of what was ACHIEVABLE from that same
+    state, rather than by how far the state itself moved.
+
+    Why this is not the term that was tested before. The previous
+    ``tree_advantage`` computed gamma*Phi(s_H^k) - mean_j Phi(s_H^j) across the K
+    rollouts of a GRPO group. Its baseline is constant within the group, so under
+    TRL's scale_rewards='group' -- which mean-centres and std-normalises
+    advantages inside exactly that group -- it is an affine image of Phi(s_H^k),
+    the quantity ``lagrangian_potential`` already carries. Enabling it re-weighted
+    an existing term and added no lookahead information, which is why the D=1 cell
+    tied its baseline at 12%. Here the baseline varies with the rollout AND the
+    step, so the sum is not an affine image of any single per-trajectory quantity
+    and cannot be normalised away.
+
+    Requires ``rl.lookahead_probe.{enabled: true, all_steps: true}``: with a
+    subsampled probe this is a partial sum over a variable number of steps, which
+    would make the reward depend on the probe budget rather than on the policy.
+    Returns 0.0 when no probe data is present, so a misconfigured run is visibly
+    flat rather than silently wrong.
+
+    Domain-agnostic: it reads only potentials recorded by the probe.
+
+    Config: reward_fn: lookahead_advantage  (or as a composite weight)
+    Params: normalize ("none" | "per_step"), gamma (1.0)
+    """
+
+    def __init__(self, normalize: str = "none", gamma: float = 1.0) -> None:
+        self.normalize = normalize
+        self.gamma = gamma
+
+    def compute(self, rollout: RolloutResult, problem_spec: dict) -> float:
+        probes = (rollout.tree_metrics or {}).get("lookahead_probes") or []
+        if not probes:
+            return 0.0
+        total = 0.0
+        for t, probe in enumerate(probes):
+            if not isinstance(probe, dict):
+                continue
+            advantage = _finite_float(probe.get("advantage"), 0.0)
+            total += (self.gamma ** t) * advantage
+        if self.normalize == "per_step" and probes:
+            total /= len(probes)
+        return _bounded_reward(total)
+
+    def name(self) -> str:
+        return "lookahead_advantage"
+
+
 REWARD_REGISTRY: dict[str, type[RewardFunction]] = {
     "feasibility": FeasibilityReward,
     "fos_improvement": FOSImprovementReward,
@@ -721,6 +844,8 @@ REWARD_REGISTRY: dict[str, type[RewardFunction]] = {
     "progress": ProgressReward,
     "composite": CompositeReward,
     "lagrangian_potential": LagrangianPotentialReward,
+    "lagrangian_potential_v2": LagrangianPotentialV2Reward,
+    "lookahead_advantage": LookaheadAdvantageReward,
     "macro_completion": MacroCompletionReward,
     "forward_prediction": ForwardPredictionReward,
     "stagnation_escape": StagnationEscapeReward,
@@ -746,14 +871,80 @@ def build_reward_from_config(cfg) -> RewardFunction:
         cfg = OmegaConf.to_container(cfg, resolve=True)
 
     reward_fn_name = cfg.get("reward_fn", "composite")
+    component_kwargs = _reward_component_kwargs(cfg)
 
     if reward_fn_name == "composite":
         weights = cfg.get("reward_weights", {})
-        return CompositeReward(weights=weights)
+        return CompositeReward(weights=weights, **component_kwargs)
 
     if reward_fn_name not in REWARD_REGISTRY:
         raise ValueError(
             f"Unknown reward function: {reward_fn_name!r}. "
             f"Available: {list(REWARD_REGISTRY.keys())}"
         )
-    return REWARD_REGISTRY[reward_fn_name]()
+    return REWARD_REGISTRY[reward_fn_name](
+        **_accepted_kwargs(REWARD_REGISTRY[reward_fn_name], component_kwargs.get(reward_fn_name, {}))
+    )
+
+
+def _accepted_kwargs(cls, kwargs: dict) -> dict:
+    """Drop kwargs a reward class does not declare, so configs never crash a run."""
+    import inspect
+    try:
+        params = inspect.signature(cls.__init__).parameters
+    except (TypeError, ValueError):
+        return {}
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return dict(kwargs)
+    return {k: v for k, v in kwargs.items() if k in params}
+
+
+def _reward_component_kwargs(cfg: dict) -> dict:
+    """Per-component constructor kwargs for the reward registry.
+
+    Two sources, in increasing precedence:
+
+      1. the ``posterior`` block (alpha, gamma, tau, objective_weight) -- these are
+         the Lagrangian potential's parameters and every potential-family reward
+         should honour them;
+      2. an explicit ``reward_kwargs: {<component>: {...}}`` block.
+
+    Before 2026-08-23 neither was threaded: CompositeReward was constructed with
+    weights only, so every potential reward silently used alpha=5.0 no matter what
+    the config said. The alpha-sweep cells (grpo_mt_01a/01b/01c, reported 8%/12%/4%)
+    were therefore three runs of the SAME configuration -- an accidental triplicate
+    whose spread is the seed-noise floor, not an alpha effect.
+    """
+    posterior = cfg.get("posterior") or {}
+    if not isinstance(posterior, dict):
+        posterior = {}
+    shared = {
+        k: posterior[k]
+        for k in ("alpha", "gamma", "tau", "objective_weight")
+        if k in posterior
+    }
+    potential_family = (
+        "lagrangian_potential",
+        "lagrangian_potential_v2",
+        "tree_advantage",
+        "step_normalized_phi",
+        "difficulty_weighted",
+    )
+    out: dict[str, dict] = {}
+    for name in potential_family:
+        cls = REWARD_REGISTRY.get(name)
+        if cls is not None and shared:
+            accepted = _accepted_kwargs(cls, shared)
+            if accepted:
+                out[name] = accepted
+
+    explicit = cfg.get("reward_kwargs") or {}
+    if isinstance(explicit, dict):
+        for name, kwargs in explicit.items():
+            if not isinstance(kwargs, dict):
+                continue
+            cls = REWARD_REGISTRY.get(name)
+            merged = dict(out.get(name, {}))
+            merged.update(kwargs)
+            out[name] = _accepted_kwargs(cls, merged) if cls is not None else merged
+    return out

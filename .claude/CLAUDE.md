@@ -216,6 +216,28 @@ The `WarmstartReasoningTarget` reformats this into the inference-time format:
 | `REMOVE_MEMBER` | `REMOVE_MEMBER(4)` |
 | `MOVE_JOINT` | `MOVE_JOINT(3, [0.0, 2.0], [0.5, 2.0])` |
 
+## Action format — two forms the executor does NOT accept natively
+
+DesignBench's `execute_grammar_action` matches the member id with `(\d+)` and requires a
+shape's parameters inside the shape call. The gold SFT data (and older versions of this
+file) use two forms that therefore fell through to "unknown action" and silently did
+nothing — together about **two thirds of all supervised actions**:
+
+**Write actions in the flat form.** `validate_action` (`llm_finetune/data/grammar.py`)
+rejects `ADD_MEMBER(..., Pipe(r=..., t=...))` with `add_member_arity` and rejects
+`all_members` with `placeholder_token`, so an action written the executor's own way is
+silently DROPPED before it ever reaches the executor. The flat form is what the system
+prompt advertises, what the validator accepts, and what `normalize_action` converts.
+
+| written as | executes? | normalised to |
+|---|---|---|
+| `SCALE_PARAM(all_members, thickness, 1.224)` | no | `SCALE_MULTI_PARAM([0,...,n-1], [thickness:1.224])` |
+| `ADD_MEMBER(1, 6, A36_Steel, Pipe, 0.023, 0.0039)` | no | `ADD_MEMBER(1, 6, A36_Steel, Pipe(r=0.023, t=0.0039))` |
+
+`llm_finetune/envs/truss_env.py::normalize_action` rewrites both, so either form now works
+wherever this repo applies an action. Measured on gold traces walked on their own problems:
+**31.6% of actions changed the design before, 96.5% after.**
+
 ## Design Constraints (DesignBench Truss)
 
 - FOS_buckling ≥ 1.5 (Factor of Safety against buckling)

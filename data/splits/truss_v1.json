@@ -1,0 +1,1174 @@
+{
+  "name": "truss_v1",
+  "seed": 20260823,
+  "eval_frac": 0.35,
+  "source": "/ocean/projects/mch250030p/wxu7/DesignBench/data/problems",
+  "n_total": 129,
+  "train": [
+    "auto_problem_000",
+    "auto_problem_001",
+    "auto_problem_002",
+    "auto_problem_004",
+    "auto_problem_005",
+    "auto_problem_006",
+    "auto_problem_009",
+    "auto_problem_011",
+    "auto_problem_014",
+    "auto_problem_017",
+    "auto_problem_019",
+    "auto_problem_021",
+    "auto_problem_023",
+    "auto_problem_024",
+    "auto_problem_026",
+    "auto_problem_027",
+    "auto_problem_028",
+    "auto_problem_029",
+    "auto_problem_030",
+    "auto_problem_033",
+    "auto_problem_035",
+    "auto_problem_036",
+    "auto_problem_037",
+    "auto_problem_038",
+    "auto_problem_040",
+    "auto_problem_041",
+    "auto_problem_042",
+    "auto_problem_043",
+    "auto_problem_044",
+    "auto_problem_045",
+    "auto_problem_046",
+    "auto_problem_047",
+    "auto_problem_048",
+    "auto_problem_049",
+    "auto_problem_050",
+    "auto_problem_054",
+    "auto_problem_056",
+    "auto_problem_057",
+    "auto_problem_059",
+    "auto_problem_060",
+    "auto_problem_061",
+    "auto_problem_062",
+    "auto_problem_063",
+    "auto_problem_064",
+    "auto_problem_065",
+    "auto_problem_071",
+    "auto_problem_072",
+    "auto_problem_073",
+    "auto_problem_075",
+    "auto_problem_076",
+    "auto_problem_077",
+    "auto_problem_078",
+    "auto_problem_079",
+    "auto_problem_080",
+    "auto_problem_082",
+    "auto_problem_083",
+    "auto_problem_084",
+    "auto_problem_087",
+    "auto_problem_088",
+    "auto_problem_090",
+    "auto_problem_092",
+    "auto_problem_093",
+    "auto_problem_094",
+    "auto_problem_096",
+    "auto_problem_097",
+    "auto_problem_099",
+    "bridge_simple_01",
+    "cantilever_01",
+    "final_test_002",
+    "final_test_003",
+    "final_test_004",
+    "test_final_000",
+    "test_fixed_000",
+    "test_no_deflection_000",
+    "test_pattern_003",
+    "test_pattern_004",
+    "test_pattern_005",
+    "test_pattern_009",
+    "test_truss_000",
+    "verify_patterns_000",
+    "verify_patterns_001",
+    "verify_patterns_002",
+    "verify_patterns_003",
+    "verify_patterns_005",
+    "verify_patterns_006",
+    "verify_patterns_007"
+  ],
+  "eval": [
+    "auto_problem_003",
+    "auto_problem_007",
+    "auto_problem_008",
+    "auto_problem_010",
+    "auto_problem_012",
+    "auto_problem_013",
+    "auto_problem_015",
+    "auto_problem_016",
+    "auto_problem_018",
+    "auto_problem_020",
+    "auto_problem_022",
+    "auto_problem_025",
+    "auto_problem_031",
+    "auto_problem_032",
+    "auto_problem_034",
+    "auto_problem_039",
+    "auto_problem_051",
+    "auto_problem_052",
+    "auto_problem_053",
+    "auto_problem_055",
+    "auto_problem_058",
+    "auto_problem_066",
+    "auto_problem_067",
+    "auto_problem_068",
+    "auto_problem_069",
+    "auto_problem_070",
+    "auto_problem_074",
+    "auto_problem_081",
+    "auto_problem_085",
+    "auto_problem_086",
+    "auto_problem_089",
+    "auto_problem_091",
+    "auto_problem_095",
+    "auto_problem_098",
+    "final_test_000",
+    "final_test_001",
+    "test_new_000",
+    "test_pattern_000",
+    "test_pattern_002",
+    "test_pattern_007",
+    "test_realistic_000",
+    "test_truss_001",
+    "verify_patterns_004"
+  ],
+  "records": {
+    "auto_problem_000": {
+      "problem_id": "auto_problem_000",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.7050877746972037,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "auto_problem_001": {
+      "problem_id": "auto_problem_001",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.6629087092056299,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "auto_problem_002": {
+      "problem_id": "auto_problem_002",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.673438164166075,
+      "initial_feasible": false,
+      "n_members": 17
+    },
+    "auto_problem_003": {
+      "problem_id": "auto_problem_003",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3028232534512957,
+      "initial_feasible": false,
+      "n_members": 14
+    },
+    "auto_problem_004": {
+      "problem_id": "auto_problem_004",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 8
+    },
+    "auto_problem_005": {
+      "problem_id": "auto_problem_005",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.7429741209625205,
+      "initial_feasible": false,
+      "n_members": 14
+    },
+    "auto_problem_006": {
+      "problem_id": "auto_problem_006",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.15346200568027,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_007": {
+      "problem_id": "auto_problem_007",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.6095247614965565,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_008": {
+      "problem_id": "auto_problem_008",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.919091229673722,
+      "initial_feasible": false,
+      "n_members": 15
+    },
+    "auto_problem_009": {
+      "problem_id": "auto_problem_009",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.4416219829574856,
+      "initial_feasible": false,
+      "n_members": 16
+    },
+    "auto_problem_010": {
+      "problem_id": "auto_problem_010",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.837607550548029,
+      "initial_feasible": false,
+      "n_members": 19
+    },
+    "auto_problem_011": {
+      "problem_id": "auto_problem_011",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3652142876327592,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_012": {
+      "problem_id": "auto_problem_012",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.2720831697465374,
+      "initial_feasible": false,
+      "n_members": 21
+    },
+    "auto_problem_013": {
+      "problem_id": "auto_problem_013",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.65194982705977,
+      "initial_feasible": false,
+      "n_members": 15
+    },
+    "auto_problem_014": {
+      "problem_id": "auto_problem_014",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.8990496064691078,
+      "initial_feasible": false,
+      "n_members": 14
+    },
+    "auto_problem_015": {
+      "problem_id": "auto_problem_015",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 12
+    },
+    "auto_problem_016": {
+      "problem_id": "auto_problem_016",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.40767793079169606,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "auto_problem_017": {
+      "problem_id": "auto_problem_017",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 18
+    },
+    "auto_problem_018": {
+      "problem_id": "auto_problem_018",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.9560437674408804,
+      "initial_feasible": false,
+      "n_members": 19
+    },
+    "auto_problem_019": {
+      "problem_id": "auto_problem_019",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.2710931404229003,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "auto_problem_020": {
+      "problem_id": "auto_problem_020",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.5255089285881249,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_021": {
+      "problem_id": "auto_problem_021",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3098538813585662,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_022": {
+      "problem_id": "auto_problem_022",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.8188934177757661,
+      "initial_feasible": false,
+      "n_members": 19
+    },
+    "auto_problem_023": {
+      "problem_id": "auto_problem_023",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.5625103720508422,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_024": {
+      "problem_id": "auto_problem_024",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.9457092566045144,
+      "initial_feasible": false,
+      "n_members": 19
+    },
+    "auto_problem_025": {
+      "problem_id": "auto_problem_025",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.5048682891464625,
+      "initial_feasible": false,
+      "n_members": 16
+    },
+    "auto_problem_026": {
+      "problem_id": "auto_problem_026",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.5001782743923368,
+      "initial_feasible": false,
+      "n_members": 8
+    },
+    "auto_problem_027": {
+      "problem_id": "auto_problem_027",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.9234519614920874,
+      "initial_feasible": false,
+      "n_members": 8
+    },
+    "auto_problem_028": {
+      "problem_id": "auto_problem_028",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.7038076820248436,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_029": {
+      "problem_id": "auto_problem_029",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.41835867665987725,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_030": {
+      "problem_id": "auto_problem_030",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.0289776193895532,
+      "initial_feasible": false,
+      "n_members": 18
+    },
+    "auto_problem_031": {
+      "problem_id": "auto_problem_031",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.6943990464326659,
+      "initial_feasible": false,
+      "n_members": 14
+    },
+    "auto_problem_032": {
+      "problem_id": "auto_problem_032",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.35851579710838904,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_033": {
+      "problem_id": "auto_problem_033",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "auto_problem_034": {
+      "problem_id": "auto_problem_034",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.3208313090474666,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "auto_problem_035": {
+      "problem_id": "auto_problem_035",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.9594858608044855,
+      "initial_feasible": false,
+      "n_members": 19
+    },
+    "auto_problem_036": {
+      "problem_id": "auto_problem_036",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.6590709286995695,
+      "initial_feasible": false,
+      "n_members": 15
+    },
+    "auto_problem_037": {
+      "problem_id": "auto_problem_037",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.5565343774831866,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "auto_problem_038": {
+      "problem_id": "auto_problem_038",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.9982737980829942,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_039": {
+      "problem_id": "auto_problem_039",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 7
+    },
+    "auto_problem_040": {
+      "problem_id": "auto_problem_040",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.4754235285119111,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_041": {
+      "problem_id": "auto_problem_041",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3465664760564104,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_042": {
+      "problem_id": "auto_problem_042",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.28528557101834223,
+      "initial_feasible": false,
+      "n_members": 8
+    },
+    "auto_problem_043": {
+      "problem_id": "auto_problem_043",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.16303058949228186,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "auto_problem_044": {
+      "problem_id": "auto_problem_044",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.8504246080056905,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_045": {
+      "problem_id": "auto_problem_045",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3863327877331429,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_046": {
+      "problem_id": "auto_problem_046",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.5137236093491617,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_047": {
+      "problem_id": "auto_problem_047",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 7
+    },
+    "auto_problem_048": {
+      "problem_id": "auto_problem_048",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 17
+    },
+    "auto_problem_049": {
+      "problem_id": "auto_problem_049",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.1348303844938028,
+      "initial_feasible": false,
+      "n_members": 19
+    },
+    "auto_problem_050": {
+      "problem_id": "auto_problem_050",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3278560850559755,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_051": {
+      "problem_id": "auto_problem_051",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 8
+    },
+    "auto_problem_052": {
+      "problem_id": "auto_problem_052",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.8695487272161412,
+      "initial_feasible": false,
+      "n_members": 19
+    },
+    "auto_problem_053": {
+      "problem_id": "auto_problem_053",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.6124614767155203,
+      "initial_feasible": false,
+      "n_members": 17
+    },
+    "auto_problem_054": {
+      "problem_id": "auto_problem_054",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3216347830932997,
+      "initial_feasible": false,
+      "n_members": 14
+    },
+    "auto_problem_055": {
+      "problem_id": "auto_problem_055",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3759326521217248,
+      "initial_feasible": false,
+      "n_members": 16
+    },
+    "auto_problem_056": {
+      "problem_id": "auto_problem_056",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.8195354359158651,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_057": {
+      "problem_id": "auto_problem_057",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.792588933582631,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "auto_problem_058": {
+      "problem_id": "auto_problem_058",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3174258403724147,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_059": {
+      "problem_id": "auto_problem_059",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.51351392471491,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_060": {
+      "problem_id": "auto_problem_060",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.35553422927347217,
+      "initial_feasible": false,
+      "n_members": 15
+    },
+    "auto_problem_061": {
+      "problem_id": "auto_problem_061",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3358587340496543,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_062": {
+      "problem_id": "auto_problem_062",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.7274204836520575,
+      "initial_feasible": false,
+      "n_members": 14
+    },
+    "auto_problem_063": {
+      "problem_id": "auto_problem_063",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.5975065149262021,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_064": {
+      "problem_id": "auto_problem_064",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.42764289517323517,
+      "initial_feasible": false,
+      "n_members": 11
+    },
+    "auto_problem_065": {
+      "problem_id": "auto_problem_065",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.8049555196787173,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "auto_problem_066": {
+      "problem_id": "auto_problem_066",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.351828163879109,
+      "initial_feasible": false,
+      "n_members": 16
+    },
+    "auto_problem_067": {
+      "problem_id": "auto_problem_067",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.7540518437701605,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_068": {
+      "problem_id": "auto_problem_068",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.0971571449791266,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_069": {
+      "problem_id": "auto_problem_069",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.4733129574431999,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_070": {
+      "problem_id": "auto_problem_070",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.4185859450870656,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_071": {
+      "problem_id": "auto_problem_071",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.9622166383276607,
+      "initial_feasible": false,
+      "n_members": 19
+    },
+    "auto_problem_072": {
+      "problem_id": "auto_problem_072",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 7
+    },
+    "auto_problem_073": {
+      "problem_id": "auto_problem_073",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 12
+    },
+    "auto_problem_074": {
+      "problem_id": "auto_problem_074",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.4649181180983836,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "auto_problem_075": {
+      "problem_id": "auto_problem_075",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.2868205682464258,
+      "initial_feasible": false,
+      "n_members": 11
+    },
+    "auto_problem_076": {
+      "problem_id": "auto_problem_076",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.31505574353837884,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_077": {
+      "problem_id": "auto_problem_077",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.5587437973798809,
+      "initial_feasible": false,
+      "n_members": 15
+    },
+    "auto_problem_078": {
+      "problem_id": "auto_problem_078",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.3019673994139944,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_079": {
+      "problem_id": "auto_problem_079",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.6474941622276399,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "auto_problem_080": {
+      "problem_id": "auto_problem_080",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.8506540915792056,
+      "initial_feasible": false,
+      "n_members": 19
+    },
+    "auto_problem_081": {
+      "problem_id": "auto_problem_081",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.9475892954531555,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "auto_problem_082": {
+      "problem_id": "auto_problem_082",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.47219953422891753,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "auto_problem_083": {
+      "problem_id": "auto_problem_083",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.36472614644103596,
+      "initial_feasible": false,
+      "n_members": 20
+    },
+    "auto_problem_084": {
+      "problem_id": "auto_problem_084",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.6885212925968747,
+      "initial_feasible": false,
+      "n_members": 16
+    },
+    "auto_problem_085": {
+      "problem_id": "auto_problem_085",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.9776615923766693,
+      "initial_feasible": false,
+      "n_members": 15
+    },
+    "auto_problem_086": {
+      "problem_id": "auto_problem_086",
+      "family": "mass",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 8
+    },
+    "auto_problem_087": {
+      "problem_id": "auto_problem_087",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.8245376156448913,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_088": {
+      "problem_id": "auto_problem_088",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.5686412370727127,
+      "initial_feasible": false,
+      "n_members": 15
+    },
+    "auto_problem_089": {
+      "problem_id": "auto_problem_089",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.18904770982403976,
+      "initial_feasible": false,
+      "n_members": 21
+    },
+    "auto_problem_090": {
+      "problem_id": "auto_problem_090",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.40454251637825284,
+      "initial_feasible": false,
+      "n_members": 18
+    },
+    "auto_problem_091": {
+      "problem_id": "auto_problem_091",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.3353079605392788,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "auto_problem_092": {
+      "problem_id": "auto_problem_092",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.6395496857842835,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "auto_problem_093": {
+      "problem_id": "auto_problem_093",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.41642916126366836,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_094": {
+      "problem_id": "auto_problem_094",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.46883958347421617,
+      "initial_feasible": false,
+      "n_members": 14
+    },
+    "auto_problem_095": {
+      "problem_id": "auto_problem_095",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.5643223260860809,
+      "initial_feasible": false,
+      "n_members": 16
+    },
+    "auto_problem_096": {
+      "problem_id": "auto_problem_096",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.9041851074698765,
+      "initial_feasible": false,
+      "n_members": 18
+    },
+    "auto_problem_097": {
+      "problem_id": "auto_problem_097",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 1.4600570321929194,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "auto_problem_098": {
+      "problem_id": "auto_problem_098",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.7237581663981473,
+      "initial_feasible": false,
+      "n_members": 10
+    },
+    "auto_problem_099": {
+      "problem_id": "auto_problem_099",
+      "family": "mass",
+      "degenerate": false,
+      "initial_violation": 0.19630926608355295,
+      "initial_feasible": false,
+      "n_members": 16
+    },
+    "bridge_simple_01": {
+      "problem_id": "bridge_simple_01",
+      "family": "deflection",
+      "degenerate": true,
+      "initial_violation": 3.0000000002061156,
+      "initial_feasible": false,
+      "n_members": 6
+    },
+    "cantilever_01": {
+      "problem_id": "cantilever_01",
+      "family": "deflection",
+      "degenerate": false,
+      "initial_violation": 1.1383491493271045e-07,
+      "initial_feasible": true,
+      "n_members": 8
+    },
+    "final_test_000": {
+      "problem_id": "final_test_000",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.041858056680489183,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "final_test_001": {
+      "problem_id": "final_test_001",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.04641134187257067,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "final_test_002": {
+      "problem_id": "final_test_002",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.07963010245822905,
+      "initial_feasible": false,
+      "n_members": 17
+    },
+    "final_test_003": {
+      "problem_id": "final_test_003",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.07202204869271518,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "final_test_004": {
+      "problem_id": "final_test_004",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.10871765592495136,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "test_final_000": {
+      "problem_id": "test_final_000",
+      "family": "deflection",
+      "degenerate": false,
+      "initial_violation": 100.0,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "test_fixed_000": {
+      "problem_id": "test_fixed_000",
+      "family": "deflection",
+      "degenerate": false,
+      "initial_violation": 2.327613301669253e-10,
+      "initial_feasible": true,
+      "n_members": 9
+    },
+    "test_new_000": {
+      "problem_id": "test_new_000",
+      "family": "deflection",
+      "degenerate": false,
+      "initial_violation": 100.0,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "test_no_deflection_000": {
+      "problem_id": "test_no_deflection_000",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.03616346390630825,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "test_pattern_000": {
+      "problem_id": "test_pattern_000",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.05106779793653215,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "test_pattern_002": {
+      "problem_id": "test_pattern_002",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.0939542487464637,
+      "initial_feasible": false,
+      "n_members": 17
+    },
+    "test_pattern_003": {
+      "problem_id": "test_pattern_003",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.03681435224709156,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "test_pattern_004": {
+      "problem_id": "test_pattern_004",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.08597786149461094,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "test_pattern_005": {
+      "problem_id": "test_pattern_005",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.05455084474723715,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "test_pattern_007": {
+      "problem_id": "test_pattern_007",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.0844417688255055,
+      "initial_feasible": false,
+      "n_members": 17
+    },
+    "test_pattern_009": {
+      "problem_id": "test_pattern_009",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.04777111011221364,
+      "initial_feasible": false,
+      "n_members": 17
+    },
+    "test_realistic_000": {
+      "problem_id": "test_realistic_000",
+      "family": "deflection",
+      "degenerate": false,
+      "initial_violation": 0.03616352218260236,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "test_truss_000": {
+      "problem_id": "test_truss_000",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.08003620894009557,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "test_truss_001": {
+      "problem_id": "test_truss_001",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.05622795574332373,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "verify_patterns_000": {
+      "problem_id": "verify_patterns_000",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.18512855990095334,
+      "initial_feasible": false,
+      "n_members": 17
+    },
+    "verify_patterns_001": {
+      "problem_id": "verify_patterns_001",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.05174662390585869,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "verify_patterns_002": {
+      "problem_id": "verify_patterns_002",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.04402515036375987,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "verify_patterns_003": {
+      "problem_id": "verify_patterns_003",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.04379460973640334,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "verify_patterns_004": {
+      "problem_id": "verify_patterns_004",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.07310010956262013,
+      "initial_feasible": false,
+      "n_members": 13
+    },
+    "verify_patterns_005": {
+      "problem_id": "verify_patterns_005",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.047360046493458166,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "verify_patterns_006": {
+      "problem_id": "verify_patterns_006",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.06964729750512173,
+      "initial_feasible": false,
+      "n_members": 9
+    },
+    "verify_patterns_007": {
+      "problem_id": "verify_patterns_007",
+      "family": "fos_only",
+      "degenerate": false,
+      "initial_violation": 0.09179089129358751,
+      "initial_feasible": false,
+      "n_members": 13
+    }
+  }
+}

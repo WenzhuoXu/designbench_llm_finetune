@@ -1,0 +1,66 @@
+# T5a CONTROL — champion configuration, rerun on the held-out split.
+#
+# Identical to grpo_mt_01b (the 54% champion) in every respect except that
+# training is now restricted to the train side of data/splits/truss_v1.json.
+# It exists so that T5b (goal-aligned potential) has a comparison run trained on
+# the same 86 problems and evaluated on the same 43 unseen ones. The published
+# champion cannot serve as that control: it trained on the evaluation problems.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+# Written out in full ON PURPOSE. Hydra merges dict-valued keys, so every mt_*
+# config silently inherited grpo_truss.yaml's four reward terms on top of the one
+# it declared: the champion's reward was never the "single dense reward term"
+# the status report describes, but
+#   feasibility 1.0 + fos_improvement 0.5 + grammar_compliance 0.1
+#   + step_efficiency 0.1 + lagrangian_potential 1.0.
+# (One casualty: the grammar-reward ablation, which "added" a term that was
+# already present at 0.1 in every run.) These weights reproduce that effective
+# blend exactly, so the A/B changes the potential and nothing else.
+reward_weights:
+  feasibility: 1.0
+  fos_improvement: 0.5
+  grammar_compliance: 0.1
+  step_efficiency: 0.1
+  lagrangian_potential: 1.0  # r_env = gamma*Phi_v1(s') - Phi_v1(s)   [shipped potential]
+cost_fn: null
+use_tree_expansion: false
+
+multi_turn: true
+max_turns: 5
+max_turn_tokens: 1536
+gen_batch_chunk: 8
+
+learning_rate: 5.0e-6
+max_steps_train: 100
+num_epochs: 100
+save_steps: 25
+group_size: 8
+temperature: 0.6
+top_p: 0.95
+
+posterior:
+  alpha: 5.0
+  # gamma = 1.0 for the shaping term. With gamma < 1 the shaping return is
+  # (gamma^H)Phi(s_H) - Phi(s_0), and where Phi < 0 -- i.e. anywhere infeasible --
+  # simply surviving longer raises it: a no-op turn paid +0.25 and a five-turn
+  # stall +1.27 on a typical infeasible truss state, which is a direct reward for
+  # burning the turn budget. At gamma = 1.0 the return is exactly
+  # Phi(s_H) - Phi(s_0): progress only. Turn economy is priced separately by
+  # step_efficiency.
+  gamma: 1.0
+
+# Lookahead probe — the diagnostic the study has been missing.
+# At up to max_states_per_batch visited states per batch, rank the candidate
+# actions by the design program's potential and locate the action the policy
+# actually took. Logs lookahead/{rho,regret,rank_frac,margin,sigma,reliable_frac}.
+# The legacy `rho_tree_agreement` compares two orderings of the same group of
+# trajectories and cannot move; this compares the policy's action against
+# counterfactuals at the state it chose from. ~0.13 s per measured state at 48
+# candidates, against a ~500 s step. Diagnostic only: it never touches the reward.
+lookahead_probe:
+  enabled: true
+  max_states_per_batch: 8
+  max_candidates: 48

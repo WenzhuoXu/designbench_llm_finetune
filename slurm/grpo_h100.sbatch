@@ -83,6 +83,12 @@ export TRANSFORMERS_CACHE="/ocean/projects/mch250030p/wxu7/hf_models"
 export HF_HUB_CACHE="/ocean/projects/mch250030p/wxu7/hf_models"
 export HF_HUB_OFFLINE=0
 export HF_HUB_DISABLE_XET=1
+
+# Unique rendezvous port per job: a hardcoded port made any two jobs landing
+# on the same node fail instantly with EADDRINUSE (killed T5b, T5c and the
+# first distillation run 11-33 s after launch).
+MASTER_PORT_DERIVED=$(( 20000 + (SLURM_JOB_ID % 20000) ))
+echo "rendezvous port: $MASTER_PORT_DERIVED"
 export NCCL_DEBUG=WARN
 export NCCL_IB_DISABLE=0
 export NCCL_P2P_DISABLE=0
@@ -102,6 +108,9 @@ export VLLM_TENSOR_PARALLEL_SIZE="$GPUS"
 # ─── FEA worker pool ───────────────────────────────────────────
 # 2 shared H100s usually provide 24 CPUs; leave room for trainer workers.
 export N_FEA_WORKERS="${N_FEA_WORKERS:-20}"
+# trussme (via DesignBench) imports matplotlib.pyplot; Agg skips GUI-backend
+# probing, ~90s of Lustre stat()s per process on this cluster.
+export MPLBACKEND=Agg
 
 # ─── Launch GRPO training ──────────────────────────────────────
 CHECKPOINT_ARGS=""
@@ -111,7 +120,7 @@ fi
 
 torchrun \
   --nproc_per_node="$GPUS" \
-  --master_port=29501 \
+  --master_port="$MASTER_PORT_DERIVED" \
   --master_addr=localhost \
   scripts/train_grpo.py \
     model="$MODEL" \
@@ -129,7 +138,7 @@ torchrun \
     rl.n_env_workers="$N_FEA_WORKERS" \
     logging.wandb_project=designbench-training \
     ${CHECKPOINT_ARGS} \
-    "${OVERRIDE_ARGS:-}"
+    ${OVERRIDE_ARGS:-}
 
 echo "============================================================"
 echo "GRPO training completed: $(date)"

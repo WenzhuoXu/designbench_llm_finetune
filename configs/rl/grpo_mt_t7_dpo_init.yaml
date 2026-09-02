@@ -1,0 +1,20 @@
+# T7 — GRPO from a preference-trained initialisation.
+#
+# The pipeline the evidence points to. Three findings compose here:
+#
+#   1. SFT on the search's demonstrations FAILED to transfer its decision rule --
+#      regret against procedural candidates rose 1.606 -> 3.427 -- because a
+#      demonstration shows the argmax and never the comparison.
+#   2. DPO on 535 same-move preference pairs DID transfer it: 0.724 dev accuracy
+#      on held-out problems where the surface-feature ceiling is exactly 0.50,
+#      i.e. the policy learned which ELEMENT to act on. It also left grammar at
+#      1.000, where SFT dropped it to 0.743 and made the policy temperature-brittle.
+#   3. But preferences over single actions cannot teach a sequential policy:
+#      DPO alone reaches 20.6% feasible against the champion's 61.8%.
+#
+# So start GRPO from the preference-trained checkpoint rather than the plain
+# warmstart. Reward is Phi_v2 alone, matching T5bo, so this differs from T5bo in
+# exactly one thing: the initialisation.
+
+defaults:
+  - grpo_mt_t5bo_phionly_v2

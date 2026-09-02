@@ -1,0 +1,74 @@
+# T9 TREATMENT kappa=1.0 — does PER-TOKEN potential credit help, holding the reward fixed?
+#
+# The only difference between t9_control and t9_treat is lookahead_kappa. Both
+# train on the champion's reward. The potential shaping term is set to 0.0 ON
+# PURPOSE: tests/test_shaping_invisibility.py proves the shaping sum telescopes
+# to gamma^T*Phi(s_T) - Phi(s_0), and Phi(s_0) is a group constant that GRPO's
+# mean-centring deletes -- so as a REWARD the potential contributes only a
+# terminal reweighting and zero per-step credit. Keeping it in would add a
+# confound without adding signal.
+#
+# T8 (cancelled, job 44317641) inherited grpo_mt_t5bo_phionly_v2, which zeroes
+# feasibility AND fos_improvement and keeps only the potential. That is a pure
+# terminal-Phi reward with the useful signal removed: a null there would have
+# been uninterpretable. This pair fixes that.
+#
+# Per-token advantages are the ONLY route that puts Phi inside the gradient:
+# A_token = A_sequence + kappa * zscore(A_step). A_sequence lives in span{1}
+# (one scalar broadcast to every token), so the step term is orthogonal to it
+# and cannot be cancelled by group normalisation.
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+# Hydra MERGES dict-valued keys, so grpo_truss.yaml's terms arrive whether wanted
+# or not. Written out in full so the A/B changes kappa and nothing else (D5).
+reward_weights:
+  feasibility: 1.0
+  fos_improvement: 0.5
+  grammar_compliance: 0.1
+  step_efficiency: 0.1
+  lagrangian_potential_v2: 0.0   # shaping is invisible to GRPO; see header
+cost_fn: null
+use_tree_expansion: false
+
+lookahead_kappa: 1.0
+lookahead_probe:
+  enabled: true
+  all_steps: true          # every turn must be probed or its tokens get no credit
+  max_candidates: 48
+
+# GPU-shared will not schedule 24h here but schedules 8h in minutes, and ~5.5
+# training steps/hour means one allocation reaches ~44 of the 100 steps. The
+# default save_steps=50 would therefore write NO checkpoint at all and the run
+# would be unresumable. Both arms carry these identically, so the A/B still
+# differs only in lookahead_kappa.
+save_steps: 10
+max_steps_train: 100
+
+# grpo_base.yaml defaults learning_rate to 5.0e-7 and grpo_truss does not override
+# it, so the first t9_control run (job 44793478) trained at 5e-7 -> KL stayed pinned
+# at 0.0014 for all 100 steps and the policy never moved. Every ablation that ever
+# worked sets 5.0e-6 ("10x grpo_base default; needed for LoRA to shift distribution"),
+# and the champion's own log shows lr 5.0e-6 with KL rising 0.0014 -> 0.035.
+# Identical in both arms, so the A/B still differs only in lookahead_kappa.
+learning_rate: 5.0e-6
+
+# These configs are named grpo_mt_* but never set multi_turn, so the first pair ran
+# SINGLE-turn: the treat arm died on the guard at grpo_trainer.py:278 ("lookahead_kappa
+# requires rl.multi_turn=true"), and the control silently "succeeded" while exercising
+# a completely different rollout path. That also explains its reward of 0.004 -- a
+# single-turn rollout on a problem needing ~20 turns essentially never reaches
+# feasibility. Mirrors grpo_mt_t5b_phi2.yaml, a config that actually produced results.
+multi_turn: true
+max_turns: 5
+max_turn_tokens: 1536
+gen_batch_chunk: 8
+num_epochs: 100
+temperature: 0.6
+top_p: 0.95
+posterior:
+  alpha: 5.0
+  gamma: 1.0
+  tau: 0.05
+  objective_weight: 1.0

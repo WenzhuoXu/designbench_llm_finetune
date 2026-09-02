@@ -1,0 +1,30 @@
+# SFT on the potential-guided search's own decisions.
+#
+# Measured on 130 truss problems, the trained policy sits at 54% feasible /
+# median mass 0.917x reference while a validity-gated one-step lookahead under
+# the goal-aligned potential reaches 75.6% / 0.620 using only actions the policy
+# can emit. The policy has not internalised the potential; that gap is what this
+# supervises against.
+#
+# Traces come from scripts/distill_search_traces.py: the search runs on the TRAIN
+# side of data/splits/truss_v1_auto.json and each decision is written as a turn
+# whose reasoning is the search's own justification -- which constraint binds,
+# which element the simulator blames, how many candidates were compared, what the
+# chosen action did to the potential and by what margin. Every figure is read off
+# the search that produced the action; none is invented.
+#
+# target_fn: warmstart_reasoning, verified to reproduce EXACTLY the message
+# structure designbench_prompt.build_messages emits during the RL rollout
+# (system=TRUSS_SYSTEM_PROMPT, user=problem, assistant=<think>..</think><action>..,
+# user=[Simulation Result]..), so the distilled policy is in-distribution when
+# GRPO takes over.
+
+data_format: jsonl
+
+train_jsonl: /ocean/projects/mch250030p/wxu7/llm_finetune/results/distill/search_policy_train_sft.jsonl
+dev_jsonl: /ocean/projects/mch250030p/wxu7/llm_finetune/results/distill/search_policy_dev_sft.jsonl
+
+target_fn: warmstart_reasoning
+
+min_trace_quality: 0.5
+max_seq_len: 8192

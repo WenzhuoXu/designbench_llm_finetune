@@ -1,0 +1,86 @@
+{
+  "problem_id": "batg_rnd037_8A",
+  "domain": "battery",
+  "family": "grid_energy_density",
+  "description": "Li-ion cell design (rnd037 starting point) charged at 8 A. Resize the electrode geometry to meet every goal.",
+  "operating_conditions": {
+    "charge_current_a": 8.0,
+    "ambient_temperature_k": 298.15,
+    "heat_transfer_coefficient": 10.0,
+    "parameter_set": "Chen2020"
+  },
+  "goals": {
+    "max_charge_time": 64.95535685,
+    "max_temperature": 351.62671629999994,
+    "max_plating": 1e-05,
+    "minimum_energy_density": 322.1532841
+  },
+  "objective": {
+    "key": "charge_time",
+    "sense": "min",
+    "ref": 64.95535685
+  },
+  "optimization": {
+    "design_params": {
+      "neg_thickness": {
+        "min": 2e-05,
+        "max": 0.0003
+      },
+      "pos_thickness": {
+        "min": 2e-05,
+        "max": 0.0003
+      },
+      "sep_thickness": {
+        "min": 5e-06,
+        "max": 4e-05
+      },
+      "neg_porosity": {
+        "min": 0.15,
+        "max": 0.55
+      },
+      "pos_porosity": {
+        "min": 0.15,
+        "max": 0.55
+      },
+      "neg_radius": {
+        "min": 1e-06,
+        "max": 2e-05
+      },
+      "pos_radius": {
+        "min": 1e-06,
+        "max": 2e-05
+      },
+      "neg_am_fraction": {
+        "min": 0.35,
+        "max": 0.8
+      },
+      "pos_am_fraction": {
+        "min": 0.35,
+        "max": 0.8
+      }
+    }
+  },
+  "scales": {
+    "charge_time": 64.95535685,
+    "max_temperature": 30.0,
+    "energy_density": 322.1532841,
+    "max_plating": 1.0
+  },
+  "_metadata": {
+    "generated_by": "make_battery_problems_grid.py",
+    "binding_metric": "energy_density",
+    "q": 0.1,
+    "base_value": 212.818918,
+    "best_reachable": 334.301547,
+    "limit": 322.1532841,
+    "n_neighbours_scanned": 68,
+    "n_neighbours_feasible": 1,
+    "initial_metrics": {
+      "charge_time": 36.539557,
+      "energy_density": 212.818918,
+      "max_temperature": 303.860696,
+      "max_plating": 0.0
+    },
+    "initial_feasible": false
+  }
+}

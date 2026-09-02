@@ -1,0 +1,25 @@
+# SFT config for distilling the potential-guided search into the policy.
+#
+# Same hyperparameters as `warmstart` (the settings that produced the 1.00
+# grammar-compliance checkpoint), with two changes:
+#
+#   packing: false   TRL 1.0+ turns packing into padding-free batching, which
+#                    rejects a custom data collator -- and DataCollatorForSFT is
+#                    what applies the target's loss mask. configs/sft/pretrain.yaml
+#                    documents the same conflict. With packing left on, the run
+#                    dies at trainer construction with
+#                    "Passing a custom data collator is not supported when using
+#                    padding-free."
+#   num_epochs: 3    the dataset is 59 traces / ~1.2k assistant turns, not 5k.
+
+defaults:
+  - warmstart
+
+packing: false
+
+# Step count, not coverage. The target supervises every assistant turn inside one
+# conversation-shaped example, so a trace is ONE example: at the inherited
+# gradient_accumulation_steps=16 on 2 GPUs, 59 traces gave 1.8 optimizer steps per
+# epoch -- the first run finished in 20 minutes having taken 6 steps in total.
+gradient_accumulation_steps: 2
+num_epochs: 5

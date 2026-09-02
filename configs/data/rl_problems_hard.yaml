@@ -1,0 +1,27 @@
+# GRPO RL training data — the REPLACEMENT truss benchmark, TRAIN SIDE ONLY.
+#
+# Supersedes rl_problems_split.yaml. That config pointed at data/problems, where
+# 28 of 100 problems are degenerate mechanisms (raw deflection inf or 1e13-1e14 m;
+# the split file marked only 11) and the remaining 72 are saturated: greedy
+# critical-member solves 94.9% and depth-1 lookahead solves 100.0%. The champion
+# scores 0.958 there. Nothing can be measured on a solved task.
+#
+# data/problems_hard is 580 generated problems, 0 degenerate, with a
+# simulator-certified free-aspect optimum so the mass budget actually binds
+# (43% start OVER budget, so no global rescale can fix them):
+#
+#   policy            originals(clean)   problems_hard
+#   greedy_critical        0.949             0.116
+#   lookahead_v2_d1        1.000             0.734
+#   lookahead_v2_d2        1.000             0.800
+#   trained champion       0.958             0.167   <- de-saturated
+#
+# 44 problems need depth 2 where depth 1 fails -- the first truss set in this
+# repo where search depth does anything.
+problems_dir: /ocean/projects/mch250030p/wxu7/DesignBench/data/problems_hard
+repeat: 5
+
+# 378 train / 202 held-out, stratified on MEASURED difficulty (search_ladder
+# solve rates), not on generation parameters. See docs/problem_generation.md.
+split_file: /ocean/projects/mch250030p/wxu7/llm_finetune/data/splits/truss_hard_v1.json
+split: train

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
@@ -372,11 +373,78 @@ def _load_truss_and_goals(problem_spec: dict):
         )
 
 
+_ALL_MEMBERS = re.compile(
+    r"^\s*SCALE_PARAM\s*\(\s*all_members\s*,\s*(\w+)\s*,\s*([\d.]+)\s*\)\s*$",
+    re.IGNORECASE,
+)
+
+
+# Flat form: ADD_MEMBER(j1, j2, material, Shape, p1, p2[, p3...])
+# Executor form: ADD_MEMBER(j1, j2, material, Shape(a=p1, b=p2))
+_ADD_FLAT = re.compile(
+    r"^\s*ADD_MEMBER\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*([^,()]+?)\s*,\s*(\w+)\s*,\s*"
+    r"([\d.eE+-]+(?:\s*,\s*[\d.eE+-]+)*)\s*\)\s*$",
+    re.IGNORECASE,
+)
+# Shape parameter names, in the order the flat form lists them.
+_SHAPE_PARAMS = {
+    "pipe": ("r", "t"),
+    "box": ("w", "h", "t"),
+    "bar": ("r",),
+    "square": ("side",),
+}
+
+
+def normalize_action(truss, action_str: str) -> str:
+    """Rewrite whole-structure actions into a form the executor accepts.
+
+    ``SCALE_PARAM(all_members, thickness, 1.224)`` appears in **27.5% of the gold
+    SFT actions** (3295 of 11964) and in the few-shot example of the system
+    prompt, but DesignBench's executor matches the member id with ``(\d+)``
+    (validation/truss_executor.py:214), so every one of them falls through to
+    "unknown action" and silently does nothing. A quarter of the supervised signal
+    has been teaching an action that cannot execute, which is a large part of the
+    ~0.66 execute rates this study attributed to "grammar drift".
+
+    The intent is unambiguous and is exactly the whole-structure move that both
+    fully-stressed design and the potential-guided search converge on, so it is
+    expanded here rather than discarded. Rewriting in our own action layer leaves
+    the benchmark repository untouched.
+    """
+    text = action_str or ""
+
+    match = _ALL_MEMBERS.match(text)
+    if match:
+        n = len(getattr(truss, "members", []) or [])
+        if n == 0:
+            return text
+        param, factor = match.group(1), match.group(2)
+        ids = ",".join(str(i) for i in range(n))
+        return f"SCALE_MULTI_PARAM([{ids}], [{param}:{factor}])"
+
+    # ADD_MEMBER's flat form is what the gold SFT data and CLAUDE.md both use
+    # (ADD_MEMBER(1, 6, A36_Steel, Pipe, 0.0232, 0.0039)), but the executor's
+    # regex requires the shape's parameters inside the shape call
+    # (validation/truss_executor.py:277). Roughly 26.5% of gold actions are in
+    # the flat form, so they parsed as "unknown action" and silently added
+    # nothing -- which together with all_members means over half the supervised
+    # actions never touched the design.
+    match = _ADD_FLAT.match(text)
+    if match:
+        j1, j2, material, shape = match.group(1), match.group(2), match.group(3), match.group(4)
+        values = [v.strip() for v in match.group(5).split(",")]
+        names = _SHAPE_PARAMS.get(shape.lower())
+        if names and len(values) >= len(names):
+            params = ", ".join(f"{k}={v}" for k, v in zip(names, values))
+            return f"ADD_MEMBER({j1}, {j2}, {material}, {shape}({params}))"
+    return text
+
+
 def _apply_action(truss, action_str: str):
     """Apply a grammar action to a truss object (in-place)."""
     _ensure_path()
     from validation.truss_executor import execute_grammar_action
-    execute_grammar_action(truss, action_str)
+    execute_grammar_action(truss, normalize_action(truss, action_str))
     return truss
 
 

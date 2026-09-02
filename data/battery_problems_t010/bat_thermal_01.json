@@ -1,0 +1,113 @@
+{
+  "problem_id": "bat_thermal_01",
+  "domain": "battery",
+  "family": "thermal",
+  "description": "Li-ion cell design (std starting point) charged at 16 A from 0% SOC to 4.2 V with a CV hold. Resize the electrode geometry so the cell meets every goal.",
+  "operating_conditions": {
+    "charge_current_a": 16.0,
+    "ambient_temperature_k": 298.15,
+    "heat_transfer_coefficient": 10.0,
+    "protocol": [
+      "Rest for 2 min",
+      "Charge at 16 A until 4.2V",
+      "Hold at 4.2V until C/50",
+      "Rest for 30 min"
+    ],
+    "simulator": "pybamm DFN + lumped thermal + partially-reversible plating + solvent-diffusion SEI",
+    "parameter_set": "Chen2020"
+  },
+  "goals": {
+    "max_temperature": 296.1,
+    "max_charge_time": 32.0,
+    "max_plating": 1e-05,
+    "minimum_energy_density": 505.0
+  },
+  "objective": {
+    "key": "charge_time",
+    "sense": "min",
+    "ref": 32.0
+  },
+  "optimization": {
+    "design_params": {
+      "neg_thickness": {
+        "min": 2e-05,
+        "max": 0.0003,
+        "initial": 8.52e-05
+      },
+      "pos_thickness": {
+        "min": 2e-05,
+        "max": 0.0003,
+        "initial": 7.56e-05
+      },
+      "sep_thickness": {
+        "min": 5e-06,
+        "max": 4e-05,
+        "initial": 1.2e-05
+      },
+      "neg_porosity": {
+        "min": 0.15,
+        "max": 0.55,
+        "initial": 0.28
+      },
+      "pos_porosity": {
+        "min": 0.15,
+        "max": 0.55,
+        "initial": 0.335
+      },
+      "neg_radius": {
+        "min": 1e-06,
+        "max": 2e-05,
+        "initial": 5.86e-06
+      },
+      "pos_radius": {
+        "min": 1e-06,
+        "max": 2e-05,
+        "initial": 5.22e-06
+      },
+      "neg_am_fraction": {
+        "min": 0.35,
+        "max": 0.8,
+        "initial": 0.68
+      },
+      "pos_am_fraction": {
+        "min": 0.35,
+        "max": 0.8,
+        "initial": 0.62
+      }
+    }
+  },
+  "scales": {
+    "charge_time": 32.0,
+    "max_temperature": 30.0,
+    "energy_density": 505.0,
+    "max_plating": 1.0
+  },
+  "_metadata": {
+    "initial_metrics": {
+      "charge_time": 23.718263,
+      "energy_density": 682.781804,
+      "max_temperature": 341.513648,
+      "max_plating": 0.0,
+      "true_capacity": 4.633103
+    },
+    "initial_feasible": false,
+    "initial_violations": [
+      "max_temperature=341.5>329"
+    ],
+    "n_1step_neighbours_scanned": 52,
+    "n_1step_feasible": 3,
+    "n_2step_probes_scanned": 535,
+    "n_2step_feasible": 73,
+    "best_1step_charge_time": 19.873053,
+    "best_known_charge_time": 18.803033,
+    "scan_source": "results/battery_ladder/scan_std_16A.jsonl",
+    "design_variant": "std",
+    "retightened": {
+      "binding_key": "max_temperature",
+      "factor": 0.1,
+      "old_limit": 329.0,
+      "new_limit": 296.1,
+      "note": "tightened for LLM-agent calibration; see tighten_battery_problems.py"
+    }
+  }
+}

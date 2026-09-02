@@ -23,7 +23,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from transformers import PreTrainedTokenizer
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:  # `transformers` pulls in torch, minutes of cold import on
+    # Lustre. Both uses below are annotations only, and this module already has
+    # `from __future__ import annotations`, so they never evaluate at runtime.
+    from transformers import PreTrainedTokenizer
 
 
 class ThinkingMode(Enum):

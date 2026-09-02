@@ -1,0 +1,102 @@
+{
+  "designbench_dfn_shipped": {
+    "ok": true,
+    "seconds": 4.920656442642212,
+    "keys": [
+      "charge_time",
+      "energy_density",
+      "max_plating",
+      "max_temperature",
+      "min_neg_potential",
+      "success"
+    ],
+    "metrics": {
+      "charge_time": Infinity,
+      "min_neg_potential": -1.0,
+      "max_temperature": 1000.0,
+      "max_plating": 1000.0,
+      "energy_density": 0.0,
+      "success": 0.0
+    }
+  },
+  "dfn_full_20pts": {
+    "ok": true,
+    "seconds": 3.290692090988159,
+    "keys": [
+      "charge_time",
+      "energy_density",
+      "max_plating",
+      "max_temperature",
+      "success",
+      "true_capacity"
+    ],
+    "metrics": {
+      "true_capacity": 5.1102391537966545,
+      "charge_time": 33.23440466787693,
+      "energy_density": 729.1809792284654,
+      "max_plating": 0.0,
+      "max_temperature": 321.1306065940473,
+      "success": 1.0
+    }
+  },
+  "spme_full_20pts": {
+    "ok": true,
+    "seconds": 2.092151641845703,
+    "keys": [
+      "charge_time",
+      "energy_density",
+      "max_plating",
+      "max_temperature",
+      "success",
+      "true_capacity"
+    ],
+    "metrics": {
+      "true_capacity": 5.11580879969622,
+      "charge_time": 33.895154577723694,
+      "energy_density": 732.1402274899525,
+      "max_plating": 0.0,
+      "max_temperature": 321.81775253475314,
+      "success": 1.0
+    }
+  },
+  "spme_lean_10pts": {
+    "ok": true,
+    "seconds": 1.6994645595550537,
+    "keys": [
+      "charge_time",
+      "energy_density",
+      "max_plating",
+      "max_temperature",
+      "success",
+      "true_capacity"
+    ],
+    "metrics": {
+      "true_capacity": 5.123262057922286,
+      "charge_time": 33.20863226796447,
+      "energy_density": 727.7378660596444,
+      "max_plating": 0.0,
+      "max_temperature": 322.20072047104014,
+      "success": 1.0
+    }
+  },
+  "spm_lean_10pts": {
+    "ok": true,
+    "seconds": 0.7742311954498291,
+    "keys": [
+      "charge_time",
+      "energy_density",
+      "max_plating",
+      "max_temperature",
+      "success",
+      "true_capacity"
+    ],
+    "metrics": {
+      "true_capacity": 5.125667104492366,
+      "charge_time": 29.334584308311644,
+      "energy_density": 715.5579917218449,
+      "max_plating": 0.0,
+      "max_temperature": 310.3892610929693,
+      "success": 1.0
+    }
+  }
+}

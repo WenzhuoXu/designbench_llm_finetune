@@ -1,0 +1,86 @@
+{
+  "problem_id": "batg_dense_14A",
+  "domain": "battery",
+  "family": "grid_charge_time",
+  "description": "Li-ion cell design (dense starting point) charged at 14 A. Resize the electrode geometry to meet every goal.",
+  "operating_conditions": {
+    "charge_current_a": 14.0,
+    "ambient_temperature_k": 298.15,
+    "heat_transfer_coefficient": 10.0,
+    "parameter_set": "Chen2020"
+  },
+  "goals": {
+    "max_charge_time": 23.54958,
+    "max_temperature": 420.1890401,
+    "max_plating": 1e-05,
+    "minimum_energy_density": 550.6814369
+  },
+  "objective": {
+    "key": "charge_time",
+    "sense": "min",
+    "ref": 23.54958
+  },
+  "optimization": {
+    "design_params": {
+      "neg_thickness": {
+        "min": 2e-05,
+        "max": 0.0003
+      },
+      "pos_thickness": {
+        "min": 2e-05,
+        "max": 0.0003
+      },
+      "sep_thickness": {
+        "min": 5e-06,
+        "max": 4e-05
+      },
+      "neg_porosity": {
+        "min": 0.15,
+        "max": 0.55
+      },
+      "pos_porosity": {
+        "min": 0.15,
+        "max": 0.55
+      },
+      "neg_radius": {
+        "min": 1e-06,
+        "max": 2e-05
+      },
+      "pos_radius": {
+        "min": 1e-06,
+        "max": 2e-05
+      },
+      "neg_am_fraction": {
+        "min": 0.35,
+        "max": 0.8
+      },
+      "pos_am_fraction": {
+        "min": 0.35,
+        "max": 0.8
+      }
+    }
+  },
+  "scales": {
+    "charge_time": 23.54958,
+    "max_temperature": 30.0,
+    "energy_density": 550.6814369,
+    "max_plating": 1.0
+  },
+  "_metadata": {
+    "generated_by": "make_battery_problems_grid.py",
+    "binding_metric": "charge_time",
+    "q": 0.0,
+    "base_value": 54.035301,
+    "best_reachable": 23.54958,
+    "limit": 23.54958,
+    "n_neighbours_scanned": 46,
+    "n_neighbours_feasible": 1,
+    "initial_metrics": {
+      "charge_time": 54.035301,
+      "energy_density": 1162.571816,
+      "max_temperature": 365.381774,
+      "max_plating": 0.0
+    },
+    "initial_feasible": false
+  }
+}

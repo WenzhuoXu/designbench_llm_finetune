@@ -1,0 +1,16 @@
+# GRPO RL training data — DesignBench truss problems, TRAIN SIDE ONLY.
+#
+# Supersedes rl_problems.yaml, which pointed training at the whole problem
+# directory while scripts/eval_checkpoint.py read the SAME directory. Every
+# "held-out" number reported before 2026-08-23 was measured on problems the
+# policy had trained on. data/splits/truss_v1.json is a seeded, stratified
+# split (family x degeneracy x initial-violation tercile; see
+# scripts/make_splits.py): 86 train / 43 eval, zero overlap.
+
+problems_dir: /ocean/projects/mch250030p/wxu7/DesignBench/data/problems
+repeat: 5
+
+# truss_v1_auto.json is truss_v1.json restricted to the auto_problem_* ids that the
+# loaders actually glob; identical membership, honest n (66 train / 34 eval).
+split_file: /ocean/projects/mch250030p/wxu7/llm_finetune/data/splits/truss_v1_auto.json
+split: train

@@ -1,0 +1,30 @@
+# Training data weighted by SIGNAL INFORMATIVENESS.
+#
+# Under scale_rewards='group' only the order of a group's K rollouts reaches the
+# gradient, so a group whose rollouts are uniformly feasible or uniformly
+# infeasible carries no feasibility signal at all. Measured over 264 sampled
+# groups (scripts/group_ordering_divergence.py): only 33% come out mixed, which
+# is roughly 66 informative gradient events in a 100-step run at 2 groups/step.
+#
+# Mixedness is strongly predicted by the initial violation, at no simulator cost
+# beyond the initial analysis the rollout already performs:
+#
+#     initial violation   0.15-0.47   0.47-0.85   0.85-3.00
+#     mixed-group rate      0.648       0.307       0.034
+#
+# Weighting the repeat count by exp(-violation/scale) with a floor reproduces
+# that gradient. At floor 0.10 / scale 0.35 the expected mixed-group rate rises
+# 0.330 -> 0.468 (+42%) while the sampler still behaves as if it had 51 of the 66
+# problems. Sharper settings buy more signal and lose coverage fast (floor 0 /
+# scale 0.2 reaches 0.586 but collapses to 29 effective problems), which trades a
+# gradient gain for overfitting.
+#
+# This is curriculum by informativeness rather than by difficulty, and the
+# statistic comes from the same potential.
+
+defaults:
+  - rl_problems_split
+
+informativeness_weighting: true
+informativeness_floor: 0.10
+informativeness_scale: 0.35

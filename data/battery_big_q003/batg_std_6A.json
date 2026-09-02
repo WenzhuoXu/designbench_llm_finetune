@@ -1,0 +1,86 @@
+{
+  "problem_id": "batg_std_6A",
+  "domain": "battery",
+  "family": "grid_energy_density",
+  "description": "Li-ion cell design (std starting point) charged at 6 A. Resize the electrode geometry to meet every goal.",
+  "operating_conditions": {
+    "charge_current_a": 6.0,
+    "ambient_temperature_k": 298.15,
+    "heat_transfer_coefficient": 10.0,
+    "parameter_set": "Chen2020"
+  },
+  "goals": {
+    "max_charge_time": 62.68108924999999,
+    "max_temperature": 365.58070475,
+    "max_plating": 1e-05,
+    "minimum_energy_density": 1014.3448130599999
+  },
+  "objective": {
+    "key": "charge_time",
+    "sense": "min",
+    "ref": 62.68108924999999
+  },
+  "optimization": {
+    "design_params": {
+      "neg_thickness": {
+        "min": 2e-05,
+        "max": 0.0003
+      },
+      "pos_thickness": {
+        "min": 2e-05,
+        "max": 0.0003
+      },
+      "sep_thickness": {
+        "min": 5e-06,
+        "max": 4e-05
+      },
+      "neg_porosity": {
+        "min": 0.15,
+        "max": 0.55
+      },
+      "pos_porosity": {
+        "min": 0.15,
+        "max": 0.55
+      },
+      "neg_radius": {
+        "min": 1e-06,
+        "max": 2e-05
+      },
+      "pos_radius": {
+        "min": 1e-06,
+        "max": 2e-05
+      },
+      "neg_am_fraction": {
+        "min": 0.35,
+        "max": 0.8
+      },
+      "pos_am_fraction": {
+        "min": 0.35,
+        "max": 0.8
+      }
+    }
+  },
+  "scales": {
+    "charge_time": 62.68108924999999,
+    "max_temperature": 30.0,
+    "energy_density": 1014.3448130599999,
+    "max_plating": 1.0
+  },
+  "_metadata": {
+    "generated_by": "make_battery_problems_grid.py",
+    "binding_metric": "energy_density",
+    "q": 0.03,
+    "base_value": 657.651274,
+    "best_reachable": 1025.376572,
+    "limit": 1014.3448130599999,
+    "n_neighbours_scanned": 58,
+    "n_neighbours_feasible": 1,
+    "initial_metrics": {
+      "charge_time": 35.581404,
+      "energy_density": 657.651274,
+      "max_temperature": 314.533713,
+      "max_plating": 0.0
+    },
+    "initial_feasible": false
+  }
+}

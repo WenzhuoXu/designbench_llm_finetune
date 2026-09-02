@@ -1,0 +1,3648 @@
+{
+  "aggregate": {
+    "checkpoint": "checkpoints/dpo/search_prefs_v4/final",
+    "pairs_file": "results/distill/prefs_eval_split.jsonl",
+    "n_pairs": 363,
+    "n_problems": 23,
+    "accuracy": 0.743801652892562,
+    "accuracy_se_naive": 0.022912022061573115,
+    "accuracy_se_clustered": 0.04426090147270329,
+    "mean_margin": 10.081944951669572,
+    "median_margin": 8.30523681640625,
+    "mean_margin_per_token": 0.2526612646745614,
+    "surface_feature_ceiling": 0.5,
+    "seconds": 155.13517093658447
+  },
+  "per_pair": [
+    {
+      "problem_id": "auto_problem_058",
+      "step": 1,
+      "logp_chosen": -204.11585998535156,
+      "logp_rejected": -221.8756866455078,
+      "margin": 17.75982666015625,
+      "margin_per_token": 0.43316650390625,
+      "correct": true,
+      "phi_gap": 0.01438439616102527
+    },
+    {
+      "problem_id": "auto_problem_058",
+      "step": 1,
+      "logp_chosen": -204.11585998535156,
+      "logp_rejected": -216.23989868164062,
+      "margin": 12.124038696289062,
+      "margin_per_token": 0.2957082608850987,
+      "correct": true,
+      "phi_gap": 0.036785580376696214
+    },
+    {
+      "problem_id": "auto_problem_058",
+      "step": 1,
+      "logp_chosen": -204.11585998535156,
+      "logp_rejected": -210.23291015625,
+      "margin": 6.1170501708984375,
+      "margin_per_token": 0.14919634563166895,
+      "correct": true,
+      "phi_gap": 0.08387919207677308
+    },
+    {
+      "problem_id": "auto_problem_058",
+      "step": 1,
+      "logp_chosen": -204.11585998535156,
+      "logp_rejected": -204.74285888671875,
+      "margin": 0.6269989013671875,
+      "margin_per_token": 0.015292656130906579,
+      "correct": true,
+      "phi_gap": 1.683544268058244
+    },
+    {
+      "problem_id": "auto_problem_058",
+      "step": 2,
+      "logp_chosen": -237.6268768310547,
+      "logp_rejected": -229.2628173828125,
+      "margin": -8.364059448242188,
+      "margin_per_token": -0.20400144995712655,
+      "correct": false,
+      "phi_gap": 0.01670374567327093
+    },
+    {
+      "problem_id": "auto_problem_058",
+      "step": 2,
+      "logp_chosen": -237.6268768310547,
+      "logp_rejected": -233.5919189453125,
+      "margin": -4.0349578857421875,
+      "margin_per_token": -0.09841360696932178,
+      "correct": false,
+      "phi_gap": 0.024670664740759185
+    },
+    {
+      "problem_id": "auto_problem_058",
+      "step": 2,
+      "logp_chosen": -237.6268768310547,
+      "logp_rejected": -241.79566955566406,
+      "margin": 4.168792724609375,
+      "margin_per_token": 0.10167787133193595,
+      "correct": true,
+      "phi_gap": 1.0031549864396425
+    },
+    {
+      "problem_id": "auto_problem_058",
+      "step": 2,
+      "logp_chosen": -237.6268768310547,
+      "logp_rejected": -231.90614318847656,
+      "margin": -5.720733642578125,
+      "margin_per_token": -0.13953008884336882,
+      "correct": false,
+      "phi_gap": 1.5645359775641994
+    },
+    {
+      "problem_id": "auto_problem_016",
+      "step": 2,
+      "logp_chosen": -233.54920959472656,
+      "logp_rejected": -258.0994873046875,
+      "margin": 24.550277709960938,
+      "margin_per_token": 0.6137569427490233,
+      "correct": true,
+      "phi_gap": 0.049564025698279335
+    },
+    {
+      "problem_id": "auto_problem_016",
+      "step": 2,
+      "logp_chosen": -233.54920959472656,
+      "logp_rejected": -263.895751953125,
+      "margin": 30.346542358398438,
+      "margin_per_token": 0.7586635589599604,
+      "correct": true,
+      "phi_gap": 0.04995449554894538
+    },
+    {
+      "problem_id": "auto_problem_016",
+      "step": 2,
+      "logp_chosen": -233.54920959472656,
+      "logp_rejected": -256.60272216796875,
+      "margin": 23.053512573242188,
+      "margin_per_token": 0.5763378143310547,
+      "correct": true,
+      "phi_gap": 0.05285421925746736
+    },
+    {
+      "problem_id": "auto_problem_016",
+      "step": 2,
+      "logp_chosen": -233.54920959472656,
+      "logp_rejected": -239.21466064453125,
+      "margin": 5.6654510498046875,
+      "margin_per_token": -0.004226321708865832,
+      "correct": true,
+      "phi_gap": 0.06456153670436215
+    },
+    {
+      "problem_id": "auto_problem_003",
+      "step": 1,
+      "logp_chosen": -214.7423858642578,
+      "logp_rejected": -217.25782775878906,
+      "margin": 2.51544189453125,
+      "margin_per_token": 0.1860574596019573,
+      "correct": true,
+      "phi_gap": 0.028776800300755134
+    },
+    {
+      "problem_id": "auto_problem_003",
+      "step": 1,
+      "logp_chosen": -214.7423858642578,
+      "logp_rejected": -240.0728759765625,
+      "margin": 25.330490112304688,
+      "margin_per_token": 0.7425220502793577,
+      "correct": true,
+      "phi_gap": 0.043030358292081905
+    },
+    {
+      "problem_id": "auto_problem_003",
+      "step": 1,
+      "logp_chosen": -214.7423858642578,
+      "logp_rejected": -240.79531860351562,
+      "margin": 26.052932739257812,
+      "margin_per_token": 0.7601426021562636,
+      "correct": true,
+      "phi_gap": 0.07646556138351146
+    },
+    {
+      "problem_id": "auto_problem_003",
+      "step": 1,
+      "logp_chosen": -214.7423858642578,
+      "logp_rejected": -215.24966430664062,
+      "margin": 0.5072784423828125,
+      "margin_per_token": 0.012078058151971938,
+      "correct": true,
+      "phi_gap": 0.48170926376766077
+    },
+    {
+      "problem_id": "auto_problem_003",
+      "step": 2,
+      "logp_chosen": -228.987548828125,
+      "logp_rejected": -248.05606079101562,
+      "margin": 19.068511962890625,
+      "margin_per_token": 0.46508565763147836,
+      "correct": true,
+      "phi_gap": 0.011900744543836161
+    },
+    {
+      "problem_id": "auto_problem_003",
+      "step": 2,
+      "logp_chosen": -228.987548828125,
+      "logp_rejected": -262.9102783203125,
+      "margin": 33.9227294921875,
+      "margin_per_token": 0.8273836461509143,
+      "correct": true,
+      "phi_gap": 0.016507622998545246
+    },
+    {
+      "problem_id": "auto_problem_003",
+      "step": 2,
+      "logp_chosen": -228.987548828125,
+      "logp_rejected": -213.9324951171875,
+      "margin": -15.0550537109375,
+      "margin_per_token": -0.4914313304161224,
+      "correct": false,
+      "phi_gap": 0.02274969669812943
+    },
+    {
+      "problem_id": "auto_problem_003",
+      "step": 2,
+      "logp_chosen": -228.987548828125,
+      "logp_rejected": -237.72216796875,
+      "margin": 8.734619140625,
+      "margin_per_token": 0.21303949123475618,
+      "correct": true,
+      "phi_gap": 0.037425463350346244
+    },
+    {
+      "problem_id": "auto_problem_013",
+      "step": 1,
+      "logp_chosen": -210.37261962890625,
+      "logp_rejected": -244.52157592773438,
+      "margin": 34.148956298828125,
+      "margin_per_token": 0.9550689803598651,
+      "correct": true,
+      "phi_gap": 0.010628175048133626
+    },
+    {
+      "problem_id": "auto_problem_013",
+      "step": 1,
+      "logp_chosen": -210.37261962890625,
+      "logp_rejected": -218.20091247558594,
+      "margin": 7.8282928466796875,
+      "margin_per_token": 0.31310157908795144,
+      "correct": true,
+      "phi_gap": 0.011793826668634044
+    },
+    {
+      "problem_id": "auto_problem_013",
+      "step": 1,
+      "logp_chosen": -210.37261962890625,
+      "logp_rejected": -222.43453979492188,
+      "margin": 12.061920166015625,
+      "margin_per_token": 0.28718857538132436,
+      "correct": true,
+      "phi_gap": 0.013259651555280416
+    },
+    {
+      "problem_id": "auto_problem_013",
+      "step": 1,
+      "logp_chosen": -210.37261962890625,
+      "logp_rejected": -227.93450927734375,
+      "margin": 17.5618896484375,
+      "margin_per_token": 0.5505063791308249,
+      "correct": true,
+      "phi_gap": 0.08611248029220753
+    },
+    {
+      "problem_id": "auto_problem_013",
+      "step": 2,
+      "logp_chosen": -207.24996948242188,
+      "logp_rejected": -214.0502166748047,
+      "margin": 6.8002471923828125,
+      "margin_per_token": 0.16191064743768635,
+      "correct": true,
+      "phi_gap": 0.01099027542040576
+    },
+    {
+      "problem_id": "auto_problem_013",
+      "step": 2,
+      "logp_chosen": -207.24996948242188,
+      "logp_rejected": -235.6213836669922,
+      "margin": 28.371414184570312,
+      "margin_per_token": 0.8123399333532957,
+      "correct": true,
+      "phi_gap": 0.011236729094107889
+    },
+    {
+      "problem_id": "auto_problem_013",
+      "step": 2,
+      "logp_chosen": -207.24996948242188,
+      "logp_rejected": -224.09375,
+      "margin": 16.843780517578125,
+      "margin_per_token": 0.5311781365973891,
+      "correct": true,
+      "phi_gap": 0.011280355226695127
+    },
+    {
+      "problem_id": "auto_problem_013",
+      "step": 2,
+      "logp_chosen": -207.24996948242188,
+      "logp_rejected": -229.83547973632812,
+      "margin": 22.58551025390625,
+      "margin_per_token": 0.6712203252883189,
+      "correct": true,
+      "phi_gap": 0.0834536729270432
+    },
+    {
+      "problem_id": "auto_problem_070",
+      "step": 1,
+      "logp_chosen": -218.51919555664062,
+      "logp_rejected": -222.0826873779297,
+      "margin": 3.5634918212890625,
+      "margin_per_token": 0.08691443466558724,
+      "correct": true,
+      "phi_gap": 0.025250635998647075
+    },
+    {
+      "problem_id": "auto_problem_070",
+      "step": 1,
+      "logp_chosen": -218.51919555664062,
+      "logp_rejected": -230.80062866210938,
+      "margin": 12.28143310546875,
+      "margin_per_token": 0.2995471489138719,
+      "correct": true,
+      "phi_gap": 0.03264367672012636
+    },
+    {
+      "problem_id": "auto_problem_070",
+      "step": 1,
+      "logp_chosen": -218.51919555664062,
+      "logp_rejected": -219.14988708496094,
+      "margin": 0.6306915283203125,
+      "margin_per_token": 0.015382720202934408,
+      "correct": true,
+      "phi_gap": 0.04572481804505424
+    },
+    {
+      "problem_id": "auto_problem_070",
+      "step": 1,
+      "logp_chosen": -218.51919555664062,
+      "logp_rejected": -232.62559509277344,
+      "margin": 14.106399536132812,
+      "margin_per_token": 0.34405852527153247,
+      "correct": true,
+      "phi_gap": 0.06882981533650123
+    },
+    {
+      "problem_id": "auto_problem_070",
+      "step": 2,
+      "logp_chosen": -235.47894287109375,
+      "logp_rejected": -237.09304809570312,
+      "margin": 1.614105224609375,
+      "margin_per_token": 0.039368420112424474,
+      "correct": true,
+      "phi_gap": 0.011084054882785743
+    },
+    {
+      "problem_id": "auto_problem_070",
+      "step": 2,
+      "logp_chosen": -235.47894287109375,
+      "logp_rejected": -250.72789001464844,
+      "margin": 15.248947143554688,
+      "margin_per_token": 0.37192554008669987,
+      "correct": true,
+      "phi_gap": 0.016563155045862477
+    },
+    {
+      "problem_id": "auto_problem_070",
+      "step": 2,
+      "logp_chosen": -235.47894287109375,
+      "logp_rejected": -226.8346710205078,
+      "margin": -8.644271850585938,
+      "margin_per_token": -0.2108358987947785,
+      "correct": false,
+      "phi_gap": 0.026162692859133863
+    },
+    {
+      "problem_id": "auto_problem_070",
+      "step": 2,
+      "logp_chosen": -235.47894287109375,
+      "logp_rejected": -260.609375,
+      "margin": 25.13043212890625,
+      "margin_per_token": 0.6129373689977138,
+      "correct": true,
+      "phi_gap": 0.03069111471178454
+    },
+    {
+      "problem_id": "auto_problem_055",
+      "step": 2,
+      "logp_chosen": -229.0509796142578,
+      "logp_rejected": -240.1665802001953,
+      "margin": 11.1156005859375,
+      "margin_per_token": 0.27111220941310954,
+      "correct": true,
+      "phi_gap": 0.050967630986973655
+    },
+    {
+      "problem_id": "auto_problem_055",
+      "step": 2,
+      "logp_chosen": -229.0509796142578,
+      "logp_rejected": -239.49330139160156,
+      "margin": 10.44232177734375,
+      "margin_per_token": 0.2546907750571643,
+      "correct": true,
+      "phi_gap": 0.05301825831090623
+    },
+    {
+      "problem_id": "auto_problem_055",
+      "step": 2,
+      "logp_chosen": -229.0509796142578,
+      "logp_rejected": -244.35723876953125,
+      "margin": 15.306259155273438,
+      "margin_per_token": 0.3733233940310594,
+      "correct": true,
+      "phi_gap": 0.06316350977994878
+    },
+    {
+      "problem_id": "auto_problem_055",
+      "step": 2,
+      "logp_chosen": -229.0509796142578,
+      "logp_rejected": -242.7003936767578,
+      "margin": 13.6494140625,
+      "margin_per_token": 0.3329125381097562,
+      "correct": true,
+      "phi_gap": 0.07331251376316528
+    },
+    {
+      "problem_id": "auto_problem_008",
+      "step": 3,
+      "logp_chosen": -233.9960479736328,
+      "logp_rejected": -241.37913513183594,
+      "margin": 7.383087158203125,
+      "margin_per_token": 0.1845771789550783,
+      "correct": true,
+      "phi_gap": 0.03106075195306468
+    },
+    {
+      "problem_id": "auto_problem_008",
+      "step": 3,
+      "logp_chosen": -233.9960479736328,
+      "logp_rejected": -250.05355834960938,
+      "margin": 16.057510375976562,
+      "margin_per_token": 0.40143775939941406,
+      "correct": true,
+      "phi_gap": 0.03176295833871645
+    },
+    {
+      "problem_id": "auto_problem_008",
+      "step": 3,
+      "logp_chosen": -233.9960479736328,
+      "logp_rejected": -257.2796630859375,
+      "margin": 23.283615112304688,
+      "margin_per_token": 0.5820903778076172,
+      "correct": true,
+      "phi_gap": 0.03387514267163394
+    },
+    {
+      "problem_id": "auto_problem_008",
+      "step": 3,
+      "logp_chosen": -233.9960479736328,
+      "logp_rejected": -239.0747833251953,
+      "margin": 5.0787353515625,
+      "margin_per_token": -0.01880892311654403,
+      "correct": true,
+      "phi_gap": 0.03742080404457093
+    },
+    {
+      "problem_id": "auto_problem_052",
+      "step": 1,
+      "logp_chosen": -208.48159790039062,
+      "logp_rejected": -222.44854736328125,
+      "margin": 13.966949462890625,
+      "margin_per_token": 0.2114769628792832,
+      "correct": true,
+      "phi_gap": 0.07677635309876318
+    },
+    {
+      "problem_id": "auto_problem_052",
+      "step": 1,
+      "logp_chosen": -208.48159790039062,
+      "logp_rejected": -216.59573364257812,
+      "margin": 8.1141357421875,
+      "margin_per_token": 0.07212425524349442,
+      "correct": true,
+      "phi_gap": 0.08016711576318547
+    },
+    {
+      "problem_id": "auto_problem_052",
+      "step": 1,
+      "logp_chosen": -208.48159790039062,
+      "logp_rejected": -215.17425537109375,
+      "margin": 6.692657470703125,
+      "margin_per_token": 0.03827953449386623,
+      "correct": true,
+      "phi_gap": 0.08373146485908622
+    },
+    {
+      "problem_id": "auto_problem_052",
+      "step": 1,
+      "logp_chosen": -208.48159790039062,
+      "logp_rejected": -243.1053924560547,
+      "margin": 34.62379455566406,
+      "margin_per_token": 0.8444827940405872,
+      "correct": true,
+      "phi_gap": 0.08817492514266967
+    },
+    {
+      "problem_id": "auto_problem_052",
+      "step": 2,
+      "logp_chosen": -223.71368408203125,
+      "logp_rejected": -225.57083129882812,
+      "margin": 1.857147216796875,
+      "margin_per_token": 0.044217790876116325,
+      "correct": true,
+      "phi_gap": 0.010527430402422655
+    },
+    {
+      "problem_id": "auto_problem_052",
+      "step": 2,
+      "logp_chosen": -223.71368408203125,
+      "logp_rejected": -230.9599609375,
+      "margin": 7.24627685546875,
+      "margin_per_token": 0.1725304013206843,
+      "correct": true,
+      "phi_gap": 0.01365549539868105
+    },
+    {
+      "problem_id": "auto_problem_052",
+      "step": 2,
+      "logp_chosen": -223.71368408203125,
+      "logp_rejected": -238.89431762695312,
+      "margin": 15.180633544921875,
+      "margin_per_token": 0.5001743861607144,
+      "correct": true,
+      "phi_gap": 0.015004308288517398
+    },
+    {
+      "problem_id": "auto_problem_052",
+      "step": 2,
+      "logp_chosen": -223.71368408203125,
+      "logp_rejected": -241.60191345214844,
+      "margin": 17.888229370117188,
+      "margin_per_token": 0.5662133087264536,
+      "correct": true,
+      "phi_gap": 0.020842571799254528
+    },
+    {
+      "problem_id": "auto_problem_066",
+      "step": 2,
+      "logp_chosen": -213.46963500976562,
+      "logp_rejected": -209.7405548095703,
+      "margin": -3.7290802001953125,
+      "margin_per_token": -0.0887876238141736,
+      "correct": false,
+      "phi_gap": 0.0119614365401568
+    },
+    {
+      "problem_id": "auto_problem_066",
+      "step": 2,
+      "logp_chosen": -213.46963500976562,
+      "logp_rejected": -229.5880889892578,
+      "margin": 16.118453979492188,
+      "margin_per_token": 0.5170991301675016,
+      "correct": true,
+      "phi_gap": 0.22356534707700992
+    },
+    {
+      "problem_id": "auto_problem_066",
+      "step": 2,
+      "logp_chosen": -213.46963500976562,
+      "logp_rejected": -217.7751007080078,
+      "margin": 4.3054656982421875,
+      "margin_per_token": 0.10251108805338571,
+      "correct": true,
+      "phi_gap": 0.5875355430775592
+    },
+    {
+      "problem_id": "auto_problem_066",
+      "step": 2,
+      "logp_chosen": -213.46963500976562,
+      "logp_rejected": -220.83230590820312,
+      "margin": 7.3626708984375,
+      "margin_per_token": 0.30354344526372845,
+      "correct": true,
+      "phi_gap": 1.426746446778023
+    },
+    {
+      "problem_id": "auto_problem_012",
+      "step": 1,
+      "logp_chosen": -226.90512084960938,
+      "logp_rejected": -230.76327514648438,
+      "margin": 3.858154296875,
+      "margin_per_token": -0.039907546270461225,
+      "correct": true,
+      "phi_gap": 0.021135711562127013
+    },
+    {
+      "problem_id": "auto_problem_012",
+      "step": 1,
+      "logp_chosen": -226.90512084960938,
+      "logp_rejected": -228.55703735351562,
+      "margin": 1.65191650390625,
+      "margin_per_token": -0.09243701753162181,
+      "correct": true,
+      "phi_gap": 0.025670061432124358
+    },
+    {
+      "problem_id": "auto_problem_012",
+      "step": 1,
+      "logp_chosen": -226.90512084960938,
+      "logp_rejected": -235.68096923828125,
+      "margin": 8.775848388671875,
+      "margin_per_token": 0.07718040829613138,
+      "correct": true,
+      "phi_gap": 0.03042899644527064
+    },
+    {
+      "problem_id": "auto_problem_012",
+      "step": 1,
+      "logp_chosen": -226.90512084960938,
+      "logp_rejected": -233.35382080078125,
+      "margin": 6.448699951171875,
+      "margin_per_token": 0.15728536466272836,
+      "correct": true,
+      "phi_gap": 0.031192593115402345
+    },
+    {
+      "problem_id": "auto_problem_012",
+      "step": 2,
+      "logp_chosen": -209.47650146484375,
+      "logp_rejected": -209.14097595214844,
+      "margin": -0.3355255126953125,
+      "margin_per_token": -0.00798870268322105,
+      "correct": false,
+      "phi_gap": 0.022578197914710607
+    },
+    {
+      "problem_id": "auto_problem_012",
+      "step": 2,
+      "logp_chosen": -209.47650146484375,
+      "logp_rejected": -216.39654541015625,
+      "margin": 6.9200439453125,
+      "margin_per_token": 0.1647629510788695,
+      "correct": true,
+      "phi_gap": 0.027099036599438908
+    },
+    {
+      "problem_id": "auto_problem_012",
+      "step": 2,
+      "logp_chosen": -209.47650146484375,
+      "logp_rejected": -227.68423461914062,
+      "margin": 18.207733154296875,
+      "margin_per_token": 0.5657382659380445,
+      "correct": true,
+      "phi_gap": 0.02722579864156094
+    },
+    {
+      "problem_id": "auto_problem_012",
+      "step": 2,
+      "logp_chosen": -209.47650146484375,
+      "logp_rejected": -221.95208740234375,
+      "margin": 12.4755859375,
+      "margin_per_token": 0.4259297972356819,
+      "correct": true,
+      "phi_gap": 0.027841296989310815
+    },
+    {
+      "problem_id": "auto_problem_020",
+      "step": 2,
+      "logp_chosen": -195.0091552734375,
+      "logp_rejected": -206.63314819335938,
+      "margin": 11.623992919921875,
+      "margin_per_token": 0.2767617361886163,
+      "correct": true,
+      "phi_gap": 0.010440292125335482
+    },
+    {
+      "problem_id": "auto_problem_020",
+      "step": 2,
+      "logp_chosen": -195.0091552734375,
+      "logp_rejected": -211.72735595703125,
+      "margin": 16.71820068359375,
+      "margin_per_token": 0.39805239722842245,
+      "correct": true,
+      "phi_gap": 0.012324659533331506
+    },
+    {
+      "problem_id": "auto_problem_020",
+      "step": 2,
+      "logp_chosen": -195.0091552734375,
+      "logp_rejected": -226.38934326171875,
+      "margin": 31.38018798828125,
+      "margin_per_token": 0.8786161735082754,
+      "correct": true,
+      "phi_gap": 0.01312541744242035
+    },
+    {
+      "problem_id": "auto_problem_020",
+      "step": 2,
+      "logp_chosen": -195.0091552734375,
+      "logp_rejected": -218.65000915527344,
+      "margin": 23.640853881835938,
+      "margin_per_token": 0.6898519270096095,
+      "correct": true,
+      "phi_gap": 0.014743039817229242
+    },
+    {
+      "problem_id": "auto_problem_074",
+      "step": 1,
+      "logp_chosen": -240.06533813476562,
+      "logp_rejected": -262.5386047363281,
+      "margin": 22.4732666015625,
+      "margin_per_token": 0.5618316650390627,
+      "correct": true,
+      "phi_gap": 0.029742861913234164
+    },
+    {
+      "problem_id": "auto_problem_074",
+      "step": 1,
+      "logp_chosen": -240.06533813476562,
+      "logp_rejected": -260.128173828125,
+      "margin": 20.062835693359375,
+      "margin_per_token": 0.5015708923339846,
+      "correct": true,
+      "phi_gap": 0.02976686750593116
+    },
+    {
+      "problem_id": "auto_problem_074",
+      "step": 1,
+      "logp_chosen": -240.06533813476562,
+      "logp_rejected": -269.0658264160156,
+      "margin": 29.00048828125,
+      "margin_per_token": 0.7250122070312504,
+      "correct": true,
+      "phi_gap": 0.03824478151664812
+    },
+    {
+      "problem_id": "auto_problem_074",
+      "step": 1,
+      "logp_chosen": -240.06533813476562,
+      "logp_rejected": -266.5738220214844,
+      "margin": 26.50848388671875,
+      "margin_per_token": 0.6627120971679688,
+      "correct": true,
+      "phi_gap": 0.039093301865784524
+    },
+    {
+      "problem_id": "auto_problem_007",
+      "step": 3,
+      "logp_chosen": -222.88375854492188,
+      "logp_rejected": -210.2364501953125,
+      "margin": -12.647308349609375,
+      "margin_per_token": -0.43055946624791286,
+      "correct": false,
+      "phi_gap": 0.0490279480541449
+    },
+    {
+      "problem_id": "auto_problem_007",
+      "step": 3,
+      "logp_chosen": -222.88375854492188,
+      "logp_rejected": -230.81072998046875,
+      "margin": 7.926971435546875,
+      "margin_per_token": 0.19334076672065592,
+      "correct": true,
+      "phi_gap": 0.10276668908820785
+    },
+    {
+      "problem_id": "auto_problem_007",
+      "step": 3,
+      "logp_chosen": -222.88375854492188,
+      "logp_rejected": -209.31407165527344,
+      "margin": -13.569686889648438,
+      "margin_per_token": -0.33096797291825375,
+      "correct": false,
+      "phi_gap": 0.110582785385129
+    },
+    {
+      "problem_id": "auto_problem_007",
+      "step": 3,
+      "logp_chosen": -222.88375854492188,
+      "logp_rejected": -221.65684509277344,
+      "margin": -1.2269134521484375,
+      "margin_per_token": -0.029924718345083257,
+      "correct": false,
+      "phi_gap": 0.4501688121334132
+    },
+    {
+      "problem_id": "auto_problem_032",
+      "step": 3,
+      "logp_chosen": -230.8616485595703,
+      "logp_rejected": -247.2886199951172,
+      "margin": 16.426971435546875,
+      "margin_per_token": 0.40065783989138737,
+      "correct": true,
+      "phi_gap": 0.13896088049067856
+    },
+    {
+      "problem_id": "auto_problem_032",
+      "step": 3,
+      "logp_chosen": -230.8616485595703,
+      "logp_rejected": -244.88137817382812,
+      "margin": 14.019729614257812,
+      "margin_per_token": 0.34194462473799536,
+      "correct": true,
+      "phi_gap": 0.14076871236597788
+    },
+    {
+      "problem_id": "auto_problem_032",
+      "step": 3,
+      "logp_chosen": -230.8616485595703,
+      "logp_rejected": -238.05718994140625,
+      "margin": 7.1955413818359375,
+      "margin_per_token": 0.17550100931307178,
+      "correct": true,
+      "phi_gap": 0.14281224544435
+    },
+    {
+      "problem_id": "auto_problem_032",
+      "step": 3,
+      "logp_chosen": -230.8616485595703,
+      "logp_rejected": -262.0111389160156,
+      "margin": 31.149490356445312,
+      "margin_per_token": 0.9195065568133094,
+      "correct": true,
+      "phi_gap": 0.14601881247833004
+    },
+    {
+      "problem_id": "auto_problem_095",
+      "step": 1,
+      "logp_chosen": -200.21759033203125,
+      "logp_rejected": -222.3180694580078,
+      "margin": 22.100479125976562,
+      "margin_per_token": 0.6553064539042088,
+      "correct": true,
+      "phi_gap": 0.010384714735481304
+    },
+    {
+      "problem_id": "auto_problem_095",
+      "step": 1,
+      "logp_chosen": -200.21759033203125,
+      "logp_rejected": -215.3195343017578,
+      "margin": 15.101943969726562,
+      "margin_per_token": 0.4846104744834774,
+      "correct": true,
+      "phi_gap": 0.010562838462353397
+    },
+    {
+      "problem_id": "auto_problem_095",
+      "step": 1,
+      "logp_chosen": -200.21759033203125,
+      "logp_rejected": -213.26258850097656,
+      "margin": 13.044998168945312,
+      "margin_per_token": 0.43444106470832455,
+      "correct": true,
+      "phi_gap": 0.010773036895408428
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 1,
+      "logp_chosen": -211.99072265625,
+      "logp_rejected": -227.69186401367188,
+      "margin": 15.701141357421875,
+      "margin_per_token": 0.365142822265625,
+      "correct": true,
+      "phi_gap": 0.03510375706070379
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 1,
+      "logp_chosen": -212.04037475585938,
+      "logp_rejected": -227.50430297851562,
+      "margin": 15.46392822265625,
+      "margin_per_token": 0.35962623773619207,
+      "correct": true,
+      "phi_gap": 0.058320879421909666
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 1,
+      "logp_chosen": -212.04037475585938,
+      "logp_rejected": -222.60198974609375,
+      "margin": 10.561614990234375,
+      "margin_per_token": 0.24561895326126493,
+      "correct": true,
+      "phi_gap": 0.11845513116631468
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 1,
+      "logp_chosen": -212.04037475585938,
+      "logp_rejected": -230.78085327148438,
+      "margin": 18.740478515625,
+      "margin_per_token": 0.43582508175872103,
+      "correct": true,
+      "phi_gap": 0.13580327798426817
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 2,
+      "logp_chosen": -219.43727111816406,
+      "logp_rejected": -232.03082275390625,
+      "margin": 12.593551635742188,
+      "margin_per_token": 0.2928732938544698,
+      "correct": true,
+      "phi_gap": 0.01089238351835986
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 2,
+      "logp_chosen": -221.3247528076172,
+      "logp_rejected": -258.7767639160156,
+      "margin": 37.45201110839844,
+      "margin_per_token": 0.8709770025208936,
+      "correct": true,
+      "phi_gap": 0.03506072258361104
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 2,
+      "logp_chosen": -221.3247528076172,
+      "logp_rejected": -230.09727478027344,
+      "margin": 8.77252197265625,
+      "margin_per_token": 0.20401213889898262,
+      "correct": true,
+      "phi_gap": 0.08134818458140058
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 2,
+      "logp_chosen": -221.3247528076172,
+      "logp_rejected": -237.94192504882812,
+      "margin": 16.617172241210938,
+      "margin_per_token": 0.3864458660746726,
+      "correct": true,
+      "phi_gap": 0.09621323089869738
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 3,
+      "logp_chosen": -223.51376342773438,
+      "logp_rejected": -251.83767700195312,
+      "margin": 28.32391357421875,
+      "margin_per_token": 0.6586956645167152,
+      "correct": true,
+      "phi_gap": 0.019845712898973744
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 3,
+      "logp_chosen": -224.047607421875,
+      "logp_rejected": -243.36058044433594,
+      "margin": 19.312973022460938,
+      "margin_per_token": 0.44913890749909147,
+      "correct": true,
+      "phi_gap": 0.028721399384720847
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 3,
+      "logp_chosen": -224.047607421875,
+      "logp_rejected": -236.0503387451172,
+      "margin": 12.002731323242188,
+      "margin_per_token": 0.27913328658702774,
+      "correct": true,
+      "phi_gap": 0.07075638871343859
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 3,
+      "logp_chosen": -224.047607421875,
+      "logp_rejected": -229.90029907226562,
+      "margin": 5.852691650390625,
+      "margin_per_token": 0.1361091081486192,
+      "correct": true,
+      "phi_gap": 1.8088851313765502
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 4,
+      "logp_chosen": -220.1989288330078,
+      "logp_rejected": -257.14825439453125,
+      "margin": 36.94932556152344,
+      "margin_per_token": 0.9012030624761813,
+      "correct": true,
+      "phi_gap": 0.012536800785795554
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 4,
+      "logp_chosen": -221.184814453125,
+      "logp_rejected": -237.61474609375,
+      "margin": 16.429931640625,
+      "margin_per_token": 0.4007300400152438,
+      "correct": true,
+      "phi_gap": 0.0443914667401657
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 4,
+      "logp_chosen": -221.184814453125,
+      "logp_rejected": -239.61279296875,
+      "margin": 18.427978515625,
+      "margin_per_token": 0.449462890625,
+      "correct": true,
+      "phi_gap": 0.05069627472185889
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 4,
+      "logp_chosen": -221.184814453125,
+      "logp_rejected": -237.45880126953125,
+      "margin": 16.27398681640625,
+      "margin_per_token": 0.39692650771722526,
+      "correct": true,
+      "phi_gap": 1.7982818600314143
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 5,
+      "logp_chosen": -250.38259887695312,
+      "logp_rejected": -251.5059051513672,
+      "margin": 1.1233062744140625,
+      "margin_per_token": 0.028082656860352273,
+      "correct": true,
+      "phi_gap": 0.06218958317013468
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 5,
+      "logp_chosen": -250.69541931152344,
+      "logp_rejected": -253.50656127929688,
+      "margin": 2.8111419677734375,
+      "margin_per_token": 0.07027854919433629,
+      "correct": true,
+      "phi_gap": 0.0818535906135407
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 5,
+      "logp_chosen": -250.69541931152344,
+      "logp_rejected": -266.74407958984375,
+      "margin": 16.048660278320312,
+      "margin_per_token": 0.4012165069580078,
+      "correct": true,
+      "phi_gap": 0.08694139919624222
+    },
+    {
+      "problem_id": "auto_problem_098",
+      "step": 5,
+      "logp_chosen": -250.69541931152344,
+      "logp_rejected": -230.2115936279297,
+      "margin": -20.48382568359375,
+      "margin_per_token": -0.5120956420898439,
+      "correct": false,
+      "phi_gap": 0.08929389843406721
+    },
+    {
+      "problem_id": "auto_problem_089",
+      "step": 1,
+      "logp_chosen": -232.2709197998047,
+      "logp_rejected": -246.1160125732422,
+      "margin": 13.8450927734375,
+      "margin_per_token": 0.3296450660342263,
+      "correct": true,
+      "phi_gap": 0.03048268710470292
+    },
+    {
+      "problem_id": "auto_problem_089",
+      "step": 1,
+      "logp_chosen": -233.6851348876953,
+      "logp_rejected": -243.4901123046875,
+      "margin": 9.804977416992188,
+      "margin_per_token": 0.23345184326171875,
+      "correct": true,
+      "phi_gap": 0.03361807215752166
+    },
+    {
+      "problem_id": "auto_problem_089",
+      "step": 1,
+      "logp_chosen": -233.6851348876953,
+      "logp_rejected": -239.9151611328125,
+      "margin": 6.2300262451171875,
+      "margin_per_token": 0.1483339582170764,
+      "correct": true,
+      "phi_gap": 1.276703360895412
+    },
+    {
+      "problem_id": "auto_problem_089",
+      "step": 1,
+      "logp_chosen": -233.6851348876953,
+      "logp_rejected": -244.84030151367188,
+      "margin": 11.155166625976562,
+      "margin_per_token": 0.2655992053803944,
+      "correct": true,
+      "phi_gap": 1.3138770009781975
+    },
+    {
+      "problem_id": "auto_problem_089",
+      "step": 2,
+      "logp_chosen": -223.14027404785156,
+      "logp_rejected": -260.67926025390625,
+      "margin": 37.53898620605469,
+      "margin_per_token": 1.0451670700941635,
+      "correct": true,
+      "phi_gap": 0.034123876882031334
+    },
+    {
+      "problem_id": "auto_problem_089",
+      "step": 2,
+      "logp_chosen": -223.14027404785156,
+      "logp_rejected": -246.8555908203125,
+      "margin": 23.715316772460938,
+      "margin_per_token": 0.7080044009821203,
+      "correct": true,
+      "phi_gap": 0.9841266197628217
+    },
+    {
+      "problem_id": "auto_problem_089",
+      "step": 2,
+      "logp_chosen": -223.14027404785156,
+      "logp_rejected": -229.13099670410156,
+      "margin": 5.99072265625,
+      "margin_per_token": 0.14263625372023814,
+      "correct": true,
+      "phi_gap": 1.259288191597602
+    },
+    {
+      "problem_id": "auto_problem_089",
+      "step": 2,
+      "logp_chosen": -223.14027404785156,
+      "logp_rejected": -252.92221069335938,
+      "margin": 29.781936645507812,
+      "margin_per_token": 0.8559707393491172,
+      "correct": true,
+      "phi_gap": 1.339243887009264
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 1,
+      "logp_chosen": -229.27761840820312,
+      "logp_rejected": -279.9197998046875,
+      "margin": 50.642181396484375,
+      "margin_per_token": 0.8755082044000817,
+      "correct": true,
+      "phi_gap": 1.929960388698642
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 1,
+      "logp_chosen": -229.12884521484375,
+      "logp_rejected": -275.93035888671875,
+      "margin": 46.801513671875,
+      "margin_per_token": 0.742881169394841,
+      "correct": true,
+      "phi_gap": 1.9697925460220027
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 1,
+      "logp_chosen": -229.12884521484375,
+      "logp_rejected": -278.3193054199219,
+      "margin": 49.190460205078125,
+      "margin_per_token": 0.8520552580990186,
+      "correct": true,
+      "phi_gap": 1.9830140062734651
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 1,
+      "logp_chosen": -229.12884521484375,
+      "logp_rejected": -266.6199645996094,
+      "margin": 37.491119384765625,
+      "margin_per_token": 0.5950971330915182,
+      "correct": true,
+      "phi_gap": 2.019454250880395
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 2,
+      "logp_chosen": -200.14659118652344,
+      "logp_rejected": -211.84666442871094,
+      "margin": 11.7000732421875,
+      "margin_per_token": 0.2659107555042617,
+      "correct": true,
+      "phi_gap": 0.047941505796897266
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 2,
+      "logp_chosen": -198.52545166015625,
+      "logp_rejected": -217.76358032226562,
+      "margin": 19.238128662109375,
+      "margin_per_token": 0.4372301968661221,
+      "correct": true,
+      "phi_gap": 0.0748749025909261
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 2,
+      "logp_chosen": -198.52545166015625,
+      "logp_rejected": -212.63296508789062,
+      "margin": 14.107513427734375,
+      "margin_per_token": 0.4330105932772037,
+      "correct": true,
+      "phi_gap": 0.07646586251412901
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 2,
+      "logp_chosen": -198.52545166015625,
+      "logp_rejected": -226.5882110595703,
+      "margin": 28.062759399414062,
+      "margin_per_token": 0.7575511972697546,
+      "correct": true,
+      "phi_gap": 1.7232474244067784
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 3,
+      "logp_chosen": -193.25784301757812,
+      "logp_rejected": -205.20156860351562,
+      "margin": 11.9437255859375,
+      "margin_per_token": 0.27144830877130754,
+      "correct": true,
+      "phi_gap": 0.025241844629376287
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 3,
+      "logp_chosen": -192.01878356933594,
+      "logp_rejected": -217.28567504882812,
+      "margin": 25.266891479492188,
+      "margin_per_token": 0.689091970754224,
+      "correct": true,
+      "phi_gap": 0.04734175206936175
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 3,
+      "logp_chosen": -192.01878356933594,
+      "logp_rejected": -237.47706604003906,
+      "margin": 45.458282470703125,
+      "margin_per_token": 1.158659203107967,
+      "correct": true,
+      "phi_gap": 0.0629015359343219
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 3,
+      "logp_chosen": -192.01878356933594,
+      "logp_rejected": -219.11651611328125,
+      "margin": 27.097732543945312,
+      "margin_per_token": 0.7316696699275527,
+      "correct": true,
+      "phi_gap": 1.6960154066653277
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 4,
+      "logp_chosen": -205.740966796875,
+      "logp_rejected": -211.5485076904297,
+      "margin": 5.8075408935546875,
+      "margin_per_token": 0.13198956576260645,
+      "correct": true,
+      "phi_gap": 0.010550660705867854
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 4,
+      "logp_chosen": -208.21197509765625,
+      "logp_rejected": -245.2947235107422,
+      "margin": 37.08274841308594,
+      "margin_per_token": 0.97243811060964,
+      "correct": true,
+      "phi_gap": 0.025944909249417503
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 4,
+      "logp_chosen": -208.21197509765625,
+      "logp_rejected": -233.68406677246094,
+      "margin": 25.472091674804688,
+      "margin_per_token": 0.7024228376263544,
+      "correct": true,
+      "phi_gap": 0.03968800068448819
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 4,
+      "logp_chosen": -208.21197509765625,
+      "logp_rejected": -238.56784057617188,
+      "margin": 30.355865478515625,
+      "margin_per_token": 0.8159989725963763,
+      "correct": true,
+      "phi_gap": 0.28547092260082274
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 5,
+      "logp_chosen": -215.7008056640625,
+      "logp_rejected": -213.13034057617188,
+      "margin": -2.570465087890625,
+      "margin_per_token": -0.06120154971168201,
+      "correct": false,
+      "phi_gap": 0.014812687694011117
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 5,
+      "logp_chosen": -216.75350952148438,
+      "logp_rejected": -210.30201721191406,
+      "margin": -6.4514923095703125,
+      "margin_per_token": -0.03148035277611427,
+      "correct": false,
+      "phi_gap": 0.02053310862837754
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 5,
+      "logp_chosen": -216.75350952148438,
+      "logp_rejected": -235.85426330566406,
+      "margin": 19.100753784179688,
+      "margin_per_token": 0.5917451617055924,
+      "correct": true,
+      "phi_gap": 0.035747187115365175
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 5,
+      "logp_chosen": -216.75350952148438,
+      "logp_rejected": -209.67910766601562,
+      "margin": -7.07440185546875,
+      "margin_per_token": -0.16843813941592245,
+      "correct": false,
+      "phi_gap": 1.5394451679928287
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 6,
+      "logp_chosen": -206.463134765625,
+      "logp_rejected": -209.70761108398438,
+      "margin": 3.244476318359375,
+      "margin_per_token": 0.07724943615141378,
+      "correct": true,
+      "phi_gap": 0.014170523352560416
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 6,
+      "logp_chosen": -207.07455444335938,
+      "logp_rejected": -208.22698974609375,
+      "margin": 1.152435302734375,
+      "margin_per_token": 0.14836053261219728,
+      "correct": true,
+      "phi_gap": 0.018134434811935884
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 6,
+      "logp_chosen": -207.07455444335938,
+      "logp_rejected": -231.80029296875,
+      "margin": 24.725738525390625,
+      "margin_per_token": 0.7233191477989349,
+      "correct": true,
+      "phi_gap": 0.03225354048193352
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 6,
+      "logp_chosen": -207.07455444335938,
+      "logp_rejected": -205.95884704589844,
+      "margin": -1.1157073974609375,
+      "margin_per_token": -0.026564461844308163,
+      "correct": false,
+      "phi_gap": 1.5365898443088382
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 7,
+      "logp_chosen": -209.7698974609375,
+      "logp_rejected": -237.8878936767578,
+      "margin": 28.117996215820312,
+      "margin_per_token": 0.8076223800960456,
+      "correct": true,
+      "phi_gap": 0.021424173304945393
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 7,
+      "logp_chosen": -210.76190185546875,
+      "logp_rejected": -219.04058837890625,
+      "margin": 8.2786865234375,
+      "margin_per_token": 0.19711158389136862,
+      "correct": true,
+      "phi_gap": 0.02181647123235808
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 7,
+      "logp_chosen": -210.76190185546875,
+      "logp_rejected": -221.30865478515625,
+      "margin": 10.5467529296875,
+      "margin_per_token": 0.37963154756233664,
+      "correct": true,
+      "phi_gap": 0.09525056691458045
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 7,
+      "logp_chosen": -210.76190185546875,
+      "logp_rejected": -194.96481323242188,
+      "margin": -15.797088623046875,
+      "margin_per_token": -0.3761211576915926,
+      "correct": false,
+      "phi_gap": 1.3517961142101507
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 8,
+      "logp_chosen": -197.39320373535156,
+      "logp_rejected": -233.80972290039062,
+      "margin": 36.41651916503906,
+      "margin_per_token": 1.002837984127173,
+      "correct": true,
+      "phi_gap": 0.015814987702416516
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 8,
+      "logp_chosen": -197.3931884765625,
+      "logp_rejected": -222.31149291992188,
+      "margin": 24.918304443359375,
+      "margin_per_token": 0.7223937137617051,
+      "correct": true,
+      "phi_gap": 0.021683916310830664
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 8,
+      "logp_chosen": -197.3931884765625,
+      "logp_rejected": -195.07305908203125,
+      "margin": -2.32012939453125,
+      "margin_per_token": -0.05524117606026735,
+      "correct": false,
+      "phi_gap": 1.3423771231613832
+    },
+    {
+      "problem_id": "auto_problem_010",
+      "step": 8,
+      "logp_chosen": -197.3931884765625,
+      "logp_rejected": -203.40631103515625,
+      "margin": 6.01312255859375,
+      "margin_per_token": 0.14316958472842245,
+      "correct": true,
+      "phi_gap": 1.6565795834616055
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 1,
+      "logp_chosen": -225.44866943359375,
+      "logp_rejected": -232.70574951171875,
+      "margin": 7.257080078125,
+      "margin_per_token": 0.16493363813920414,
+      "correct": true,
+      "phi_gap": 0.024627931367676936
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 1,
+      "logp_chosen": -226.0958251953125,
+      "logp_rejected": -236.1395263671875,
+      "margin": 10.043701171875,
+      "margin_per_token": 0.3530754105485272,
+      "correct": true,
+      "phi_gap": 0.027359323237324595
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 1,
+      "logp_chosen": -226.0958251953125,
+      "logp_rejected": -238.91427612304688,
+      "margin": 12.818450927734375,
+      "margin_per_token": 0.29132843017578125,
+      "correct": true,
+      "phi_gap": 0.04011269639675108
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 1,
+      "logp_chosen": -226.0958251953125,
+      "logp_rejected": -240.765625,
+      "margin": 14.6697998046875,
+      "margin_per_token": 0.333404541015625,
+      "correct": true,
+      "phi_gap": 0.050188532666872954
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 2,
+      "logp_chosen": -226.0718994140625,
+      "logp_rejected": -227.2660369873047,
+      "margin": 1.1941375732421875,
+      "margin_per_token": 0.027770641238189953,
+      "correct": true,
+      "phi_gap": 0.014558773620404697
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 2,
+      "logp_chosen": -230.3275146484375,
+      "logp_rejected": -227.77134704589844,
+      "margin": -2.5561676025390625,
+      "margin_per_token": -0.05944575819858322,
+      "correct": false,
+      "phi_gap": 0.021619860217436226
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 2,
+      "logp_chosen": -230.3275146484375,
+      "logp_rejected": -229.88319396972656,
+      "margin": -0.4443206787109375,
+      "margin_per_token": -0.010333039039789327,
+      "correct": false,
+      "phi_gap": 0.03113624447950425
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 2,
+      "logp_chosen": -230.3275146484375,
+      "logp_rejected": -224.6422119140625,
+      "margin": -5.685302734375,
+      "margin_per_token": -0.25094901280473714,
+      "correct": false,
+      "phi_gap": 0.12233071470924939
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 3,
+      "logp_chosen": -207.42733764648438,
+      "logp_rejected": -248.07131958007812,
+      "margin": 40.64398193359375,
+      "margin_per_token": 1.0548427815669186,
+      "correct": true,
+      "phi_gap": 0.01896157000912324
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 3,
+      "logp_chosen": -210.6882781982422,
+      "logp_rejected": -218.18946838378906,
+      "margin": 7.501190185546875,
+      "margin_per_token": 0.17048159512606542,
+      "correct": true,
+      "phi_gap": 0.02765432469080298
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 3,
+      "logp_chosen": -210.6882781982422,
+      "logp_rejected": -228.3250732421875,
+      "margin": 17.636795043945312,
+      "margin_per_token": 0.5215154651859599,
+      "correct": true,
+      "phi_gap": 0.028661876768698358
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 3,
+      "logp_chosen": -210.6882781982422,
+      "logp_rejected": -223.5682373046875,
+      "margin": 12.879959106445312,
+      "margin_per_token": 0.2927263433283027,
+      "correct": true,
+      "phi_gap": 0.17534718162134388
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 4,
+      "logp_chosen": -218.285400390625,
+      "logp_rejected": -250.95416259765625,
+      "margin": 32.66876220703125,
+      "margin_per_token": 0.923561796217153,
+      "correct": true,
+      "phi_gap": 0.016039745131751548
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 4,
+      "logp_chosen": -220.67147827148438,
+      "logp_rejected": -239.45013427734375,
+      "margin": 18.778656005859375,
+      "margin_per_token": 0.586164361508466,
+      "correct": true,
+      "phi_gap": 0.018330818997058795
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 4,
+      "logp_chosen": -220.67147827148438,
+      "logp_rejected": -229.50714111328125,
+      "margin": 8.835662841796875,
+      "margin_per_token": 0.2103729248046875,
+      "correct": true,
+      "phi_gap": 0.034753598178435485
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 4,
+      "logp_chosen": -220.67147827148438,
+      "logp_rejected": -225.39608764648438,
+      "margin": 4.724609375,
+      "margin_per_token": 0.11249069940476186,
+      "correct": true,
+      "phi_gap": 0.05382876535312797
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 5,
+      "logp_chosen": -207.5018310546875,
+      "logp_rejected": -236.11593627929688,
+      "margin": 28.614105224609375,
+      "margin_per_token": 0.818405488088433,
+      "correct": true,
+      "phi_gap": 0.013457957224861206
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 5,
+      "logp_chosen": -210.34609985351562,
+      "logp_rejected": -205.10482788085938,
+      "margin": -5.24127197265625,
+      "margin_per_token": -0.12479218982514872,
+      "correct": false,
+      "phi_gap": 0.020735018683437856
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 5,
+      "logp_chosen": -210.34609985351562,
+      "logp_rejected": -211.73995971679688,
+      "margin": 1.39385986328125,
+      "margin_per_token": 0.03318713960193431,
+      "correct": true,
+      "phi_gap": 0.0407449373286346
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 5,
+      "logp_chosen": -210.34609985351562,
+      "logp_rejected": -195.45245361328125,
+      "margin": -14.893646240234375,
+      "margin_per_token": -0.35461062476748495,
+      "correct": false,
+      "phi_gap": 1.748394687074302
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 6,
+      "logp_chosen": -216.5289306640625,
+      "logp_rejected": -229.5172119140625,
+      "margin": 12.98828125,
+      "margin_per_token": 0.31678734756097615,
+      "correct": true,
+      "phi_gap": 0.03436238000736713
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 6,
+      "logp_chosen": -216.52891540527344,
+      "logp_rejected": -233.51966857910156,
+      "margin": 16.990753173828125,
+      "margin_per_token": 0.41440861399580786,
+      "correct": true,
+      "phi_gap": 0.04100513775939851
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 6,
+      "logp_chosen": -216.52891540527344,
+      "logp_rejected": -227.81837463378906,
+      "margin": 11.289459228515625,
+      "margin_per_token": 0.27535266411013737,
+      "correct": true,
+      "phi_gap": 0.052592631170782056
+    },
+    {
+      "problem_id": "auto_problem_069",
+      "step": 6,
+      "logp_chosen": -216.52891540527344,
+      "logp_rejected": -246.91854858398438,
+      "margin": 30.389633178710938,
+      "margin_per_token": 0.891770655934403,
+      "correct": true,
+      "phi_gap": 0.053231094776547305
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 1,
+      "logp_chosen": -233.75439453125,
+      "logp_rejected": -218.8658447265625,
+      "margin": -14.8885498046875,
+      "margin_per_token": -0.34624534429505793,
+      "correct": false,
+      "phi_gap": 0.010000538978537366
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 1,
+      "logp_chosen": -231.630615234375,
+      "logp_rejected": -212.2205810546875,
+      "margin": -19.4100341796875,
+      "margin_per_token": -0.5635634698525038,
+      "correct": false,
+      "phi_gap": 0.026473142179492815
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 1,
+      "logp_chosen": -231.630615234375,
+      "logp_rejected": -243.10476684570312,
+      "margin": 11.474151611328125,
+      "margin_per_token": 0.26684073514716555,
+      "correct": true,
+      "phi_gap": 0.03615386153489997
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 1,
+      "logp_chosen": -231.630615234375,
+      "logp_rejected": -221.22406005859375,
+      "margin": -10.40655517578125,
+      "margin_per_token": -0.24201291106468048,
+      "correct": false,
+      "phi_gap": 0.08468013027647725
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 2,
+      "logp_chosen": -239.8158721923828,
+      "logp_rejected": -212.46067810058594,
+      "margin": -27.355194091796875,
+      "margin_per_token": -0.7484615317862842,
+      "correct": false,
+      "phi_gap": 0.013455902142995635
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 2,
+      "logp_chosen": -234.85687255859375,
+      "logp_rejected": -218.3149871826172,
+      "margin": -16.541885375976562,
+      "margin_per_token": -0.5000834797703941,
+      "correct": false,
+      "phi_gap": 0.01599606984284807
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 2,
+      "logp_chosen": -234.85687255859375,
+      "logp_rejected": -230.84652709960938,
+      "margin": -4.010345458984375,
+      "margin_per_token": -0.09326384788335762,
+      "correct": false,
+      "phi_gap": 0.06609902403969348
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 2,
+      "logp_chosen": -234.85687255859375,
+      "logp_rejected": -227.57293701171875,
+      "margin": -7.283935546875,
+      "margin_per_token": -0.1693938499273253,
+      "correct": false,
+      "phi_gap": 1.6559407060198332
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 3,
+      "logp_chosen": -226.66793823242188,
+      "logp_rejected": -220.26010131835938,
+      "margin": -6.4078369140625,
+      "margin_per_token": -0.26543600715491955,
+      "correct": false,
+      "phi_gap": 0.01073356663089875
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 3,
+      "logp_chosen": -222.61932373046875,
+      "logp_rejected": -223.50132751464844,
+      "margin": 0.8820037841796875,
+      "margin_per_token": -0.09761794979426153,
+      "correct": true,
+      "phi_gap": 0.011736259647603386
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 3,
+      "logp_chosen": -222.61932373046875,
+      "logp_rejected": -235.51220703125,
+      "margin": 12.89288330078125,
+      "margin_per_token": 0.2998344953670058,
+      "correct": true,
+      "phi_gap": 0.026039518442368514
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 3,
+      "logp_chosen": -222.61932373046875,
+      "logp_rejected": -229.1259002685547,
+      "margin": 6.5065765380859375,
+      "margin_per_token": 0.15131573344385885,
+      "correct": true,
+      "phi_gap": 0.06342676113640122
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 4,
+      "logp_chosen": -230.45291137695312,
+      "logp_rejected": -232.07296752929688,
+      "margin": 1.62005615234375,
+      "margin_per_token": 0.03857276553199451,
+      "correct": true,
+      "phi_gap": 0.06542213685559628
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 4,
+      "logp_chosen": -232.56521606445312,
+      "logp_rejected": -241.2209014892578,
+      "margin": 8.655685424804688,
+      "margin_per_token": 0.2060877482096357,
+      "correct": true,
+      "phi_gap": 0.08900883236085666
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 4,
+      "logp_chosen": -232.56521606445312,
+      "logp_rejected": -220.44198608398438,
+      "margin": -12.12322998046875,
+      "margin_per_token": -0.4107092332470321,
+      "correct": false,
+      "phi_gap": 0.09903522183433489
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 4,
+      "logp_chosen": -232.56521606445312,
+      "logp_rejected": -237.66046142578125,
+      "margin": 5.095245361328125,
+      "margin_per_token": 0.12131536574590829,
+      "correct": true,
+      "phi_gap": 0.10157846820791283
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 5,
+      "logp_chosen": -241.958984375,
+      "logp_rejected": -239.19931030273438,
+      "margin": -2.759674072265625,
+      "margin_per_token": -0.064178466796875,
+      "correct": false,
+      "phi_gap": 0.012025456079837626
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 5,
+      "logp_chosen": -240.17037963867188,
+      "logp_rejected": -219.45309448242188,
+      "margin": -20.71728515625,
+      "margin_per_token": -0.5977873368696729,
+      "correct": false,
+      "phi_gap": 0.018288555298408227
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 5,
+      "logp_chosen": -240.17037963867188,
+      "logp_rejected": -241.9176025390625,
+      "margin": 1.747222900390625,
+      "margin_per_token": 0.040633090706759134,
+      "correct": true,
+      "phi_gap": 0.02957328825309813
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 5,
+      "logp_chosen": -240.17037963867188,
+      "logp_rejected": -233.17660522460938,
+      "margin": -6.9937744140625,
+      "margin_per_token": -0.16264591660610428,
+      "correct": false,
+      "phi_gap": 0.06517011499727476
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 6,
+      "logp_chosen": -199.16078186035156,
+      "logp_rejected": -233.94229125976562,
+      "margin": 34.78150939941406,
+      "margin_per_token": 0.9141369954728171,
+      "correct": true,
+      "phi_gap": 0.013773694851993978
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 6,
+      "logp_chosen": -202.949462890625,
+      "logp_rejected": -222.91964721679688,
+      "margin": 19.970184326171875,
+      "margin_per_token": 0.5716900492823402,
+      "correct": true,
+      "phi_gap": 0.017592434381718647
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 6,
+      "logp_chosen": -202.949462890625,
+      "logp_rejected": -213.47833251953125,
+      "margin": 10.52886962890625,
+      "margin_per_token": 0.3521245912063957,
+      "correct": true,
+      "phi_gap": 0.04974638354467409
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 6,
+      "logp_chosen": -202.949462890625,
+      "logp_rejected": -214.84732055664062,
+      "margin": 11.897857666015625,
+      "margin_per_token": 0.3839615223019619,
+      "correct": true,
+      "phi_gap": 0.8378979438783598
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 7,
+      "logp_chosen": -228.44973754882812,
+      "logp_rejected": -239.90097045898438,
+      "margin": 11.45123291015625,
+      "margin_per_token": 0.27929836366234806,
+      "correct": true,
+      "phi_gap": 0.010519386195798841
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 7,
+      "logp_chosen": -225.61859130859375,
+      "logp_rejected": -229.651123046875,
+      "margin": 4.03253173828125,
+      "margin_per_token": 0.09835443264100618,
+      "correct": true,
+      "phi_gap": 0.013996542100018994
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 7,
+      "logp_chosen": -225.61859130859375,
+      "logp_rejected": -226.55532836914062,
+      "margin": 0.936737060546875,
+      "margin_per_token": 0.022847245379192138,
+      "correct": true,
+      "phi_gap": 0.04274849110778556
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 7,
+      "logp_chosen": -225.61859130859375,
+      "logp_rejected": -230.00448608398438,
+      "margin": 4.385894775390625,
+      "margin_per_token": 0.10697304330221069,
+      "correct": true,
+      "phi_gap": 1.7332635519774733
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 8,
+      "logp_chosen": -207.4709930419922,
+      "logp_rejected": -211.0554962158203,
+      "margin": 3.584503173828125,
+      "margin_per_token": 0.2079094810352924,
+      "correct": true,
+      "phi_gap": 0.011155123329913641
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 8,
+      "logp_chosen": -209.52835083007812,
+      "logp_rejected": -215.4971923828125,
+      "margin": 5.968841552734375,
+      "margin_per_token": 0.2672588246486187,
+      "correct": true,
+      "phi_gap": 0.035904855072327324
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 8,
+      "logp_chosen": -209.52835083007812,
+      "logp_rejected": -225.359130859375,
+      "margin": 15.830780029296875,
+      "margin_per_token": 0.5077939094428263,
+      "correct": true,
+      "phi_gap": 0.03706748036319585
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 8,
+      "logp_chosen": -209.52835083007812,
+      "logp_rejected": -224.39385986328125,
+      "margin": 14.865509033203125,
+      "margin_per_token": 0.48425071441614964,
+      "correct": true,
+      "phi_gap": 0.8315655274661995
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 9,
+      "logp_chosen": -226.1587677001953,
+      "logp_rejected": -216.59637451171875,
+      "margin": -9.562393188476562,
+      "margin_per_token": -0.23322910215796533,
+      "correct": false,
+      "phi_gap": 0.011130565131960868
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 9,
+      "logp_chosen": -225.5386199951172,
+      "logp_rejected": -198.92025756835938,
+      "margin": -26.618362426757812,
+      "margin_per_token": -0.6492283518721411,
+      "correct": false,
+      "phi_gap": 0.027102884809545147
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 9,
+      "logp_chosen": -225.5386199951172,
+      "logp_rejected": -204.05499267578125,
+      "margin": -21.483627319335938,
+      "margin_per_token": -0.5239909102277052,
+      "correct": false,
+      "phi_gap": 0.02902766930058287
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 9,
+      "logp_chosen": -225.5386199951172,
+      "logp_rejected": -218.54193115234375,
+      "margin": -6.9966888427734375,
+      "margin_per_token": -0.17065094738471753,
+      "correct": false,
+      "phi_gap": 0.03302215382222684
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 10,
+      "logp_chosen": -205.1861114501953,
+      "logp_rejected": -212.45379638671875,
+      "margin": 7.2676849365234375,
+      "margin_per_token": 0.2964163059141578,
+      "correct": true,
+      "phi_gap": 0.025632895368847386
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 10,
+      "logp_chosen": -206.60165405273438,
+      "logp_rejected": -214.8095703125,
+      "margin": 8.207916259765625,
+      "margin_per_token": 0.32017081124441926,
+      "correct": true,
+      "phi_gap": 0.02953237043410839
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 10,
+      "logp_chosen": -206.60165405273438,
+      "logp_rejected": -217.4217987060547,
+      "margin": 10.820144653320312,
+      "margin_per_token": 0.3838836988920944,
+      "correct": true,
+      "phi_gap": 0.8310450064227535
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 10,
+      "logp_chosen": -206.60165405273438,
+      "logp_rejected": -221.25057983398438,
+      "margin": 14.64892578125,
+      "margin_per_token": 0.4772686044513552,
+      "correct": true,
+      "phi_gap": 1.047084391859794
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 11,
+      "logp_chosen": -203.10287475585938,
+      "logp_rejected": -211.93438720703125,
+      "margin": 8.831512451171875,
+      "margin_per_token": 0.3333486630110789,
+      "correct": true,
+      "phi_gap": 0.02167364069168798
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 11,
+      "logp_chosen": -202.70925903320312,
+      "logp_rejected": -205.18673706054688,
+      "margin": 2.47747802734375,
+      "margin_per_token": 0.17814363309038317,
+      "correct": true,
+      "phi_gap": 0.03360790015422821
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 11,
+      "logp_chosen": -202.70925903320312,
+      "logp_rejected": -211.9564208984375,
+      "margin": 9.247161865234375,
+      "margin_per_token": 0.34325787303893485,
+      "correct": true,
+      "phi_gap": 0.8284923887852071
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 11,
+      "logp_chosen": -202.70925903320312,
+      "logp_rejected": -219.21151733398438,
+      "margin": 16.50225830078125,
+      "margin_per_token": 0.5202114446376394,
+      "correct": true,
+      "phi_gap": 1.0527727700017615
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 12,
+      "logp_chosen": -209.262451171875,
+      "logp_rejected": -214.54010009765625,
+      "margin": 5.27764892578125,
+      "margin_per_token": 0.2502460546194474,
+      "correct": true,
+      "phi_gap": 0.01956158277745157
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 12,
+      "logp_chosen": -209.262451171875,
+      "logp_rejected": -208.98675537109375,
+      "margin": -0.27569580078125,
+      "margin_per_token": 0.11479862226426452,
+      "correct": false,
+      "phi_gap": 0.03262181488517757
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 12,
+      "logp_chosen": -209.262451171875,
+      "logp_rejected": -217.99951171875,
+      "margin": 8.737060546875,
+      "margin_per_token": 0.3346219478168555,
+      "correct": true,
+      "phi_gap": 0.8278403546973554
+    },
+    {
+      "problem_id": "auto_problem_085",
+      "step": 12,
+      "logp_chosen": -209.262451171875,
+      "logp_rejected": -222.08921813964844,
+      "margin": 12.826766967773438,
+      "margin_per_token": 0.43437088491193965,
+      "correct": true,
+      "phi_gap": 1.0412685152360839
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 1,
+      "logp_chosen": -271.5533752441406,
+      "logp_rejected": -319.40338134765625,
+      "margin": 47.850006103515625,
+      "margin_per_token": 0.8562278566002401,
+      "correct": true,
+      "phi_gap": 0.4101582634183374
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 1,
+      "logp_chosen": -273.3572692871094,
+      "logp_rejected": -332.5234375,
+      "margin": 59.166168212890625,
+      "margin_per_token": 1.042215679134407,
+      "correct": true,
+      "phi_gap": 0.4953894789762052
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 1,
+      "logp_chosen": -273.3572692871094,
+      "logp_rejected": -320.8883056640625,
+      "margin": 47.531036376953125,
+      "margin_per_token": 0.7666296189831154,
+      "correct": true,
+      "phi_gap": 0.5231817320913721
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 1,
+      "logp_chosen": -273.3572692871094,
+      "logp_rejected": -324.72705078125,
+      "margin": 51.369781494140625,
+      "margin_per_token": 0.8285448628087195,
+      "correct": true,
+      "phi_gap": 0.7721422495977746
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 2,
+      "logp_chosen": -217.229736328125,
+      "logp_rejected": -235.39076232910156,
+      "margin": 18.161026000976562,
+      "margin_per_token": 0.4127505909312852,
+      "correct": true,
+      "phi_gap": 0.06651952954717433
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 2,
+      "logp_chosen": -216.40560913085938,
+      "logp_rejected": -248.4034423828125,
+      "margin": 31.997833251953125,
+      "margin_per_token": 0.8585149430321337,
+      "correct": true,
+      "phi_gap": 0.07106943122546361
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 2,
+      "logp_chosen": -216.40560913085938,
+      "logp_rejected": -245.94119262695312,
+      "margin": 29.53558349609375,
+      "margin_per_token": 0.8012533208028456,
+      "correct": true,
+      "phi_gap": 0.08952109645127182
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 2,
+      "logp_chosen": -216.40560913085938,
+      "logp_rejected": -242.7306671142578,
+      "margin": 26.325057983398438,
+      "margin_per_token": 0.7265899367866755,
+      "correct": true,
+      "phi_gap": 0.10947277772094988
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 3,
+      "logp_chosen": -232.60098266601562,
+      "logp_rejected": -226.0126190185547,
+      "margin": -6.5883636474609375,
+      "margin_per_token": -0.14973553744229395,
+      "correct": false,
+      "phi_gap": 0.029097715031296767
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 3,
+      "logp_chosen": -231.1275634765625,
+      "logp_rejected": -238.1900634765625,
+      "margin": 7.0625,
+      "margin_per_token": 0.1605113636363633,
+      "correct": true,
+      "phi_gap": 0.06884624817840401
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 3,
+      "logp_chosen": -231.1275634765625,
+      "logp_rejected": -249.62240600585938,
+      "margin": 18.494842529296875,
+      "margin_per_token": 0.552273062772529,
+      "correct": true,
+      "phi_gap": 0.08596005678947893
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 3,
+      "logp_chosen": -231.1275634765625,
+      "logp_rejected": -243.45602416992188,
+      "margin": 12.328460693359375,
+      "margin_per_token": 0.2801922884854404,
+      "correct": true,
+      "phi_gap": 0.09162363291623632
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 4,
+      "logp_chosen": -222.47300720214844,
+      "logp_rejected": -231.60064697265625,
+      "margin": 9.127639770507812,
+      "margin_per_token": 0.20744635842063186,
+      "correct": true,
+      "phi_gap": 0.032515575961629795
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 4,
+      "logp_chosen": -220.74942016601562,
+      "logp_rejected": -228.34481811523438,
+      "margin": 7.59539794921875,
+      "margin_per_token": 0.1726226806640625,
+      "correct": true,
+      "phi_gap": 0.04746735661695589
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 4,
+      "logp_chosen": -220.74942016601562,
+      "logp_rejected": -243.75489807128906,
+      "margin": 23.005477905273438,
+      "margin_per_token": 0.6516862832970647,
+      "correct": true,
+      "phi_gap": 0.05417674936652306
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 4,
+      "logp_chosen": -220.74942016601562,
+      "logp_rejected": -229.05465698242188,
+      "margin": 8.30523681640625,
+      "margin_per_token": 0.1887553821910508,
+      "correct": true,
+      "phi_gap": 1.2253229608685707
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 5,
+      "logp_chosen": -230.94305419921875,
+      "logp_rejected": -241.07289123535156,
+      "margin": 10.129837036132812,
+      "margin_per_token": 0.23022356900301855,
+      "correct": true,
+      "phi_gap": 0.034302856711989405
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 5,
+      "logp_chosen": -230.3876495361328,
+      "logp_rejected": -261.3703308105469,
+      "margin": 30.982681274414062,
+      "margin_per_token": 0.8422968422887696,
+      "correct": true,
+      "phi_gap": 0.039665163636930734
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 5,
+      "logp_chosen": -230.3876495361328,
+      "logp_rejected": -250.6200714111328,
+      "margin": 20.232421875,
+      "margin_per_token": 0.4598277698863633,
+      "correct": true,
+      "phi_gap": 0.07138605032735534
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 5,
+      "logp_chosen": -230.3876495361328,
+      "logp_rejected": -260.1714782714844,
+      "margin": 29.783828735351562,
+      "margin_per_token": 0.8144165506826644,
+      "correct": true,
+      "phi_gap": 0.08650047893018975
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 6,
+      "logp_chosen": -223.09507751464844,
+      "logp_rejected": -226.41197204589844,
+      "margin": 3.31689453125,
+      "margin_per_token": 0.07897367931547628,
+      "correct": true,
+      "phi_gap": 0.01729646814361363
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 6,
+      "logp_chosen": -222.73666381835938,
+      "logp_rejected": -219.89944458007812,
+      "margin": -2.83721923828125,
+      "margin_per_token": 0.06014718688185017,
+      "correct": false,
+      "phi_gap": 0.023829551607328803
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 6,
+      "logp_chosen": -222.73666381835938,
+      "logp_rejected": -241.8385009765625,
+      "margin": 19.101837158203125,
+      "margin_per_token": 0.595246123381469,
+      "correct": true,
+      "phi_gap": 0.034348449960331484
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 6,
+      "logp_chosen": -222.73666381835938,
+      "logp_rejected": -236.73129272460938,
+      "margin": 13.99462890625,
+      "margin_per_token": 0.47068006845578303,
+      "correct": true,
+      "phi_gap": 0.041539714613251455
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 7,
+      "logp_chosen": -213.70401000976562,
+      "logp_rejected": -222.42483520507812,
+      "margin": 8.7208251953125,
+      "margin_per_token": 0.20763869512648814,
+      "correct": true,
+      "phi_gap": 0.013186427313695903
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 7,
+      "logp_chosen": -212.8716583251953,
+      "logp_rejected": -219.8310546875,
+      "margin": 6.9593963623046875,
+      "margin_per_token": 0.29336022389198124,
+      "correct": true,
+      "phi_gap": 0.021748665553719126
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 7,
+      "logp_chosen": -212.8716583251953,
+      "logp_rejected": -238.378662109375,
+      "margin": 25.507003784179688,
+      "margin_per_token": 0.7457408927182012,
+      "correct": true,
+      "phi_gap": 0.031453688315833395
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 7,
+      "logp_chosen": -212.8716583251953,
+      "logp_rejected": -215.27447509765625,
+      "margin": 2.4028167724609375,
+      "margin_per_token": 0.05720992315383189,
+      "correct": true,
+      "phi_gap": 1.2789172776723658
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 8,
+      "logp_chosen": -216.42721557617188,
+      "logp_rejected": -242.83062744140625,
+      "margin": 26.403411865234375,
+      "margin_per_token": 0.7696692879883953,
+      "correct": true,
+      "phi_gap": 0.013550778565429633
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 8,
+      "logp_chosen": -216.07443237304688,
+      "logp_rejected": -222.54432678222656,
+      "margin": 6.4698944091796875,
+      "margin_per_token": 0.15404510498046875,
+      "correct": true,
+      "phi_gap": 0.016579425140231585
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 8,
+      "logp_chosen": -216.07443237304688,
+      "logp_rejected": -236.85757446289062,
+      "margin": 20.78314208984375,
+      "margin_per_token": 0.6323846690746135,
+      "correct": true,
+      "phi_gap": 0.017754059603846573
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 8,
+      "logp_chosen": -216.07443237304688,
+      "logp_rejected": -208.10379028320312,
+      "margin": -7.97064208984375,
+      "margin_per_token": -0.18977719261532755,
+      "correct": false,
+      "phi_gap": 1.3135651587440165
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 9,
+      "logp_chosen": -219.78956604003906,
+      "logp_rejected": -218.0955352783203,
+      "margin": -1.69403076171875,
+      "margin_per_token": -0.04033406575520804,
+      "correct": false,
+      "phi_gap": 0.012652896694408389
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 9,
+      "logp_chosen": -218.91224670410156,
+      "logp_rejected": -230.47149658203125,
+      "margin": 11.559249877929688,
+      "margin_per_token": 0.409059664098228,
+      "correct": true,
+      "phi_gap": 0.016848103129398995
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 9,
+      "logp_chosen": -218.91224670410156,
+      "logp_rejected": -245.0093231201172,
+      "margin": 26.097076416015625,
+      "margin_per_token": 0.763640799173495,
+      "correct": true,
+      "phi_gap": 0.021390705538506083
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 9,
+      "logp_chosen": -218.91224670410156,
+      "logp_rejected": -209.85955810546875,
+      "margin": -9.052688598632812,
+      "margin_per_token": -0.21554020472935242,
+      "correct": false,
+      "phi_gap": 1.0446781273872654
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 10,
+      "logp_chosen": -218.0481719970703,
+      "logp_rejected": -231.9202117919922,
+      "margin": 13.872039794921875,
+      "margin_per_token": 0.4649673887246166,
+      "correct": true,
+      "phi_gap": 0.01650439652376212
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 10,
+      "logp_chosen": -218.0481719970703,
+      "logp_rejected": -217.6318817138672,
+      "margin": -0.416290283203125,
+      "margin_per_token": -0.009911673409598087,
+      "correct": false,
+      "phi_gap": 0.02398080350868881
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 10,
+      "logp_chosen": -218.0481719970703,
+      "logp_rejected": -213.65316772460938,
+      "margin": -4.3950042724609375,
+      "margin_per_token": 0.019429728544547942,
+      "correct": false,
+      "phi_gap": 0.05210085500894124
+    },
+    {
+      "problem_id": "auto_problem_067",
+      "step": 10,
+      "logp_chosen": -218.0481719970703,
+      "logp_rejected": -205.75042724609375,
+      "margin": -12.297744750976562,
+      "margin_per_token": -0.2928034464518223,
+      "correct": false,
+      "phi_gap": 1.3226924689833326
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 0,
+      "logp_chosen": -202.3538818359375,
+      "logp_rejected": -214.101806640625,
+      "margin": 11.7479248046875,
+      "margin_per_token": 0.189482658140121,
+      "correct": true,
+      "phi_gap": 0.2717722643775424
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 0,
+      "logp_chosen": -202.5933837890625,
+      "logp_rejected": -214.57656860351562,
+      "margin": 11.983184814453125,
+      "margin_per_token": 0.19327717442666303,
+      "correct": true,
+      "phi_gap": 0.28951792025430834
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 0,
+      "logp_chosen": -202.5933837890625,
+      "logp_rejected": -214.85842895507812,
+      "margin": 12.265045166015625,
+      "margin_per_token": 0.19782330912928403,
+      "correct": true,
+      "phi_gap": 0.3071750184922699
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 0,
+      "logp_chosen": -202.5933837890625,
+      "logp_rejected": -210.82638549804688,
+      "margin": 8.233001708984375,
+      "margin_per_token": 0.1885350316621084,
+      "correct": true,
+      "phi_gap": 0.30937075730552976
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 1,
+      "logp_chosen": -236.2069549560547,
+      "logp_rejected": -291.0773010253906,
+      "margin": 54.87034606933594,
+      "margin_per_token": 0.8850055817634832,
+      "correct": true,
+      "phi_gap": 0.6932716165872304
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 1,
+      "logp_chosen": -235.4217071533203,
+      "logp_rejected": -292.93768310546875,
+      "margin": 57.51597595214844,
+      "margin_per_token": 1.00513279116513,
+      "correct": true,
+      "phi_gap": 0.7047582558265884
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 1,
+      "logp_chosen": -235.4217071533203,
+      "logp_rejected": -288.6610412597656,
+      "margin": 53.23933410644531,
+      "margin_per_token": 0.9350239084486858,
+      "correct": true,
+      "phi_gap": 0.7252054481862125
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 1,
+      "logp_chosen": -235.4217071533203,
+      "logp_rejected": -283.96588134765625,
+      "margin": 48.54417419433594,
+      "margin_per_token": 0.8580540738239422,
+      "correct": true,
+      "phi_gap": 0.7311146227890273
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 2,
+      "logp_chosen": -240.61288452148438,
+      "logp_rejected": -296.7059326171875,
+      "margin": 56.093048095703125,
+      "margin_per_token": 0.90472658218876,
+      "correct": true,
+      "phi_gap": 1.2131250402531943
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 2,
+      "logp_chosen": -240.94418334960938,
+      "logp_rejected": -295.794189453125,
+      "margin": 54.850006103515625,
+      "margin_per_token": 0.9628885673631884,
+      "correct": true,
+      "phi_gap": 1.2428797941850753
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 2,
+      "logp_chosen": -240.94418334960938,
+      "logp_rejected": -278.5717468261719,
+      "margin": 37.6275634765625,
+      "margin_per_token": 0.6805534423311701,
+      "correct": true,
+      "phi_gap": 1.2471863666829357
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 2,
+      "logp_chosen": -240.94418334960938,
+      "logp_rejected": -286.6834716796875,
+      "margin": 45.739288330078125,
+      "margin_per_token": 0.737730456936744,
+      "correct": true,
+      "phi_gap": 1.254918466928622
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 4,
+      "logp_chosen": -206.70863342285156,
+      "logp_rejected": -209.12594604492188,
+      "margin": 2.4173126220703125,
+      "margin_per_token": 0.056216572606285986,
+      "correct": true,
+      "phi_gap": 0.8834056568415765
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 4,
+      "logp_chosen": -208.5653076171875,
+      "logp_rejected": -221.1396942138672,
+      "margin": 12.574386596679688,
+      "margin_per_token": 0.29242759527162043,
+      "correct": true,
+      "phi_gap": 1.2785740380513868
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 4,
+      "logp_chosen": -208.5653076171875,
+      "logp_rejected": -226.6529998779297,
+      "margin": 18.087692260742188,
+      "margin_per_token": 0.42064400606377106,
+      "correct": true,
+      "phi_gap": 1.368867121150605
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 4,
+      "logp_chosen": -208.5653076171875,
+      "logp_rejected": -217.7218780517578,
+      "margin": 9.156570434570312,
+      "margin_per_token": 0.21294349847837868,
+      "correct": true,
+      "phi_gap": 1.4013704203564723
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 5,
+      "logp_chosen": -197.69927978515625,
+      "logp_rejected": -237.6578369140625,
+      "margin": 39.95855712890625,
+      "margin_per_token": 1.060862257103059,
+      "correct": true,
+      "phi_gap": 0.45205177865365886
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 5,
+      "logp_chosen": -200.83419799804688,
+      "logp_rejected": -222.75698852539062,
+      "margin": 21.92279052734375,
+      "margin_per_token": 0.5098323378452037,
+      "correct": true,
+      "phi_gap": 0.46663592575696855
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 5,
+      "logp_chosen": -200.83419799804688,
+      "logp_rejected": -214.70263671875,
+      "margin": 13.868438720703125,
+      "margin_per_token": 0.4414047967819936,
+      "correct": true,
+      "phi_gap": 0.4852105344892239
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 5,
+      "logp_chosen": -200.83419799804688,
+      "logp_rejected": -218.80224609375,
+      "margin": 17.968048095703125,
+      "margin_per_token": 0.41786158362100334,
+      "correct": true,
+      "phi_gap": 0.4933835814402592
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 6,
+      "logp_chosen": -210.1647491455078,
+      "logp_rejected": -222.64614868164062,
+      "margin": 12.481399536132812,
+      "margin_per_token": 0.28366817127574606,
+      "correct": true,
+      "phi_gap": 0.010560737355333583
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 6,
+      "logp_chosen": -209.68841552734375,
+      "logp_rejected": -245.4834442138672,
+      "margin": 35.79502868652344,
+      "margin_per_token": 0.9432714998596063,
+      "correct": true,
+      "phi_gap": 0.04628965781245942
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 6,
+      "logp_chosen": -209.68841552734375,
+      "logp_rejected": -230.03309631347656,
+      "margin": 20.344680786132812,
+      "margin_per_token": 0.5839610835714524,
+      "correct": true,
+      "phi_gap": 0.052129796833383146
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 6,
+      "logp_chosen": -209.68841552734375,
+      "logp_rejected": -226.7657928466797,
+      "margin": 17.077377319335938,
+      "margin_per_token": 0.3881222118030889,
+      "correct": true,
+      "phi_gap": 0.06914860879690377
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 7,
+      "logp_chosen": -217.0572509765625,
+      "logp_rejected": -207.87295532226562,
+      "margin": -9.184295654296875,
+      "margin_per_token": -0.0988645654400111,
+      "correct": false,
+      "phi_gap": 0.012755485173832515
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 7,
+      "logp_chosen": -216.48980712890625,
+      "logp_rejected": -217.79815673828125,
+      "margin": 1.308349609375,
+      "margin_per_token": 0.1448505232248447,
+      "correct": true,
+      "phi_gap": 0.01987427604334302
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 7,
+      "logp_chosen": -216.48980712890625,
+      "logp_rejected": -217.76512145996094,
+      "margin": 1.2753143310546875,
+      "margin_per_token": 0.1440822609383252,
+      "correct": true,
+      "phi_gap": 0.06838529774820401
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 7,
+      "logp_chosen": -216.48980712890625,
+      "logp_rejected": -200.38803100585938,
+      "margin": -16.101776123046875,
+      "margin_per_token": -0.3659494573419746,
+      "correct": false,
+      "phi_gap": 1.4868308559683805
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 8,
+      "logp_chosen": -228.4270477294922,
+      "logp_rejected": -204.10675048828125,
+      "margin": -24.320297241210938,
+      "margin_per_token": -0.6734671401171042,
+      "correct": false,
+      "phi_gap": 0.01249412978713016
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 8,
+      "logp_chosen": -227.023681640625,
+      "logp_rejected": -229.77716064453125,
+      "margin": 2.75347900390625,
+      "margin_per_token": 0.06403439543968048,
+      "correct": true,
+      "phi_gap": 0.01425985452981715
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 8,
+      "logp_chosen": -227.023681640625,
+      "logp_rejected": -222.63475036621094,
+      "margin": -4.3889312744140625,
+      "margin_per_token": -0.10206816917242012,
+      "correct": false,
+      "phi_gap": 0.06637081879074547
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 8,
+      "logp_chosen": -227.023681640625,
+      "logp_rejected": -214.19827270507812,
+      "margin": -12.825408935546875,
+      "margin_per_token": -0.4114779417913006,
+      "correct": false,
+      "phi_gap": 0.3913554619245927
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 9,
+      "logp_chosen": -228.711669921875,
+      "logp_rejected": -222.16497802734375,
+      "margin": -6.54669189453125,
+      "margin_per_token": -0.15224864871002897,
+      "correct": false,
+      "phi_gap": 0.012824564709620123
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 9,
+      "logp_chosen": -229.18017578125,
+      "logp_rejected": -244.64047241210938,
+      "margin": 15.460296630859375,
+      "margin_per_token": 0.35954178211300913,
+      "correct": true,
+      "phi_gap": 0.03913490011137721
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 9,
+      "logp_chosen": -229.18017578125,
+      "logp_rejected": -224.93186950683594,
+      "margin": -4.2483062744140625,
+      "margin_per_token": -0.21768358645933095,
+      "correct": false,
+      "phi_gap": 0.061955503978667004
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 9,
+      "logp_chosen": -229.18017578125,
+      "logp_rejected": -208.29676818847656,
+      "margin": -20.883407592773438,
+      "margin_per_token": -0.5957540709674989,
+      "correct": false,
+      "phi_gap": 1.4779971120490432
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 10,
+      "logp_chosen": -208.4395751953125,
+      "logp_rejected": -218.74359130859375,
+      "margin": 10.30401611328125,
+      "margin_per_token": 0.3497971903698138,
+      "correct": true,
+      "phi_gap": 0.012427820883879281
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 10,
+      "logp_chosen": -211.43130493164062,
+      "logp_rejected": -237.89883422851562,
+      "margin": 26.467529296875,
+      "margin_per_token": 0.7272740983055712,
+      "correct": true,
+      "phi_gap": 0.03809201298264897
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 10,
+      "logp_chosen": -211.43130493164062,
+      "logp_rejected": -224.78382873535156,
+      "margin": 13.352523803710938,
+      "margin_per_token": 0.42227397055757,
+      "correct": true,
+      "phi_gap": 0.07356759988861894
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 10,
+      "logp_chosen": -211.43130493164062,
+      "logp_rejected": -224.29574584960938,
+      "margin": 12.86444091796875,
+      "margin_per_token": 0.41092320577286756,
+      "correct": true,
+      "phi_gap": 0.20875857950569188
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 11,
+      "logp_chosen": -209.19898986816406,
+      "logp_rejected": -205.2805938720703,
+      "margin": -3.91839599609375,
+      "margin_per_token": -0.08905445445667581,
+      "correct": false,
+      "phi_gap": 0.029077734038653436
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 11,
+      "logp_chosen": -210.023193359375,
+      "logp_rejected": -233.2705078125,
+      "margin": 23.247314453125,
+      "margin_per_token": 0.6516411359920058,
+      "correct": true,
+      "phi_gap": 0.03557751400957132
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 11,
+      "logp_chosen": -210.023193359375,
+      "logp_rejected": -219.0992431640625,
+      "margin": 9.0760498046875,
+      "margin_per_token": 0.32207684184229635,
+      "correct": true,
+      "phi_gap": 0.07100997061782044
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 11,
+      "logp_chosen": -210.023193359375,
+      "logp_rejected": -218.5383758544922,
+      "margin": 8.515182495117188,
+      "margin_per_token": 0.3090334160383357,
+      "correct": true,
+      "phi_gap": 0.20610901403465176
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 12,
+      "logp_chosen": -139.85617065429688,
+      "logp_rejected": -136.0809326171875,
+      "margin": -3.775238037109375,
+      "margin_per_token": -0.08580086447975832,
+      "correct": false,
+      "phi_gap": 0.02215864103170251
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 12,
+      "logp_chosen": -140.27835083007812,
+      "logp_rejected": -148.00732421875,
+      "margin": 7.728973388671875,
+      "margin_per_token": 0.2538864587376537,
+      "correct": true,
+      "phi_gap": 0.049715271114737725
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 12,
+      "logp_chosen": -140.27835083007812,
+      "logp_rejected": -146.48097229003906,
+      "margin": 6.2026214599609375,
+      "margin_per_token": 0.21838990225600385,
+      "correct": true,
+      "phi_gap": 0.06970456514412682
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 12,
+      "logp_chosen": -140.27835083007812,
+      "logp_rejected": -147.1810302734375,
+      "margin": 6.902679443359375,
+      "margin_per_token": 0.23467032047457215,
+      "correct": true,
+      "phi_gap": 0.20474096726176683
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 13,
+      "logp_chosen": -162.0084228515625,
+      "logp_rejected": -156.76080322265625,
+      "margin": -5.24761962890625,
+      "margin_per_token": -0.2048922129463695,
+      "correct": false,
+      "phi_gap": 0.020945083554938737
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 13,
+      "logp_chosen": -162.0084228515625,
+      "logp_rejected": -159.756591796875,
+      "margin": -2.2518310546875,
+      "margin_per_token": -0.13680610898685241,
+      "correct": false,
+      "phi_gap": 0.026729453429952255
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 13,
+      "logp_chosen": -162.0084228515625,
+      "logp_rejected": -158.00765991210938,
+      "margin": -4.000762939453125,
+      "margin_per_token": -0.1765545609133441,
+      "correct": false,
+      "phi_gap": 0.05589101973350363
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 13,
+      "logp_chosen": -162.0084228515625,
+      "logp_rejected": -161.116455078125,
+      "margin": -0.8919677734375,
+      "margin_per_token": -0.02074343659156952,
+      "correct": false,
+      "phi_gap": 0.06850841915333739
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 14,
+      "logp_chosen": -172.28115844726562,
+      "logp_rejected": -172.53292846679688,
+      "margin": 0.25177001953125,
+      "margin_per_token": 0.0057220458984375,
+      "correct": true,
+      "phi_gap": 0.02494672740965287
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 14,
+      "logp_chosen": -172.28115844726562,
+      "logp_rejected": -172.7696533203125,
+      "margin": 0.488494873046875,
+      "margin_per_token": 0.10241804062437998,
+      "correct": true,
+      "phi_gap": 0.03140294124343468
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 14,
+      "logp_chosen": -172.28115844726562,
+      "logp_rejected": -170.71859741210938,
+      "margin": -1.56256103515625,
+      "margin_per_token": -0.03551275079900584,
+      "correct": false,
+      "phi_gap": 0.05402831563825261
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 14,
+      "logp_chosen": -172.28115844726562,
+      "logp_rejected": -171.28887939453125,
+      "margin": -0.992279052734375,
+      "margin_per_token": -0.02255179665305418,
+      "correct": false,
+      "phi_gap": 1.4662095547288936
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 15,
+      "logp_chosen": -175.4717559814453,
+      "logp_rejected": -172.74343872070312,
+      "margin": -2.7283172607421875,
+      "margin_per_token": 0.029294818450733562,
+      "correct": false,
+      "phi_gap": 0.010680594668476928
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 15,
+      "logp_chosen": -175.4717559814453,
+      "logp_rejected": -176.7715606689453,
+      "margin": 1.2998046875,
+      "margin_per_token": 0.029541015624999556,
+      "correct": true,
+      "phi_gap": 0.024811008547104052
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 15,
+      "logp_chosen": -175.4717559814453,
+      "logp_rejected": -175.2850341796875,
+      "margin": -0.1867218017578125,
+      "margin_per_token": -0.004243677312677718,
+      "correct": false,
+      "phi_gap": 0.05379043369660508
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 15,
+      "logp_chosen": -175.4717559814453,
+      "logp_rejected": -175.1519012451172,
+      "margin": -0.319854736328125,
+      "margin_per_token": -0.007269425825639608,
+      "correct": false,
+      "phi_gap": 1.4657308520798793
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 16,
+      "logp_chosen": -173.5125732421875,
+      "logp_rejected": -171.2171630859375,
+      "margin": -2.29541015625,
+      "margin_per_token": -0.14387696086730273,
+      "correct": false,
+      "phi_gap": 0.01709352565474509
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 16,
+      "logp_chosen": -173.5125732421875,
+      "logp_rejected": -174.02442932128906,
+      "margin": 0.5118560791015625,
+      "margin_per_token": 0.01190362974654846,
+      "correct": true,
+      "phi_gap": 0.03507430573964365
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 16,
+      "logp_chosen": -173.5125732421875,
+      "logp_rejected": -173.8236083984375,
+      "margin": 0.31103515625,
+      "margin_per_token": 0.007233375726744207,
+      "correct": true,
+      "phi_gap": 0.05116915795908206
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 16,
+      "logp_chosen": -173.5125732421875,
+      "logp_rejected": -170.05364990234375,
+      "margin": -3.45892333984375,
+      "margin_per_token": -0.17032044231261523,
+      "correct": false,
+      "phi_gap": 0.3757757384687457
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 17,
+      "logp_chosen": -172.08575439453125,
+      "logp_rejected": -174.10195922851562,
+      "margin": 2.016204833984375,
+      "margin_per_token": -0.04513157850592142,
+      "correct": true,
+      "phi_gap": 0.01931744782751421
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 17,
+      "logp_chosen": -172.08575439453125,
+      "logp_rejected": -172.68917846679688,
+      "margin": 0.603424072265625,
+      "margin_per_token": 0.014033117959665553,
+      "correct": true,
+      "phi_gap": 0.03132655245025129
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 17,
+      "logp_chosen": -172.08575439453125,
+      "logp_rejected": -172.3358612060547,
+      "margin": 0.2501068115234375,
+      "margin_per_token": 0.005816437477289327,
+      "correct": true,
+      "phi_gap": 0.047326899889840846
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 17,
+      "logp_chosen": -172.08575439453125,
+      "logp_rejected": -173.88424682617188,
+      "margin": 1.798492431640625,
+      "margin_per_token": 0.041825405386990866,
+      "correct": true,
+      "phi_gap": 0.19456506582690247
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 18,
+      "logp_chosen": -174.7220458984375,
+      "logp_rejected": -177.71939086914062,
+      "margin": 2.997344970703125,
+      "margin_per_token": -0.02422632777917766,
+      "correct": true,
+      "phi_gap": 0.018574302971473777
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 18,
+      "logp_chosen": -174.7220458984375,
+      "logp_rejected": -175.12673950195312,
+      "margin": 0.404693603515625,
+      "margin_per_token": 0.009411479151525626,
+      "correct": true,
+      "phi_gap": 0.024891215102990305
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 18,
+      "logp_chosen": -174.7220458984375,
+      "logp_rejected": -175.65057373046875,
+      "margin": 0.92852783203125,
+      "margin_per_token": 0.02159367051235428,
+      "correct": true,
+      "phi_gap": 0.059390391509186014
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 18,
+      "logp_chosen": -174.7220458984375,
+      "logp_rejected": -175.6413116455078,
+      "margin": 0.9192657470703125,
+      "margin_per_token": -0.07145540104355952,
+      "correct": true,
+      "phi_gap": 1.4577770014886062
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 19,
+      "logp_chosen": -175.77810668945312,
+      "logp_rejected": -174.47894287109375,
+      "margin": -1.299163818359375,
+      "margin_per_token": 0.06269286399663887,
+      "correct": false,
+      "phi_gap": 0.021822375928564064
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 19,
+      "logp_chosen": -176.05731201171875,
+      "logp_rejected": -175.41195678710938,
+      "margin": -0.645355224609375,
+      "margin_per_token": 0.07804528653747678,
+      "correct": false,
+      "phi_gap": 0.04312595448526668
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 19,
+      "logp_chosen": -176.05731201171875,
+      "logp_rejected": -175.52743530273438,
+      "margin": -0.529876708984375,
+      "margin_per_token": 0.08073083341247678,
+      "correct": false,
+      "phi_gap": 0.05602284651614431
+    },
+    {
+      "problem_id": "auto_problem_018",
+      "step": 19,
+      "logp_chosen": -176.05731201171875,
+      "logp_rejected": -173.4742889404297,
+      "margin": -2.5830230712890625,
+      "margin_per_token": -0.05870506980202439,
+      "correct": false,
+      "phi_gap": 1.4532532938522924
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 0,
+      "logp_chosen": -199.9382781982422,
+      "logp_rejected": -211.66268920898438,
+      "margin": 11.724411010742188,
+      "margin_per_token": 0.18610176207527251,
+      "correct": true,
+      "phi_gap": 0.6706644918893989
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 0,
+      "logp_chosen": -199.95382690429688,
+      "logp_rejected": -210.68821716308594,
+      "margin": 10.734390258789062,
+      "margin_per_token": 0.22432678269534279,
+      "correct": true,
+      "phi_gap": 0.6708980431069627
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 0,
+      "logp_chosen": -199.95382690429688,
+      "logp_rejected": -210.47694396972656,
+      "margin": 10.523117065429688,
+      "margin_per_token": 0.22091915054438482,
+      "correct": true,
+      "phi_gap": 0.675442097141473
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 0,
+      "logp_chosen": -199.95382690429688,
+      "logp_rejected": -210.6489715576172,
+      "margin": 10.695144653320312,
+      "margin_per_token": 0.16976420084635446,
+      "correct": true,
+      "phi_gap": 0.6929178045726436
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 10,
+      "logp_chosen": -269.742919921875,
+      "logp_rejected": -267.889892578125,
+      "margin": -1.85302734375,
+      "margin_per_token": 0.03917106944844484,
+      "correct": false,
+      "phi_gap": 0.034485290560914095
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 10,
+      "logp_chosen": -268.99395751953125,
+      "logp_rejected": -268.8062744140625,
+      "margin": -0.18768310546875,
+      "margin_per_token": -0.00297909691220255,
+      "correct": false,
+      "phi_gap": 0.05783892084514042
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 10,
+      "logp_chosen": -268.99395751953125,
+      "logp_rejected": -267.32623291015625,
+      "margin": -1.667724609375,
+      "margin_per_token": 0.041968076581900604,
+      "correct": false,
+      "phi_gap": 0.07653940551290539
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 10,
+      "logp_chosen": -268.99395751953125,
+      "logp_rejected": -234.25897216796875,
+      "margin": -34.7349853515625,
+      "margin_per_token": -0.551348973834326,
+      "correct": false,
+      "phi_gap": 1.240197616959513
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 11,
+      "logp_chosen": -215.13818359375,
+      "logp_rejected": -214.27337646484375,
+      "margin": -0.86480712890625,
+      "margin_per_token": 0.041130397970470245,
+      "correct": false,
+      "phi_gap": 0.022406244378912366
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 11,
+      "logp_chosen": -214.74514770507812,
+      "logp_rejected": -216.56036376953125,
+      "margin": 1.815216064453125,
+      "margin_per_token": 0.028812953404017794,
+      "correct": true,
+      "phi_gap": 0.04276950993415163
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 11,
+      "logp_chosen": -214.74514770507812,
+      "logp_rejected": -214.31118774414062,
+      "margin": -0.4339599609375,
+      "margin_per_token": -0.006888253348214413,
+      "correct": false,
+      "phi_gap": 0.05087853434683387
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 11,
+      "logp_chosen": -214.74514770507812,
+      "logp_rejected": -215.21188354492188,
+      "margin": 0.46673583984375,
+      "margin_per_token": 0.06250627383902563,
+      "correct": true,
+      "phi_gap": 0.07068021040460248
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 14,
+      "logp_chosen": -218.7252197265625,
+      "logp_rejected": -217.52627563476562,
+      "margin": -1.198944091796875,
+      "margin_per_token": 0.036659432141156856,
+      "correct": false,
+      "phi_gap": 0.01601206276923861
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 14,
+      "logp_chosen": -218.7252197265625,
+      "logp_rejected": -219.4732208251953,
+      "margin": 0.7480010986328125,
+      "margin_per_token": 0.011873033311631698,
+      "correct": true,
+      "phi_gap": 0.0208599266186269
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 14,
+      "logp_chosen": -218.7252197265625,
+      "logp_rejected": -217.13941955566406,
+      "margin": -1.5858001708984375,
+      "margin_per_token": 0.030419817962099582,
+      "correct": false,
+      "phi_gap": 0.030136358507601102
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 14,
+      "logp_chosen": -218.7252197265625,
+      "logp_rejected": -214.90805053710938,
+      "margin": -3.817169189453125,
+      "margin_per_token": -0.06058998713417685,
+      "correct": false,
+      "phi_gap": 1.3582410444711153
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 15,
+      "logp_chosen": -217.24166870117188,
+      "logp_rejected": -217.52317810058594,
+      "margin": 0.2815093994140625,
+      "margin_per_token": 0.06015790088690709,
+      "correct": true,
+      "phi_gap": 0.010836709422429536
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 15,
+      "logp_chosen": -217.24166870117188,
+      "logp_rejected": -216.0582275390625,
+      "margin": -1.183441162109375,
+      "margin_per_token": 0.03652966602362584,
+      "correct": false,
+      "phi_gap": 0.016677064525686625
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 15,
+      "logp_chosen": -217.24166870117188,
+      "logp_rejected": -215.79794311523438,
+      "margin": -1.4437255859375,
+      "margin_per_token": 0.03233153015542989,
+      "correct": false,
+      "phi_gap": 0.02334205175443138
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 15,
+      "logp_chosen": -217.24166870117188,
+      "logp_rejected": -212.3103790283203,
+      "margin": -4.9312896728515625,
+      "margin_per_token": -0.07827443925161193,
+      "correct": false,
+      "phi_gap": 1.351764588788904
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 17,
+      "logp_chosen": -216.79998779296875,
+      "logp_rejected": -216.63340759277344,
+      "margin": -0.1665802001953125,
+      "margin_per_token": 0.05281757173084056,
+      "correct": false,
+      "phi_gap": 0.01835549389265667
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 17,
+      "logp_chosen": -216.79998779296875,
+      "logp_rejected": -217.81378173828125,
+      "margin": 1.0137939453125,
+      "margin_per_token": 0.016091967385912564,
+      "correct": true,
+      "phi_gap": 0.02672195373007824
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 17,
+      "logp_chosen": -216.79998779296875,
+      "logp_rejected": -219.17465209960938,
+      "margin": 2.374664306640625,
+      "margin_per_token": 0.03769308423239082,
+      "correct": true,
+      "phi_gap": 0.04421775984172793
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 17,
+      "logp_chosen": -216.79998779296875,
+      "logp_rejected": -217.37525939941406,
+      "margin": 0.5752716064453125,
+      "margin_per_token": 0.009131295340401469,
+      "correct": true,
+      "phi_gap": 1.4805746257041985
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 18,
+      "logp_chosen": -218.09854125976562,
+      "logp_rejected": -218.08905029296875,
+      "margin": -0.009490966796875,
+      "margin_per_token": -0.0001530801096270018,
+      "correct": false,
+      "phi_gap": 0.011331834632800852
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 18,
+      "logp_chosen": -218.09854125976562,
+      "logp_rejected": -217.24127197265625,
+      "margin": -0.857269287109375,
+      "margin_per_token": -0.013826923985635009,
+      "correct": false,
+      "phi_gap": 0.022420762937592542
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 18,
+      "logp_chosen": -218.09854125976562,
+      "logp_rejected": -217.63986206054688,
+      "margin": -0.45867919921875,
+      "margin_per_token": -0.007398051600302491,
+      "correct": false,
+      "phi_gap": 0.033388820338612124
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 18,
+      "logp_chosen": -218.09854125976562,
+      "logp_rejected": -216.35702514648438,
+      "margin": -1.74151611328125,
+      "margin_per_token": -0.0834799130269337,
+      "correct": false,
+      "phi_gap": 1.4715468942315364
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 19,
+      "logp_chosen": -219.28965759277344,
+      "logp_rejected": -217.96836853027344,
+      "margin": -1.3212890625,
+      "margin_per_token": -0.020972842261904656,
+      "correct": false,
+      "phi_gap": 0.017021131251740762
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 19,
+      "logp_chosen": -219.28965759277344,
+      "logp_rejected": -214.9166259765625,
+      "margin": -4.3730316162109375,
+      "margin_per_token": -0.014391022587945557,
+      "correct": false,
+      "phi_gap": 0.020244471834165
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 19,
+      "logp_chosen": -219.28965759277344,
+      "logp_rejected": -218.35391235351562,
+      "margin": -0.9357452392578125,
+      "margin_per_token": -0.014853099035838202,
+      "correct": false,
+      "phi_gap": 0.03146207826653491
+    },
+    {
+      "problem_id": "auto_problem_068",
+      "step": 19,
+      "logp_chosen": -219.28965759277344,
+      "logp_rejected": -216.57666015625,
+      "margin": -2.7129974365234375,
+      "margin_per_token": 0.012383722245723927,
+      "correct": false,
+      "phi_gap": 0.0380928621775567
+    }
+  ]
+}

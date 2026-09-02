@@ -26,7 +26,9 @@ Key Hydra overrides (research hooks!):
     rl.use_vllm=false               — use HF generate (slower, no vLLM needed)
 """
 
+import json
 import logging
+import math
 import os
 import sys
 from pathlib import Path
@@ -131,12 +133,56 @@ def _run_grpo_training(cfg, local_logger, wandb_logger, run_name):
         "problems_dir",
         "/ocean/projects/mch250030p/wxu7/DesignBench/data/problems",
     )
+    # Held-out discipline: until 2026-08-23 training and evaluation both read the
+    # whole problems_dir, so every "held-out" number was measured on problems the
+    # policy had trained on. A split file (data/splits/*.json, see
+    # scripts/make_splits.py) now restricts training to its own side.
+    split_ids = None
+    split_file = data_cfg.get("split_file", None)
+    if split_file:
+        with open(split_file) as f:
+            split_payload = json.load(f)
+        split_name = data_cfg.get("split", "train")
+        split_ids = list(split_payload[split_name])
+        log.info(
+            f"Problem split {split_file} [{split_name}]: {len(split_ids)} problems "
+            f"(held out: {len(split_payload.get('eval', []))})"
+        )
+
+    # Curriculum by signal informativeness. Groups whose rollouts are uniformly
+    # feasible or uniformly infeasible contribute no feasibility ordering, and
+    # only 33% of groups come out mixed. Mixedness is predicted by the initial
+    # violation recorded in the split file, so weight the repeat count by it.
+    problem_weights = None
+    if data_cfg.get("informativeness_weighting", False) and split_file:
+        floor = float(data_cfg.get("informativeness_floor", 0.10))
+        scale = float(data_cfg.get("informativeness_scale", 0.35))
+        records = split_payload.get("records", {})
+        problem_weights = {}
+        for pid in split_ids or []:
+            v = (records.get(pid) or {}).get("initial_violation")
+            try:
+                v = float(v)
+            except (TypeError, ValueError):
+                v = None
+            # Measured mixed-group rate falls steeply with initial violation;
+            # exp(-v/scale) reproduces that shape, floored so nothing is dropped.
+            problem_weights[pid] = floor + (1.0 - floor) * (
+                math.exp(-max(v, 0.0) / scale) if v is not None and math.isfinite(v) else 0.0
+            )
+        log.info(
+            f"informativeness weighting on: weights "
+            f"{min(problem_weights.values()):.2f}-{max(problem_weights.values()):.2f}"
+        )
+
     train_dataset = RLPromptDataset.from_problems_dir(
         problems_dir=problems_dir,
         tokenizer=tokenizer,
         formatter=formatter,
         max_prompt_len=rl_cfg.get("max_prompt_length", 2048),
+        problem_ids=split_ids,
         repeat=data_cfg.get("repeat", 1),
+        problem_weights=problem_weights,
     )
     log.info(f"RL dataset: {len(train_dataset)} prompts")
 
@@ -189,6 +235,15 @@ def _run_grpo_training(cfg, local_logger, wandb_logger, run_name):
             wandb_logger=wandb_logger,
         )
 
+        # NO HF resume here, deliberately. transformers' `check_torch_load_is_safe`
+        # refuses to torch.load a checkpoint's optimizer.pt unless torch >= 2.6
+        # (CVE-2025-32434), and this env is older, so `trainer.train(
+        # resume_from_checkpoint=...)` dies in _load_optimizer_and_scheduler
+        # (job 44785608). It is not needed anyway: the measured rate is ~39
+        # steps/hour, so max_steps_train=100 finishes inside one 8h allocation.
+        # To continue a run, point CHECKPOINT at the last checkpoint-* instead --
+        # that reloads the LoRA weights and starts a fresh optimizer, which is
+        # identical treatment for both arms of an A/B.
         log.info("Starting GRPO training ...")
         train_result = trainer.train()
         log.info(f"GRPO training complete: {train_result.metrics}")

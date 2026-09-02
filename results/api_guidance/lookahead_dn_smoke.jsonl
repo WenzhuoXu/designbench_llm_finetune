@@ -1,0 +1,8 @@
+{"problem_id": "hard_problem_0442", "arm": "d1", "feasible": true, "turns": 1, "n_llm_calls": 1, "n_simulator_calls": 3, "mass_ratio": 1.075337731441571}
+{"problem_id": "hard_problem_0442", "arm": "d1_wide", "feasible": true, "turns": 1, "n_llm_calls": 1, "n_simulator_calls": 21, "mass_ratio": 1.0652486534406447}
+{"problem_id": "hard_problem_0499", "arm": "d1", "feasible": false, "turns": 3, "n_llm_calls": 3, "n_simulator_calls": 9, "mass_ratio": 1.1237474423305105}
+{"problem_id": "hard_problem_0442", "arm": "d2", "feasible": true, "turns": 2, "n_llm_calls": 4, "n_simulator_calls": 12, "mass_ratio": 1.0296839698046496}
+{"problem_id": "hard_problem_0499", "arm": "d1_wide", "feasible": false, "turns": 3, "n_llm_calls": 3, "n_simulator_calls": 43, "mass_ratio": 1.1196997958352322}
+{"problem_id": "hard_problem_0442", "arm": "d3", "feasible": true, "turns": 2, "n_llm_calls": 8, "n_simulator_calls": 24, "mass_ratio": 1.0629445304501624}
+{"problem_id": "hard_problem_0499", "arm": "d2", "feasible": false, "turns": 3, "n_llm_calls": 9, "n_simulator_calls": 27, "mass_ratio": 1.0988497008660683}
+{"problem_id": "hard_problem_0499", "arm": "d3", "feasible": false, "turns": 3, "n_llm_calls": 21, "n_simulator_calls": 63, "mass_ratio": 1.2106587449431783}

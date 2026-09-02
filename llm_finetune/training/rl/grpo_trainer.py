@@ -260,7 +260,36 @@ def build_grpo_trainer(
     )
     if rollout_func is not None:
         trainer_kwargs["rollout_func"] = rollout_func
-    trainer = GRPOTrainer(**trainer_kwargs)
+    # Per-token lookahead advantages. GRPO delivers ONE advantage per sequence,
+    # broadcast to every token, so a per-step signal folded into that scalar is
+    # projected onto span{1} before it reaches the gradient -- which is why the
+    # scalar-sum form (reward term "lookahead_advantage") moved nothing. TRL 1.0
+    # accepts a (B, T) advantage tensor from a subclass (grpo_trainer.py:2291);
+    # this supplies one. kappa=0 reproduces stock GRPO exactly.
+    kappa = float(rl_cfg.get("lookahead_kappa", 0.0))
+    # An A/B on kappa must not also switch trainer class, or the arms differ by
+    # more than the one variable (this is defect D1's shape: the control silently
+    # took a different code path). If the config sets lookahead_kappa AT ALL --
+    # including 0.0 -- both arms go through LookaheadGRPOTrainer, whose injection
+    # is an exact no-op at kappa=0. Configs that never mention it are unaffected.
+    kappa_declared = "lookahead_kappa" in rl_cfg
+    if kappa != 0.0 or kappa_declared:
+        if kappa != 0.0 and not bool(rl_cfg.get("multi_turn", False)):
+            raise ValueError("rl.lookahead_kappa requires rl.multi_turn=true: the per-token "
+                             "advantages are produced by the multi-turn rollout_func.")
+        probe_cfg = dict(rl_cfg.get("lookahead_probe", {}) or {})
+        if kappa != 0.0 and (not probe_cfg.get("enabled") or not probe_cfg.get("all_steps")):
+            raise ValueError("rl.lookahead_kappa requires lookahead_probe.enabled=true and "
+                             "lookahead_probe.all_steps=true: an unprobed turn carries no "
+                             "credit, so a subsampled probe would silently zero most tokens.")
+        from llm_finetune.training.rl.lookahead_grpo_trainer import make_lookahead_trainer_cls
+        trainer_cls = make_lookahead_trainer_cls()
+        trainer_kwargs["lookahead_kappa"] = kappa
+        log.info(f"Using LookaheadGRPOTrainer with per-token advantages (kappa={kappa})")
+    else:
+        trainer_cls = GRPOTrainer
+
+    trainer = trainer_cls(**trainer_kwargs)
 
     log.info(
         f"GRPOTrainer built:\n"
@@ -342,6 +371,53 @@ def _compute_group_tree_advantages(
     return phi_H_per_rollout
 
 
+def _collect_probe_rows(rollout_data: list) -> list:
+    """Every lookahead-probe record attached to this batch's rollouts."""
+    rows: list[dict] = []
+    for rollout in rollout_data:
+        if rollout is None:
+            continue
+        probes = (rollout.tree_metrics or {}).get("lookahead_probes") or []
+        rows.extend(p for p in probes if isinstance(p, dict))
+    return rows
+
+
+def _aggregate_probe_metrics(rollout_data: list) -> dict:
+    """Mean of the lookahead-probe fields over every state measured this batch.
+
+    The probe (posterior/lookahead_probe.py) is attached per rollout by the
+    multi-turn rollout_func. Unlike the legacy rho -- which compares two
+    orderings of the SAME group of trajectories and so cannot move -- these
+    compare the policy's action against counterfactual actions at the state it
+    chose from, which is what section 3.6 actually asks for.
+
+    ``lookahead/regret`` is the headline: rho is binary and saturates, while
+    regret keeps reporting how far the policy's choice sits below the
+    potential-optimal one. ``lookahead/reliable_frac`` reports how often the
+    top two candidates are separated by more than the noise band, i.e. how often
+    a search budget could pay for itself at all.
+    """
+    rows = rollout_data if (rollout_data and isinstance(rollout_data[0], dict)) \
+        else _collect_probe_rows(rollout_data)
+    if not rows:
+        return {}
+    n = float(len(rows))
+
+    def _avg(key: str) -> float:
+        return sum(float(r.get(key, 0.0)) for r in rows) / n
+
+    return {
+        "lookahead/rho": _avg("rho"),
+        "lookahead/regret": _avg("regret"),
+        "lookahead/rank_frac": _avg("rank_frac"),
+        "lookahead/margin": _avg("margin"),
+        "lookahead/sigma": _avg("sigma"),
+        "lookahead/reliable_frac": sum(1.0 for r in rows if r.get("reliable")) / n,
+        "lookahead/advantage": _avg("advantage"),
+        "lookahead/n_states": n,
+    }
+
+
 def _compute_rho_per_group(
     rollout_data: list,
     rewards: list[float],
@@ -399,6 +475,19 @@ def _build_reward_callable(
 
     _call_count = [0]  # mutable counter shared across calls
     use_tree_expansion = bool(rl_cfg.get("use_tree_expansion", False))
+    if use_tree_expansion and not bool(rl_cfg.get("allow_fake_tree", False)):
+        raise ValueError(
+            "rl.use_tree_expansion=true does NOT run a tree search. It computes "
+            "gamma*Phi(s_H^k) - mean_j Phi(s_H^j), a group-relative TERMINAL potential; "
+            "evaluate_tree() is never called from training. Under TRL's "
+            "scale_rewards='group' that is an affine image of the Phi(s_H) the "
+            "lagrangian_potential reward already carries, so enabling it re-weights an "
+            "existing term and adds no lookahead information -- which is why the D=1 "
+            "cell tied its baseline at 12%. For real per-step lookahead use "
+            "rl.lookahead_kappa (per-token advantages, configs/rl/grpo_mt_t8_pertoken.yaml) "
+            "or the lookahead_advantage reward. Set rl.allow_fake_tree=true only to "
+            "reproduce a historical cell."
+        )
     cost_coef = float(rl_cfg.get("cost_coef", 0.1))
 
     def compute_rewards(
@@ -542,6 +631,13 @@ def _build_reward_callable(
             # so it uses global_step and avoids W&B step-conflict drops.
             if rho_state is not None:
                 rho_state["rho"] = rho
+                # Accumulate every probed state since the last log rather than
+                # overwriting. on_log fires every logging_steps steps, so keeping
+                # only the newest batch would throw away ~90% of the measurement
+                # and leave each logged point a single noisy batch.
+                rho_state.setdefault("_probe_rows", []).extend(
+                    _collect_probe_rows(rollout_data)
+                )
 
         return rewards
 
@@ -572,7 +668,18 @@ def _build_grpo_callbacks(wandb_logger, local_logger, cfg, rho_state: Optional[d
                 # Inject rho into the log dict so it shares global_step and
                 # reaches both metrics.jsonl and W&B without step conflicts.
                 rho = rho_state["rho"] if rho_state is not None else 0.0
-                logs_with_rho = {**logs, "rho_tree_agreement": rho}
+                extra: dict = {}
+                if rho_state is not None:
+                    probe_rows = rho_state.pop("_probe_rows", [])
+                    if probe_rows:
+                        extra = _aggregate_probe_metrics(probe_rows)
+                    extra.update({k: v for k, v in rho_state.items()
+                                  if k != "rho" and not k.startswith("_")})
+                # The legacy name is kept only so historical dashboards keep resolving.
+                # It compares two orderings of the SAME group of trajectories, so it is
+                # an identity under tree mode and a 1/K coin flip otherwise, and it
+                # cannot move. lookahead/* is the metric that measures section 3.6's rho.
+                logs_with_rho = {**logs, "rho_tree_agreement_DEPRECATED": rho, **extra}
                 if local_logger is not None:
                     local_logger.log_step(state.global_step, logs_with_rho)
                 if wandb_logger is not None and wandb_logger.is_active:

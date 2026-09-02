@@ -68,6 +68,12 @@ export HF_HUB_OFFLINE=0         # Allow downloading models
 # Avoid HF Xet download race condition when 8 ranks hit the cache simultaneously
 export HF_HUB_DISABLE_XET=1
 
+# Unique rendezvous port per job: a hardcoded port made any two jobs landing
+# on the same node fail instantly with EADDRINUSE (killed T5b, T5c and the
+# first distillation run 11-33 s after launch).
+MASTER_PORT_DERIVED=$(( 20000 + (SLURM_JOB_ID % 20000) ))
+echo "rendezvous port: $MASTER_PORT_DERIVED"
+
 # ─── NCCL configuration for H100 NVLink ──────────────────────
 export NCCL_DEBUG=WARN
 export NCCL_IB_DISABLE=0
@@ -77,6 +83,9 @@ export NCCL_SOCKET_IFNAME=^lo   # Use all non-loopback interfaces
 
 # ─── CUDA configuration ───────────────────────────────────────
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
+# trussme (via DesignBench) imports matplotlib.pyplot; Agg skips GUI-backend
+# probing, ~90s of Lustre stat()s per process on this cluster.
+export MPLBACKEND=Agg
 
 # ─── Create log directories ───────────────────────────────────
 mkdir -p logs/slurm logs/"$RUN_NAME"
@@ -86,7 +95,7 @@ mkdir -p logs/slurm logs/"$RUN_NAME"
 # DeepSpeed ZeRO-2 handles model/gradient/optimizer sharding
 torchrun \
   --nproc_per_node=8 \
-  --master_port=29500 \
+  --master_port="$MASTER_PORT_DERIVED" \
   --master_addr=localhost \
   scripts/train_sft.py \
     model="$MODEL" \
@@ -95,7 +104,7 @@ torchrun \
     parallelism="$PARALLELISM" \
     run_name="$RUN_NAME" \
     logging.wandb_project=designbench-training \
-    "${OVERRIDE_ARGS:-}"
+    ${OVERRIDE_ARGS:-}
 
 echo "============================================================"
 echo "Training completed: $(date)"

@@ -83,6 +83,7 @@ class RLPromptDataset(Dataset):
         max_prompt_len: int = 2048,
         problem_ids: Optional[list[str]] = None,
         repeat: int = 1,
+        problem_weights: Optional[dict] = None,
     ) -> "RLPromptDataset":
         """Build dataset from problem spec JSON files.
 
@@ -93,34 +94,75 @@ class RLPromptDataset(Dataset):
             max_prompt_len: Maximum prompt length.
             problem_ids: Optional filter to specific problem IDs.
             repeat: Repeat each problem N times (for more rollouts per problem).
+            problem_weights: Optional per-problem sampling weights. Under
+                scale_rewards='group' only the ORDER of a group's K rollouts
+                reaches the gradient, so a group whose rollouts are uniformly
+                feasible or uniformly infeasible carries no feasibility signal.
+                Measured on the training split, only 33% of groups come out
+                mixed -- and mixedness is strongly predicted by the initial
+                violation (0.65 for the lowest tercile, 0.03 for the highest).
+                Weighting the repeat count by that prediction roughly doubles the
+                number of informative gradient events per step at no simulator
+                cost. See scripts/group_ordering_divergence.py.
 
         Returns:
             RLPromptDataset.
         """
         problems_dir = Path(problems_dir)
-        problem_files = sorted(problems_dir.glob("auto_problem_*.json"))
-        if not problem_files:
+        if problem_ids:
+            # An explicit id list is authoritative: globbing auto_problem_* first
+            # would silently drop every other problem in the split.
             problem_files = sorted(problems_dir.glob("*.json"))
+        else:
+            problem_files = sorted(problems_dir.glob("auto_problem_*.json"))
+            if not problem_files:
+                problem_files = sorted(problems_dir.glob("*.json"))
 
         log.info(f"Loading {len(problem_files)} problem specs from {problems_dir}")
         prompts = []
+        seen_ids: set[str] = set()
         for pf in problem_files:
             with open(pf) as f:
                 spec = json.load(f)
+            # The directory holds a few files that are not problem specs (e.g.
+            # test_problems.json is a LIST). Globbing "*.json" for an explicit id
+            # list surfaces them, so skip anything that is not a spec, and skip
+            # duplicate problem_ids (two files share auto_problem_000).
+            if not isinstance(spec, dict) or "topology" not in spec:
+                continue
             pid = spec.get("problem_id", pf.stem)
+            if pid in seen_ids:
+                continue
+            seen_ids.add(pid)
             if problem_ids and pid not in problem_ids:
                 continue
             problem_text = _spec_to_problem_text(spec)
             messages = formatter.build_messages(problem_text=problem_text)
             # Build both text (for TRL) and token IDs (kept for reference)
             prompt_text = formatter.apply_template(messages, add_generation_prompt=True, tokenize=False)
-            for _ in range(repeat):
+            n_repeat = repeat
+            if problem_weights:
+                mean_w = sum(problem_weights.values()) / max(len(problem_weights), 1)
+                w = float(problem_weights.get(pid, mean_w))
+                if mean_w > 0:
+                    n_repeat = max(1, int(round(repeat * w / mean_w)))
+            for _ in range(n_repeat):
                 prompts.append({
                     "prompt_text": prompt_text,
                     "problem_id": pid,
                     "problem_spec": spec,
                 })
 
+        if problem_weights:
+            counts: dict[str, int] = {}
+            for item in prompts:
+                counts[item["problem_id"]] = counts.get(item["problem_id"], 0) + 1
+            if counts:
+                log.info(
+                    f"informativeness weighting: repeats range "
+                    f"{min(counts.values())}-{max(counts.values())} across "
+                    f"{len(counts)} problems"
+                )
         log.info(f"RLPromptDataset: {len(prompts)} prompts")
         return cls(prompts=prompts, tokenizer=tokenizer, max_prompt_len=max_prompt_len)
 

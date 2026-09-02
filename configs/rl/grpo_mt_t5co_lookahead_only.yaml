@@ -1,0 +1,59 @@
+# T5co — the innovation ALONE. The sharpest available test of the core claim.
+#
+# T5c carries the counterfactual advantage inside a six-term composite, where it
+# competes with feasibility (1.0), fos_improvement (0.5), grammar (0.1),
+# step_efficiency (0.1) and lagrangian_potential_v2 (1.0). If the per-step
+# lookahead signal is real but modest, that blend can bury it.
+#
+# Here the reward is the per-step counterfactual advantage and nothing else:
+#
+#     R(tau) = sum_t [ Phi_v2(s_{t+1}) - E_c Phi_v2(f(s_t, c)) ]
+#
+# Under TRL's scale_rewards='group' the magnitude cancels, so what reaches the
+# gradient is purely the ORDER this estimator induces over a group's 8 rollouts:
+# which trajectory chose better relative to what was available at each of its
+# states. That is the framework's claim reduced to one term.
+#
+# Paired with T5bo (Phi_v2 alone, same isolation) this gives a clean contrast:
+# terminal potential ordering vs per-step counterfactual ordering.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  # Hydra merges dicts; zero the inherited terms explicitly (defect D5).
+  feasibility: 0.0
+  fos_improvement: 0.0
+  grammar_compliance: 0.0
+  step_efficiency: 0.0
+  lookahead_advantage: 1.0
+
+cost_fn: null
+use_tree_expansion: false
+
+multi_turn: true
+max_turns: 5
+max_turn_tokens: 1536
+gen_batch_chunk: 8
+
+learning_rate: 5.0e-6
+max_steps_train: 100
+num_epochs: 100
+save_steps: 25
+group_size: 8
+temperature: 0.6
+top_p: 0.95
+
+posterior:
+  alpha: 5.0
+  gamma: 1.0
+  tau: 0.05
+  objective_weight: 1.0
+
+# all_steps is REQUIRED: the reward is a sum over probed steps, so a subsampled
+# probe would make it depend on the probe budget rather than on the policy.
+lookahead_probe:
+  enabled: true
+  all_steps: true
+  max_candidates: 48

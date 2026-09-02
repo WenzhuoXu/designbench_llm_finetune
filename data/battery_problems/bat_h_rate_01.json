@@ -1,0 +1,109 @@
+{
+  "problem_id": "bat_h_rate_01",
+  "domain": "battery",
+  "family": "rate_hard",
+  "description": "Li-ion cell design (coarse starting point) charged at 12 A. Tier-2: no single grammar action reaches feasibility; at least two are required.",
+  "operating_conditions": {
+    "charge_current_a": 12.0,
+    "ambient_temperature_k": 298.15,
+    "heat_transfer_coefficient": 10.0,
+    "protocol": [
+      "Rest for 2 min",
+      "Charge at 12 A until 4.2V",
+      "Hold at 4.2V until C/50",
+      "Rest for 30 min"
+    ],
+    "simulator": "pybamm DFN + lumped thermal + partially-reversible plating + solvent-diffusion SEI",
+    "parameter_set": "Chen2020"
+  },
+  "goals": {
+    "max_charge_time": 39.825,
+    "max_temperature": 340.0,
+    "max_plating": 1e-05,
+    "minimum_energy_density": 400.0
+  },
+  "objective": {
+    "key": "charge_time",
+    "sense": "min",
+    "ref": 39.825
+  },
+  "optimization": {
+    "design_params": {
+      "neg_thickness": {
+        "min": 2e-05,
+        "max": 0.0003,
+        "initial": 8.52e-05
+      },
+      "pos_thickness": {
+        "min": 2e-05,
+        "max": 0.0003,
+        "initial": 7.56e-05
+      },
+      "sep_thickness": {
+        "min": 5e-06,
+        "max": 4e-05,
+        "initial": 1.2e-05
+      },
+      "neg_porosity": {
+        "min": 0.15,
+        "max": 0.55,
+        "initial": 0.28
+      },
+      "pos_porosity": {
+        "min": 0.15,
+        "max": 0.55,
+        "initial": 0.335
+      },
+      "neg_radius": {
+        "min": 1e-06,
+        "max": 2e-05,
+        "initial": 1.2e-05
+      },
+      "pos_radius": {
+        "min": 1e-06,
+        "max": 2e-05,
+        "initial": 1.05e-05
+      },
+      "neg_am_fraction": {
+        "min": 0.35,
+        "max": 0.8,
+        "initial": 0.68
+      },
+      "pos_am_fraction": {
+        "min": 0.35,
+        "max": 0.8,
+        "initial": 0.62
+      }
+    }
+  },
+  "scales": {
+    "charge_time": 39.825,
+    "max_temperature": 30.0,
+    "energy_density": 400.0,
+    "max_plating": 1.0
+  },
+  "_metadata": {
+    "tier": 2,
+    "derived_from": "bat_rate_01",
+    "tightened_goal": "max_charge_time",
+    "tightening_fraction": 0.115,
+    "initial_metrics": {
+      "charge_time": 61.529636,
+      "energy_density": 677.727576,
+      "max_temperature": 322.60128,
+      "max_plating": 0.0,
+      "true_capacity": 4.574502
+    },
+    "initial_feasible": false,
+    "initial_violations": [
+      "charge_time=61.53>39.825"
+    ],
+    "n_1step_neighbours_scanned": 52,
+    "n_1step_feasible": 0,
+    "n_2step_probes_scanned": 534,
+    "n_2step_feasible": 31,
+    "best_known_charge_time": 27.974079,
+    "scan_source": "results/battery_ladder/scan_coarse_12A.jsonl",
+    "design_variant": "coarse"
+  }
+}

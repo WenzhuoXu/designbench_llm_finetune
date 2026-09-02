@@ -1,0 +1,71 @@
+# T5c — the innovation itself: per-step counterfactual lookahead advantages.
+#
+# T5b fixed the potential. This adds the estimator the framework was always
+# supposed to be testing, and which no run has ever actually used:
+#
+#     R(tau) += sum_t [ Phi_v2(s_{t+1}) - E_c Phi_v2(f(s_t, c)) ]
+#
+# Every action is credited by how far it beat the MEAN of what was achievable
+# from the state it was taken in, rather than by how far the state itself moved.
+#
+# The previous "tree expansion" cells never ran a search. They computed
+# gamma*Phi(s_H^k) - mean_j Phi(s_H^j) over the K rollouts of a GRPO group,
+# whose baseline is a group constant -- so under TRL's scale_rewards='group' it
+# is an affine image of the Phi(s_H) that lagrangian_potential already carries,
+# and enabling it could only re-weight an existing term. Here the baseline
+# depends on the rollout and the step, so the summed advantage cannot be
+# normalised away.
+#
+# Cost: the candidate successors are simulator calls, ~4 ms each on the truss
+# domain, ~0.13 s per state at 48 candidates against a ~500 s training step.
+# The expensive part of a lookahead is sampling candidate ACTIONS from the LLM;
+# taking them from the simulator's own action space instead makes a dense,
+# every-step lookahead affordable.
+
+defaults:
+  - grpo_truss
+
+reward_fn: composite
+reward_weights:
+  feasibility: 1.0
+  fos_improvement: 0.5
+  grammar_compliance: 0.1
+  step_efficiency: 0.1
+  lagrangian_potential_v2: 1.0   # identical to T5b ...
+  lookahead_advantage: 1.0       # ... plus the counterfactual advantage (the one change)
+
+cost_fn: null
+use_tree_expansion: false        # the old fake-tree path stays off
+
+multi_turn: true
+max_turns: 5
+max_turn_tokens: 1536
+gen_batch_chunk: 8
+
+learning_rate: 5.0e-6
+max_steps_train: 100
+num_epochs: 100
+save_steps: 25
+group_size: 8
+temperature: 0.6
+top_p: 0.95
+
+posterior:
+  alpha: 5.0
+  # gamma = 1.0 for the shaping term. With gamma < 1 the shaping return is
+  # (gamma^H)Phi(s_H) - Phi(s_0), and where Phi < 0 -- i.e. anywhere infeasible --
+  # simply surviving longer raises it: a no-op turn paid +0.25 and a five-turn
+  # stall +1.27 on a typical infeasible truss state, which is a direct reward for
+  # burning the turn budget. At gamma = 1.0 the return is exactly
+  # Phi(s_H) - Phi(s_0): progress only. Turn economy is priced separately by
+  # step_efficiency.
+  gamma: 1.0
+  tau: 0.05
+  objective_weight: 1.0
+
+# all_steps is REQUIRED here: the reward is a sum over probed steps, so a
+# subsampled probe would make it depend on the probe budget, not on the policy.
+lookahead_probe:
+  enabled: true
+  all_steps: true
+  max_candidates: 48

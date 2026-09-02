@@ -44,6 +44,9 @@ export HF_HUB_CACHE="/ocean/projects/mch250030p/wxu7/hf_models"
 export HF_HUB_OFFLINE=0
 export HF_HUB_DISABLE_XET=1
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
+# trussme (via DesignBench) imports matplotlib.pyplot; Agg skips GUI-backend
+# probing, ~90s of Lustre stat()s per process on this cluster.
+export MPLBACKEND=Agg
 
 mkdir -p logs/slurm "results/eval/${RUN_NAME}"
 
@@ -51,6 +54,13 @@ mkdir -p logs/slurm "results/eval/${RUN_NAME}"
 # master-doc §3). Override per-submit: ROLLOUT=single, MAX_PROBLEMS=25, etc.
 ROLLOUT="${ROLLOUT:-multi}"
 MAX_PROBLEMS="${MAX_PROBLEMS:-0}"
+# Held-out discipline: without a split file this evaluates problems GRPO trained on.
+SAMPLE_FLAG=""
+if [ -n "${N_SAMPLES:-}" ]; then SAMPLE_FLAG="--n-samples ${N_SAMPLES} --sample-seed ${SAMPLE_SEED:-0} --batch-size ${BATCH_SIZE:-8}"; fi
+BATCH_FLAG=""
+if [ "${BATCHED:-0}" = "1" ]; then BATCH_FLAG="--batched --batch-size ${BATCH_SIZE:-8}"; fi
+SPLIT_FLAG=""
+if [ -n "${SPLIT_FILE:-}" ]; then SPLIT_FLAG="--split-file ${SPLIT_FILE} --split ${SPLIT:-eval}"; fi
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-1024}"
 MAX_STEPS="${MAX_STEPS:-20}"
 FEW_SHOT_FLAG=""; [ "${FEW_SHOT:-0}" = "1" ] && FEW_SHOT_FLAG="--few-shot"
@@ -59,7 +69,7 @@ EXTRACT_FLAG=""; [ "${EXTRACT_ACTION:-0}" = "1" ] && EXTRACT_FLAG="--extract-act
 python scripts/eval_checkpoint.py \
   --checkpoint "${CHECKPOINT}" \
   --model-config "${MODEL_CONFIG:-configs/model/qwen3_14b.yaml}" \
-  --problems-dir "${DESIGNBENCH_DIR}/data/problems" \
+  --problems-dir "${PROBLEMS_DIR:-${DESIGNBENCH_DIR}/data/problems}" \
   --output-dir "results/eval/${RUN_NAME}" \
   --wandb-project "designbench-training" \
   --wandb-run-name "eval_${RUN_NAME}" \
@@ -68,8 +78,9 @@ python scripts/eval_checkpoint.py \
   --max-steps "${MAX_STEPS}" \
   --max-new-tokens "${MAX_NEW_TOKENS}" \
   --max-problems "${MAX_PROBLEMS}" \
+  ${SPLIT_FLAG} ${BATCH_FLAG} ${SAMPLE_FLAG} \
   ${FEW_SHOT_FLAG} ${EXTRACT_FLAG} \
-  --temperature 0.0
+  --temperature "${TEMPERATURE:-0.0}"
 
 echo "============================================================"
 echo "Evaluation completed: $(date)"
