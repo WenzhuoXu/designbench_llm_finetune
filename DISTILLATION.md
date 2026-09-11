@@ -23,6 +23,29 @@ Everything below is runnable as written on Bridges-2 from this directory with
 | `configs/model/qwen38_27b.yaml` | The target model and its LoRA configuration. |
 | `slurm/` | Batch scripts. CPU work goes to `RM-small -q low`; training and serving to `GPU`. |
 
+## Getting the data
+
+Code is in git; the corpus and the problem sets are not. They live in the
+project's shared folder, readable by anyone in `mch250030p`:
+
+```
+/ocean/projects/mch250030p/shared/designbench/
+  problems/problems_hard/          580 problems -- THE EVALUATION SET
+  problems/problems_gen_{c..g}/    49,889 minted training problems
+  corpus_v2/<domain>/              sft + value + pref, five domains
+  tiers/                           what training actually reads
+```
+
+Symlink it into your checkout rather than copying -- the 405 GB storage quota is
+pooled across every user in the project, so a second copy costs the group 4 GB
+for nothing. See the README in that folder for the exact commands.
+
+`problems_hard` is the one irreplaceable item: it is in neither repo, it is the
+set every measured baseline below is anchored to, and none of its 580 instances
+starts feasible. The minted problems regenerate from `slurm/mint_truss.sbatch`
+with seeds 20260911 and 20260921-24; the corpus and tiers regenerate from the
+commands below.
+
 ## The pipeline
 
 ```bash
