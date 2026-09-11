@@ -1,0 +1,44 @@
+# Qwen3.8-27B -- the distillation target.
+#
+# Dense 26.4B (not one of the A3B mixtures), the newest Qwen dense model in the
+# 20-30B band. Architecture is qwen3_5: 48 linear-attention layers interleaved
+# with 16 full-attention layers at a 3:1 ratio, 248,320-token vocabulary. It
+# ships as Qwen3_5ForConditionalGeneration -- a multimodal wrapper whose text
+# tower sits under config.text_config -- so the loader resolves the declared
+# architecture instead of assuming AutoModelForCausalLM.
+#
+# attn_implementation is sdpa, not flash_attention_2: FA2 would cover only the
+# 16 full-attention layers, and the linear-attention layers take their own path.
+#
+# LoRA rather than full fine-tuning: 26.4B of Adam state is ~422 GB against the
+# node's 640 GB, which fits but leaves nothing for activations once the
+# 248k-vocab logits are materialised (~4 GB per 4k-token sequence in fp32).
+defaults:
+  - base
+
+model_name_or_path: Qwen/Qwen3.8-27B
+thinking_mode: true
+think_token: "<think>"
+attn_implementation: sdpa
+torch_dtype: bfloat16
+
+# Must stay null for DeepSpeed -- device_map=auto fights ZeRO sharding.
+device_map: null
+
+use_lora: true
+lora:
+  r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  bias: none
+  # A REGEX over full module paths, anchored on the language model.
+  #
+  # The repo's default leaf-name list (q/k/v/o_proj + gate/up/down_proj) reaches
+  # only 72% of this model's Linear parameters: it matches the 16 full-attention
+  # layers and the MLPs, and leaves all 48 linear-attention layers frozen, since
+  # those use in_proj_qkv / in_proj_z / in_proj_a / in_proj_b / out_proj.
+  #
+  # Anchoring on model.language_model also excludes the vision tower, whose
+  # blocks use the leaf names qkv, proj, linear_fc1 and linear_fc2. This corpus
+  # is text only, so adapting the visual encoder would spend rank on nothing.
+  target_modules: "model\\.language_model\\.layers\\.\\d+\\.(linear_attn\\.(in_proj_qkv|in_proj_z|in_proj_a|in_proj_b|out_proj)|self_attn\\.(q_proj|k_proj|v_proj|o_proj)|mlp\\.(gate_proj|up_proj|down_proj))"

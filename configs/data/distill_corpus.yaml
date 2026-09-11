@@ -1,0 +1,35 @@
+# SFT on the Phi-argmax search's decisions across five design domains.
+#
+# The corpus is built by scripts/gen_corpus.py and split by scripts/make_tiers.py.
+# Every assistant turn is a tool call the search actually chose over scored
+# alternatives on a state the search actually reached, and every trajectory has
+# been replayed end to end -- the recorded actions reproduce a feasible design
+# from the recorded start state, or the trajectory is dropped.
+#
+# Balance is by turns, not by trajectories, and it is exact: the per-domain
+# budget is capped at whatever truss (the only domain with finite problem supply)
+# yields, so no domain dominates the gradient.
+#
+# The catalogue domain appears in NO training tier. It is the transfer test:
+# discrete section choices from a catalogue, an action vocabulary the model is
+# never supervised on. dev_seen is the ordinary generalisation check -- unseen
+# instances of the four training domains.
+#
+# target_fn: assistant_only -- the corpus needs no reformatting. Messages are
+# already emitted in the serving format (system = problem + tool vocabulary,
+# user = rendered state, assistant = justification + <tool>CALL(...)</tool>),
+# and the chat formatter masks everything but the assistant spans.
+#
+# Set train_jsonl to one of: train_1k / train_10k / train_100k / train_all
+# to walk the scaling curve. The tiers are nested, so a difference between two
+# points is data quantity and nothing else.
+
+data_format: jsonl
+
+train_jsonl: /ocean/projects/mch250030p/wxu7/llm_finetune/data/tiers/train_all.jsonl
+dev_jsonl: /ocean/projects/mch250030p/wxu7/llm_finetune/data/tiers/dev_seen.jsonl
+
+target_fn: assistant_only
+
+min_trace_quality: 0.5
+max_seq_len: 8192

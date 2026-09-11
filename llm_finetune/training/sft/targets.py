@@ -22,6 +22,7 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import re
 from abc import ABC, abstractmethod
 
@@ -29,6 +30,8 @@ import torch
 from transformers import PreTrainedTokenizer
 
 from llm_finetune.data.grammar import find_actions, validate_action
+
+log = logging.getLogger(__name__)
 
 
 class SFTTarget(ABC):
@@ -98,6 +101,72 @@ class FullSequenceTarget(SFTTarget):
         tokenizer: PreTrainedTokenizer,
     ) -> torch.Tensor:
         return (labels != -100).long()
+
+    def transform_example(self, example: dict, tokenizer: PreTrainedTokenizer) -> dict:
+        return example
+
+
+class AssistantOnlyTarget(SFTTarget):
+    """Supervise the model's own turns and nothing else.
+
+    The distillation corpus alternates rendered state (user) with the search's
+    chosen tool call (assistant). Supervising the state as well would train the
+    model to predict simulator output it will never be asked to produce, and at
+    serving time is handed for free -- roughly four fifths of the tokens in this
+    corpus. Worse, a model rewarded for continuing an observation learns to
+    invent one; the failure mode is a confident hallucinated margin table.
+
+    The mask is read off ChatML role markers, so it needs a template that emits
+    <|im_start|>role ... <|im_end|> (Qwen, Phi, DeepSeek-R1-Distill). On a
+    template without them the mask falls back to every non-masked token and says
+    so, rather than silently supervising the wrong spans.
+    """
+
+    _warned = False
+
+    def get_loss_mask(
+        self,
+        input_ids: torch.Tensor,
+        labels: torch.Tensor,
+        tokenizer: PreTrainedTokenizer,
+    ) -> torch.Tensor:
+        valid = (labels != -100).long()
+        start_id = tokenizer.convert_tokens_to_ids("<|im_start|>")
+        end_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
+        unk = getattr(tokenizer, "unk_token_id", None)
+        if start_id is None or end_id is None or start_id == unk or end_id == unk:
+            if not AssistantOnlyTarget._warned:
+                log.warning(
+                    "assistant_only: tokenizer has no ChatML role markers; "
+                    "falling back to full-sequence supervision"
+                )
+                AssistantOnlyTarget._warned = True
+            return valid
+
+        ids = input_ids.tolist() if hasattr(input_ids, "tolist") else list(input_ids)
+        mask = [0] * len(ids)
+        i = 0
+        while i < len(ids):
+            if ids[i] != start_id:
+                i += 1
+                continue
+            # Role sits between the marker and the newline that opens the body.
+            j = i + 1
+            role = ""
+            while j < len(ids) and "\n" not in role and j - i < 8:
+                role += tokenizer.decode([ids[j]])
+                j += 1
+            k = j
+            while k < len(ids) and ids[k] != end_id:
+                k += 1
+            if role.strip().startswith("assistant"):
+                # Include <|im_end|>: the model has to learn where to stop.
+                for t in range(j, min(k + 1, len(ids))):
+                    mask[t] = 1
+            i = k + 1
+
+        out = torch.tensor(mask, dtype=torch.long, device=getattr(input_ids, "device", None))
+        return out * valid
 
     def transform_example(self, example: dict, tokenizer: PreTrainedTokenizer) -> dict:
         return example
@@ -337,6 +406,7 @@ TARGET_REGISTRY: dict[str, type[SFTTarget]] = {
     "gold_curriculum_warmstart": GoldCurriculumWarmstartTarget,
     "warmstart_reasoning": WarmstartReasoningTarget,
     "full_sequence": FullSequenceTarget,
+    "assistant_only": AssistantOnlyTarget,
 }
 
 

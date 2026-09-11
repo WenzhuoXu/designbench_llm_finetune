@@ -1,0 +1,24 @@
+# SFT for the distillation scaling curve.
+#
+# One config across all four tiers, so the only thing that differs between
+# points on the curve is how much data the run sees. Step counts differ by tier
+# by construction -- that IS the independent variable -- so checkpoints are
+# compared at matched EVALUATION budget, never at matched step count.
+#
+# learning_rate 1e-4, not the base config's 2e-5: these runs train LoRA adapters
+# on Qwen3.8-27B, and adapter rank-64 updates need a rate roughly an order of
+# magnitude above full fine-tuning to move at all. A full-FT run off this config
+# would need that lowered again.
+#
+# num_epochs 2 rather than base's 3: the tiers reach 129k trajectories, where a
+# third pass over a deterministic teacher buys memorisation more than skill.
+defaults:
+  - base
+
+learning_rate: 1.0e-4
+lr_scheduler: cosine
+warmup_ratio: 0.03
+max_grad_norm: 1.0
+num_epochs: 2
+gradient_accumulation_steps: 8
+save_steps: 500

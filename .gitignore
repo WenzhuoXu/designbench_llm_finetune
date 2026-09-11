@@ -44,3 +44,23 @@ figures/
 # Stray output files
 output.file
 *.file
+
+# ---- distillation pipeline: generated bulk, all regenerable ----------------
+# The corpus is 2.5 GB and rebuilds from scripts/gen_corpus.py; the tiers rebuild
+# from scripts/make_tiers.py. Neither belongs in git.
+data/corpus*/
+data/tiers/
+data/expert/
+data/problems_gen*/
+
+# Measurement outputs are 324 MB of per-episode JSONL. Keep only the two small
+# summaries the report figures are generated from.
+results/*
+!results/report_data.json
+!results/token_budget.json
+analysis_out/
+figures/
+
+# Editor and pipeline scratch
+*.bak
+*.orig

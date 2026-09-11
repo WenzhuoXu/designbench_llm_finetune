@@ -156,8 +156,24 @@ class WarmstartTransform:
         return {"role": "assistant", "content": new_content}
 
     def _extract_action(self, think_content: str) -> Optional[str]:
-        """Extract grammar action line from shallow <think> content."""
-        return extract_action(think_content)
+        """Extract the grammar action from shallow <think> content.
+
+        Expert trajectories carry compound moves joined by ' ; ' -- a fully-stressed pass is
+        one rescale per member, eleven parts on average. ``extract_action`` returns only the
+        first valid one, which would train the model to make a fraction of the move the
+        expert made. Every valid part is kept and rejoined; a single-action turn is
+        unaffected.
+        """
+        from llm_finetune.data.grammar import find_actions, validate_action
+
+        parts = []
+        for candidate in find_actions(think_content):
+            result = validate_action(candidate)
+            if result.is_valid and result.action not in parts:
+                parts.append(result.action)
+        if not parts:
+            return extract_action(think_content)
+        return " ; ".join(parts)
 
     def _extract_description(self, think_content: str) -> str:
         """Extract human-readable description from shallow <think> content.

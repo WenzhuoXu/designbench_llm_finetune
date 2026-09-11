@@ -151,9 +151,38 @@ def _load_model(model_id: str, cfg: DictConfig, cache_dir: str) -> AutoModelForC
         model_kwargs["device_map"] = device_map
 
     log.info(f"attn_implementation={attn_impl}, dtype={torch_dtype}, device_map={device_map}")
-    model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
+    model = _model_class(model_id, cache_dir, cfg).from_pretrained(**model_kwargs)
 
     return model
+
+
+def _model_class(model_id: str, cache_dir: str, cfg: DictConfig):
+    """Resolve the class the checkpoint actually declares.
+
+    AutoModelForCausalLM is right for a plain decoder, but newer Qwen releases
+    (qwen3_5, which Qwen3.6-27B and Qwen3.8-27B both use) ship as multimodal
+    wrappers -- Qwen3_5ForConditionalGeneration, with the text tower under
+    config.text_config. Auto hands the outer config to the text model and dies
+    on a missing vocab_size. Honour the declared architecture when transformers
+    exposes it, and fall back to Auto otherwise.
+    """
+    import transformers
+    from transformers import AutoConfig
+
+    try:
+        conf = AutoConfig.from_pretrained(
+            model_id, cache_dir=cache_dir,
+            trust_remote_code=cfg.get("trust_remote_code", True))
+        arch = (getattr(conf, "architectures", None) or [None])[0]
+    except Exception:
+        arch = None
+    if arch and arch != "AutoModelForCausalLM":
+        cls = getattr(transformers, arch, None)
+        if cls is not None:
+            log.info(f"loading declared architecture {arch}")
+            return cls
+        log.warning(f"config declares {arch}, not found in transformers; using AutoModelForCausalLM")
+    return AutoModelForCausalLM
 
 
 def _apply_lora(model: torch.nn.Module, lora_cfg: DictConfig) -> torch.nn.Module:
@@ -163,8 +192,14 @@ def _apply_lora(model: torch.nn.Module, lora_cfg: DictConfig) -> torch.nn.Module
     except ImportError:
         raise ImportError("peft not installed. Run: pip install peft")
 
-    # Default target modules for common architectures
-    target_modules = list(lora_cfg.get("target_modules", ["q_proj", "v_proj"]))
+    # A string is a REGEX matched against full module paths, not a list of names.
+    # That distinction matters on multimodal checkpoints: Qwen3.8-27B carries a
+    # vision tower whose blocks use the leaf names qkv/proj/linear_fc1/linear_fc2,
+    # and a bare name list would attach adapters to it even though this corpus is
+    # text only. list() on a string would also silently shatter it into single
+    # characters, which PEFT would then match against nothing.
+    tm = lora_cfg.get("target_modules", ["q_proj", "v_proj"])
+    target_modules = tm if isinstance(tm, str) else list(tm)
 
     lora_config = LoraConfig(
         r=lora_cfg.get("r", 64),
@@ -176,6 +211,14 @@ def _apply_lora(model: torch.nn.Module, lora_cfg: DictConfig) -> torch.nn.Module
     )
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
+    # Report what actually got adapted. A target list that silently matches
+    # nothing still "succeeds" and trains a model that cannot learn.
+    hit = [n for n, _ in model.named_modules() if n.endswith("lora_A.default")]
+    log.info(f"LoRA attached to {len(hit)} modules; first: {hit[:3]}")
+    if not hit:
+        raise RuntimeError(
+            f"LoRA target_modules matched nothing: {target_modules!r}. "
+            "Check the module names for this architecture.")
     log.info(f"LoRA applied: r={lora_cfg.get('r', 64)}, alpha={lora_cfg.get('lora_alpha', 128)}")
     return model
 

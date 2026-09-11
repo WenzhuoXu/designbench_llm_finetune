@@ -239,9 +239,13 @@ def _validate_move_joint(args: list[str], problem_or_state: Optional[dict]) -> s
         return "move_joint_arity"
     if not _is_int(args[0]):
         return "joint_id_not_int"
-    if _parse_float_list(args[1], expected_len=2) is None:
+    # trussme's executor takes 3-vectors; this validator demanded 2 and so rejected every
+    # MOVE_JOINT the executor accepts. Accept either, since the executor is the authority.
+    if (_parse_float_list(args[1], expected_len=2) is None
+            and _parse_float_list(args[1], expected_len=3) is None):
         return "old_position_invalid"
-    if _parse_float_list(args[2], expected_len=2) is None:
+    if (_parse_float_list(args[2], expected_len=2) is None
+            and _parse_float_list(args[2], expected_len=3) is None):
         return "new_position_invalid"
     return ""
 
