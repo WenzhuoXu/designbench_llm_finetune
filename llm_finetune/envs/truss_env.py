@@ -35,6 +35,7 @@ import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -47,7 +48,8 @@ if TYPE_CHECKING:
     from llm_finetune.training.rl.rewards import RolloutResult
 
 # DesignBench path for FEA imports
-DESIGNBENCH_PATH = Path("/ocean/projects/mch250030p/wxu7/DesignBench")
+DESIGNBENCH_PATH = Path(os.environ.get(
+    "DESIGNBENCH_ROOT", Path(__file__).resolve().parents[2].parent / "DesignBench"))
 
 @dataclass
 class StepResult:

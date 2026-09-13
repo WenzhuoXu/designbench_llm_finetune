@@ -20,11 +20,12 @@ Appended here rather than edited into the class bodies so the existing interface
 and this addition can be read on its own.
 """
 import sys
+import os
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
-for p in (str(HERE), "/ocean/projects/mch250030p/wxu7/llm_finetune",
-          "/ocean/projects/mch250030p/wxu7/llm_finetune/scripts",
-          "/ocean/projects/mch250030p/wxu7/DesignBench"):
+_PROJECT = HERE.parent
+_DESIGNBENCH = Path(os.environ.get("DESIGNBENCH_ROOT", _PROJECT.parent / "DesignBench"))
+for p in (str(HERE), str(_PROJECT), str(_PROJECT / "scripts"), str(_DESIGNBENCH)):
     if p not in sys.path:
         sys.path.insert(0, p)
 from da_domain import Domain, TrussDomain

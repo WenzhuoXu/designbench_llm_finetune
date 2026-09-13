@@ -26,8 +26,10 @@ import os, sys, json, math, random, zlib, argparse, time
 from multiprocessing import Pool
 from pathlib import Path
 from collections import Counter
-PROJECT = Path("/ocean/projects/mch250030p/wxu7/llm_finetune")
-DESIGNBENCH = Path("/ocean/projects/mch250030p/wxu7/DesignBench")
+# Repo root from this file's location; DesignBench is a sibling by default
+# (the Bridges-2 layout) and can be pointed elsewhere with DESIGNBENCH_ROOT.
+PROJECT = Path(__file__).resolve().parents[1]
+DESIGNBENCH = Path(os.environ.get("DESIGNBENCH_ROOT", PROJECT.parent / "DesignBench"))
 for p in (str(PROJECT), str(DESIGNBENCH), str(PROJECT / "design_agent"), str(PROJECT / "scripts")):
     if p not in sys.path:
         sys.path.insert(0, p)

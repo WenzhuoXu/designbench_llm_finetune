@@ -10,10 +10,13 @@ parameters, no per-element margin vector).
 """
 from __future__ import annotations
 import copy, math, sys
+import os
 from pathlib import Path
 
-DESIGNBENCH = Path("/ocean/projects/mch250030p/wxu7/DesignBench")
-PROJECT = Path("/ocean/projects/mch250030p/wxu7/llm_finetune")
+# Repo root from this file's location; DesignBench is a sibling by default
+# (the Bridges-2 layout) and can be pointed elsewhere with DESIGNBENCH_ROOT.
+PROJECT = Path(__file__).resolve().parents[1]
+DESIGNBENCH = Path(os.environ.get("DESIGNBENCH_ROOT", PROJECT.parent / "DesignBench"))
 for p in (str(PROJECT), str(DESIGNBENCH)):
     if p not in sys.path:
         sys.path.insert(0, p)
