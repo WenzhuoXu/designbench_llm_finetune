@@ -156,7 +156,14 @@ class Client:
         self._lock = threading.Lock()
 
     def __call__(self, messages):
-        kw = dict(model=self.model, messages=messages, max_completion_tokens=self.max_tokens)
+        kw = dict(model=self.model, messages=messages)
+        # max_tokens=0 means "do not cap": the server then spends whatever context
+        # the prompt leaves. A fixed cap is not neutral for a reasoning model.
+        # At 512 tokens the un-finetuned Qwen3.8-27B was cut off inside <think> on
+        # every one of 36 calls and never reached a tool call, so the arm scored 0
+        # for a reason unrelated to design ability.
+        if self.max_tokens:
+            kw["max_completion_tokens"] = self.max_tokens
         if self.temperature is not None:
             kw["temperature"] = self.temperature
         r = None
@@ -342,6 +349,9 @@ if __name__ == "__main__":
                     help="route the model arm to the OpenAI API instead of a local server")
     ap.add_argument("--token-file", default=str(Path.home() / ".openai_token"))
     ap.add_argument("--temperature", type=float, default=0.0)
+    ap.add_argument("--max-tokens", type=int, default=0,
+                    help="completion cap per model call; 0 lets the server use the "
+                         "remaining context. Every model arm gets the same cap.")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--out", default=str(PROJECT / "results/eval_distilled"))
     a = ap.parse_args()
@@ -361,13 +371,13 @@ if __name__ == "__main__":
     if "model" in arms:
         if a.openai:
             clients["model"] = Client(a.model, token_file=a.token_file,
-                                      temperature=a.temperature)
+                                      temperature=a.temperature, max_tokens=a.max_tokens)
         else:
             clients["model"] = Client(a.model, base_url=a.base_url,
-                                      temperature=a.temperature)
+                                      temperature=a.temperature, max_tokens=a.max_tokens)
     if "base" in arms:
         clients["base"] = Client(a.base_model, base_url=a.base_url,
-                                 temperature=a.temperature)
+                                 temperature=a.temperature, max_tokens=a.max_tokens)
 
     jobs = [(k, arm) for arm in arms for k in keys]
     rows = []
