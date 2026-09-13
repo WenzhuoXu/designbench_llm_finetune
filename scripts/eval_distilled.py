@@ -147,7 +147,15 @@ class Client:
             key = Path(token_file).expanduser().read_text().strip()
         else:
             key = "EMPTY"          # vLLM ignores it
-        self.cli = OpenAI(api_key=key, base_url=base_url) if base_url else OpenAI(api_key=key)
+        # The SDK defaults to a 600 s request timeout and retries timed-out requests
+        # on its own. A thinking model reasoning 10k+ tokens while eight requests
+        # share one GPU runs past that, and the SDK would silently throw the work
+        # away and start over. Six hours is a guard against a dead connection, not
+        # a limit on the model. Retries stay with the loop in __call__.
+        opts = dict(api_key=key, timeout=6 * 3600, max_retries=0)
+        if base_url:
+            opts["base_url"] = base_url
+        self.cli = OpenAI(**opts)
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
