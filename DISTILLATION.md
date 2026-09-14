@@ -6,8 +6,9 @@ the distilled model is the deliverable. The claim under test is that a search
 costing 137–726 simulations per problem can be distilled into a model that
 reaches comparable feasibility in roughly eight model calls.
 
-Everything below is runnable as written on Bridges-2 from this directory with
-`conda activate my_env`.
+Minting, corpus building and training run on Bridges-2 from this directory with
+`conda activate my_env`. Evaluation runs on DRC: Bridges-2 GPU hours are for
+training only.
 
 ---
 
@@ -63,12 +64,19 @@ python scripts/make_tiers.py --tiers 1000,10000,100000,0
 # 4. Train. One tier per invocation; everything else is held fixed.
 bash scripts/launch_curve.sh 1k          # then 10k, 100k, all
 
-# 5. Evaluate a checkpoint against the in-script controls.
-MODEL_PATH=<checkpoint> ARMS=model,base,fsd,native,search \
-  sbatch slurm/eval_vllm.sbatch
+# 5. Evaluate on DRC. Serve the adapter directory as training saved it, then run
+#    every arm in ONE job so the tests are paired (see "Where things stand").
+#    serve.sh is /home/wxu/designbench/serve.sh on DRC.
+GPUS=4 TP=1 EXTRA="--enable-lora --max-lora-rank 64 --lora-modules d27_1k=<adapter dir>" \
+  bash serve.sh &
+python scripts/eval_distilled.py --domain truss --n 60 --calls 8 \
+  --arms model,base,fsd,native,search --model d27_1k --base-model Qwen/Qwen3.8-27B \
+  --base-url http://localhost:8000/v1 --max-tokens 0 --workers 8
 ```
 
 ## Where things stand
+
+### The teacher against its controls (Bridges-2)
 
 Measured in `scripts/eval_distilled.py`, n = 60 per domain, identical problems
 and identical action space for every arm, paired exact sign tests:
@@ -84,7 +92,48 @@ and identical action space for every arm, paired exact sign tests:
 242–0 against the generic control across 300 problems; the search loses no
 problem to any control in any domain. Corpus: 232,373 supervised turns over
 129,179 trajectories, balanced to exactly 0.250 per domain, 571.7M tokens at two
-epochs. The training runs themselves have not started — they are queued.
+epochs.
+
+### The un-finetuned model: the bar a checkpoint has to clear (DRC, 2026-09-14)
+
+Qwen3.8-27B with no fine-tuning, on the 60 truss problems, with the system prompt
+training uses (commit 9fa83d7). Served by vLLM with no completion cap and its
+reasoning split out, it gets the same eight calls and the same tools as every other
+arm. All arms ran in one job, so the tests are paired.
+
+| arm | feasible | rate | analyses per problem, mean / p90 | model calls per problem |
+|---|---|---|---|---|
+| Qwen3.8-27B, not fine-tuned | 25 / 60 | 0.4167 | 6.8 / 9 | 6.1 |
+| generic sizing pass | 28 / 60 | 0.4667 | 6.8 / 9 | — |
+| search (teacher) | 53 / 60 | 0.8833 | 494.8 / 1,896 | — |
+
+- **Base against the sizing pass:** 2 wins, 5 losses, 53 ties, p = 0.45. The
+  un-finetuned model does no better than the generic sizing rule: it ties it on 53
+  of 60 problems and spends the same number of analyses.
+- **Base against the search:** 0 wins, 28 losses, p = 7.5e-9. Those 28 problems are
+  what distillation has to recover.
+- **Reliability:** of 368 base calls, 11 did not parse and 10 named a move that
+  could not be applied.
+- **Cost:** 3.71M tokens (1.18M prompt, 2.53M completion), about 62k per problem
+  and 6.9k completion tokens per call.
+
+Rows and log: `/ocean/projects/mch250030p/shared/designbench/results/base_control_truss_20260914/`.
+An earlier run with the previous, leaked worked example gave 0.4500; it is
+superseded and should not be cited.
+
+**Compare a checkpoint only against a search arm from the same machine and job.**
+On DRC the search solves 53 / 60, against 54 / 60 on Bridges-2. Seeds now match
+across machines (they used to hash the checkout path; fixed in 8366dac), and each
+machine is deterministic: reruns and worker counts give identical rows. What
+remains is the machine itself (numpy 2.2 on Intel versus 2.4 on AMD) resolving
+near-ties differently, which changes the search path on 11 problems and the
+outcome on 3.
+
+### Training
+
+`d27_1k` is queued on Bridges-2 (8 × H100, 2 h 30 min wall clock, `my_env`, so the
+slow linear-attention path). It checkpoints every 10% of the run. No checkpoint
+exists yet; 10k, 100k and all follow once 1k has shown real throughput.
 
 ## Training environment with the linear-attention fast path
 

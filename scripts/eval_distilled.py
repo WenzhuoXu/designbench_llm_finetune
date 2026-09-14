@@ -346,7 +346,7 @@ if __name__ == "__main__":
                     help="simulation cap for the search_k arm")
     ap.add_argument("--arms", default="model,base,fsd,search")
     ap.add_argument("--model", default=None, help="served model name or checkpoint path")
-    ap.add_argument("--base-model", default="Qwen/Qwen3-14B")
+    ap.add_argument("--base-model", default="Qwen/Qwen3.8-27B")
     ap.add_argument("--base-url", default="http://localhost:8000/v1")
     ap.add_argument("--openai", action="store_true",
                     help="route the model arm to the OpenAI API instead of a local server")
