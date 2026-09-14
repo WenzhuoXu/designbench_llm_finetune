@@ -85,13 +85,19 @@ def make(domain, key):
 # "<SCALE ids=[E4,E6] factor=1.3></SCALE>". This teaches the wire format only --
 # no hint about which move to choose -- and it is identical for every arm, so
 # the comparison stays a comparison of design ability rather than of format luck.
+# The worked example is one teacher turn copied verbatim from a training problem
+# (problems_gen_c/genc_problem_0566: the first SCALE turn in corpus order that enlarges
+# a member set containing its worst member). The previous example was lifted from a
+# model's reply on problems_hard/hard_problem_0000 and was close to that evaluation
+# problem's answer. This one matches no problems_hard instance's first search move,
+# member set, or worst member.
 FORMAT_HELP = (
     "Reply with a one-line reason, then exactly one tool call in <tool></tool> tags.\n"
     "Write the call as NAME(arg=value, ...) inside the tags. Element ids are bare\n"
-    "integers: the member shown as E4 in the table is id 4.\n\n"
+    "integers: the member shown as E13 in the table is id 13.\n\n"
     "Example reply:\n"
-    "E6 is worst at margin 0.62; enlarging it and E4 lifts both above requirement.\n"
-    "<tool>SCALE(ids=[4, 6], factor=1.30)</tool>")
+    "member E13 is worst at margin 0.388; governed by yielding at 0.388; budget at 0.95 of the limit.\n"
+    "<tool>SCALE(factor=1.223, ids=[7, 13, 14])</tool>")
 
 
 def system_prompt(dom, st):

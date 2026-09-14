@@ -21,4 +21,7 @@ warmup_ratio: 0.03
 max_grad_norm: 1.0
 num_epochs: 2
 gradient_accumulation_steps: 8
-save_steps: 500
+# save_steps below 1 is a fraction of total steps: a checkpoint every 10% of the run.
+# At 500 the 1k tier (18 optimizer steps) and 10k tier (175) would save only at the
+# end, so a run that hits its wall-clock limit would leave nothing to evaluate.
+save_steps: 0.1

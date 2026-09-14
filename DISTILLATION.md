@@ -130,7 +130,14 @@ These are all failures we hit, not hypotheticals.
   `<tool>NAME(args)</tool>` example, an un-finetuned model emits
   `<SCALE ids=[E4,E6] factor=1.3></SCALE>` and parses at 0 of 12 calls. The
   stored corpus rows carry the same prompt; keep them in sync or you are
-  measuring format compliance rather than design ability.
+  measuring format compliance rather than design ability
+  (`scripts/fix_corpus_prompt.py` rewrites stored rows exactly).
+- **The worked example must come from training data.** The first one was lifted
+  from a model's reply on `hard_problem_0000` and was close to that evaluation
+  problem's answer. The current one is a teacher turn copied verbatim from
+  `problems_gen_c/genc_problem_0566`. It was checked against the search's first
+  move on all 60 evaluation problems: no identical call, no matching tool and
+  member set, no matching worst member. Any change to it needs the same check.
 - **LoRA targets must stay a regex.** `qwen3_5` interleaves 48 linear-attention
   layers with 16 full-attention layers. The conventional leaf-name list
   (`q/k/v/o_proj` + MLP) reaches only 72% of linear parameters and freezes all 48
