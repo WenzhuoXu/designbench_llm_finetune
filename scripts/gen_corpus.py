@@ -48,8 +48,20 @@ TIE_FRAC = 0.05
 DOMAINS = ("truss", "synth", "pipe", "catalogue", "cases")
 
 
+# Truss problems are keyed by file path, and the corpus and every cited baseline were
+# generated with DesignBench checked out at SEED_ROOT. Seeding from the raw path gave
+# any other checkout a different random stream for the same problem, so the local
+# root is rewritten to SEED_ROOT first: the seed depends on the problem alone, and
+# every seed at SEED_ROOT is unchanged.
+SEED_ROOT = "/ocean/projects/mch250030p/wxu7/DesignBench"
+
+
 def seed_of(x):
-    return zlib.crc32(str(x).encode()) & 0xffffffff
+    s, root = str(x), str(DESIGNBENCH)
+    i = s.find(root)
+    if i >= 0:
+        s = s[:i] + SEED_ROOT + s[i + len(root):].replace(os.sep, "/")
+    return zlib.crc32(s.encode()) & 0xffffffff
 
 
 def make(domain, key):

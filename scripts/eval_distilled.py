@@ -37,7 +37,6 @@ import random
 import sys
 import threading
 import time
-import zlib
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -70,7 +69,7 @@ import da_meta      # noqa: F401  per-domain nouns and column headers
 import da_serial as S
 from da_search import size_pass, rollout
 from da_search3 import apply_tool
-from gen_corpus import HORIZON, POOL, make, run_instance, system_prompt
+from gen_corpus import HORIZON, POOL, make, run_instance, seed_of, system_prompt
 from probe26_presentation import sign_test
 
 ARMS = ("model", "base", "fsd", "native", "search", "search_k")
@@ -126,10 +125,6 @@ NATIVE_HEURISTIC = {
     "catalogue": ("CATALOGUE_PASS", {"margin": 1.05}),
     "cases": ("SIZE_ENVELOPE", {"margin": 1.05}),
 }
-
-
-def seed_of(x):
-    return zlib.crc32(str(x).encode()) & 0xFFFFFFFF
 
 
 # ------------------------------------------------------------------ model client
