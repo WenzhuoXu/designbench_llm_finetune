@@ -86,6 +86,39 @@ problem to any control in any domain. Corpus: 232,373 supervised turns over
 129,179 trajectories, balanced to exactly 0.250 per domain, 571.7M tokens at two
 epochs. The training runs themselves have not started — they are queued.
 
+## Training environment with the linear-attention fast path
+
+`my_env` (torch 2.4) cannot load `flash-linear-attention` or `causal-conv1d`, so
+48 of the 64 Qwen3.8 layers train through transformers' pure-torch delta rule.
+`/ocean/projects/mch250030p/wxu7/envs/d27_env` is the same package set on torch
+2.9.1+cu128 with `flash-linear-attention` 0.5.2 and `causal-conv1d` 1.7.0 built
+from source. `build_d27_env.sh`, `fix_causal_conv1d.sh` and `verify_d27_env.py`
+sit beside it; `d27_env_freeze.txt` is the exact result. Transformers picks each
+kernel independently, so the delta rule (the expensive part) is fast even if
+the convolution kernel is missing. Throughput on H100 has not been measured.
+
+## Serving a LoRA checkpoint (DRC)
+
+Serve the adapter directory as saved by training; do not merge. A merged 27B
+checkpoint is 54 GB and DRC has under 30 GB free. `serve.sh` passes extra flags
+through `EXTRA`:
+
+```bash
+GPUS=4 TP=1 EXTRA="--enable-lora --max-lora-rank 64 --max-loras 4 --lora-modules d27_1k=/path/to/adapter" bash serve.sh
+```
+
+LoRA costs KV capacity: 437k tokens instead of 513k at `UTIL=0.90`. Request the
+adapter by its `--lora-modules` name.
+
+This was verified per module group before any checkpoint existed. vLLM served
+large random adapters (1 to 2 nats of effect each), and its log-probabilities
+matched transformers applying the same weights by forward hooks to within
+exact-arithmetic noise. That held for MLP, full attention, `in_proj_qkv`,
+`in_proj_z`, `in_proj_a/b`, `out_proj` and all 496 modules together. An adapter
+with its q/k blocks deliberately swapped landed on transformers' swapped result,
+not the correct one, so the check detects packing errors. The scripts are in
+`/home/wxu/designbench/lora_probe/` on DRC (`hf_groups.py`, `groups_probe.py`).
+
 ## Things that will bite you
 
 These are all failures we hit, not hypotheticals.
@@ -115,3 +148,20 @@ These are all failures we hit, not hypotheticals.
 - **Scheduler**: `RM`/`RM-small` require `-q low`, and that QOS allows only five
   submitted jobs at a time. The `GPU` partition refuses partial-node
   allocations — request all eight GPUs or the submission is denied.
+- **Home on Bridges-2 is full.** `/jet/home` is at its 25 GB quota. conda writes
+  package caches to `~/.conda/pkgs` even with `CONDA_PKGS_DIRS` set, and a
+  conda-forge index alone is over 100 MB. Build environments and caches on
+  `/ocean`.
+- **`causal-conv1d`'s prebuilt wheel needs glibc 2.32**; Bridges-2 has 2.28. It
+  installs cleanly and then fails to import. Force a source build
+  (`CAUSAL_CONV1D_FORCE_BUILD=TRUE`).
+- **vLLM refuses an adapter with only half of a packed layer.** It packs
+  `in_proj_qkv`+`in_proj_z` and `in_proj_b`+`in_proj_a`; an adapter holding one
+  without the other kills the server at startup. Training always saves both.
+- **Do not judge serving correctness by per-token agreement with transformers.**
+  On a 3.5k-token trajectory, bf16 Qwen3.8-27B moves 0.12 to 0.19 nats per token
+  under any exact rearrangement of floating-point work: chunk 32 versus 64,
+  token-by-token recurrence, a different vLLM backend. Single tokens swing up to
+  16 nats. Every engine and kernel lands inside that noise, so small-effect
+  comparisons cannot tell a correct engine from a broken one. Use adapters whose
+  effect is far larger than that noise, plus a deliberately broken control.
