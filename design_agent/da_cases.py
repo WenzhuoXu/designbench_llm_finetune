@@ -201,5 +201,7 @@ class CasesDomain(Domain):
                 newx.append(st["x"][i] * min(2.0, max(0.7, (want / m) ** (1.0 / 2.0))))
             return _apply(dom, st, newx)
 
-        return {"SIZE_FOR_CASE": (sample_case, apply_case),
-                "SIZE_ENVELOPE": (sample_env, apply_env)}
+        return {"SIZE_FOR_CASE": (sample_case, apply_case,
+                                 "SIZE_FOR_CASE(case=<load case id>, margin=<0.95-1.35>)"),
+                "SIZE_ENVELOPE": (sample_env, apply_env,
+                                  "SIZE_ENVELOPE(margin=<0.95-1.35>)")}

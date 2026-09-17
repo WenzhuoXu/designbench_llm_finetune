@@ -248,31 +248,40 @@ def run_episode(domain, key, arm, calls, client=None, param=None, analysis_budge
         return row
 
     msgs = [{"role": "system", "content": system_prompt(dom, st0)}]
+    note = None
     for _ in range(calls):
         if dom.feasible(st):
             break
         row["turns"] += 1
+
+        # The environment sizes every element to the stress it carries at the start of
+        # each turn, exactly as it does while the teacher acts (gen_corpus.run_instance).
+        # Every state the corpus stores is post-sizing, so an arm denied that rule would
+        # be answering a different question from the one it was trained on. It is also
+        # the whole of the `fsd` control: that arm adds no move of its own.
+        nxt = size_pass(dom, st, param)
+        if nxt is not None:
+            st = nxt
+        if dom.feasible(st):
+            break
         obs = S.render_state(dom, st)
 
         if arm == "fsd":
-            # The heuristic control: size every element to the stress it carries.
-            nxt = size_pass(dom, st, param)
-            if nxt is not None:
-                st = nxt
             continue
 
         if arm == "native":
-            # The domain's own heuristic, where it has one stronger than sizing.
+            # The domain's own heuristic, played in the same environment, where it has one
+            # stronger than sizing. A domain without one leaves this arm equal to fsd: the
+            # environment has already sized this turn, and sizing twice is not a control.
             spec = NATIVE_HEURISTIC.get(domain)
-            if spec is None:
-                nxt = size_pass(dom, st, param)
-            else:
+            if spec is not None:
                 nxt = apply_tool(dom, st, param, spec[0], dict(spec[1]), extra)
-            if nxt is not None:
-                st = nxt
+                if nxt is not None:
+                    st = nxt
             continue
 
-        msgs.append({"role": "user", "content": obs})
+        msgs.append({"role": "user", "content": obs if note is None else note + "\n\n" + obs})
+        note = None
         try:
             text = client(msgs)
         except Exception:
@@ -283,13 +292,25 @@ def run_episode(domain, key, arm, calls, client=None, param=None, analysis_budge
 
         parsed = S.parse_tools(text)
         if not parsed:
+            # The corpus ends every trajectory with <answer>, so a model that says it is
+            # finished is stopping, not failing to answer.
+            if "<answer" in text:
+                row["stopped_early"] = True
+                break
             row["parse_fail"] += 1
             row.setdefault("unparsed_samples", []).append(text[:300])
+            # Silence here left the model to infer failure from an unchanged state, which
+            # reads exactly like a move that was applied and did nothing.
+            note = ("Your last reply contained no tool call. Reply with one call inside "
+                    "<tool></tool> tags, written as NAME(arg=value, ...).")
             continue
         head, args = parsed[0]
         nxt = apply_tool(dom, st, param, head, args, extra)
         if nxt is None:
             row["apply_fail"] += 1
+            note = ("%s could not be applied: the tool is not in the list above, or its "
+                    "argument names or values are wrong. The design is unchanged."
+                    % S.render_tool(head, args).replace("<tool>", "").replace("</tool>", ""))
             continue
         st = nxt
 

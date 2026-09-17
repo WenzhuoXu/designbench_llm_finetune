@@ -171,7 +171,9 @@ def tool_vocabulary(dom):
             "SCALE(ids=[<element ids>], factor=<0.70-2.00>)",
             "TRIM(threshold=<margin>, factor=<0.70-1.00>)"]
     try:
-        extra = sorted((dom.tools() or {}).keys())
+        reg = dom.tools() or {}
     except Exception:
-        extra = []
-    return base + ["%s(...)" % k for k in extra]
+        reg = {}
+    # A domain that declares a signature gets it shown; one that does not is
+    # advertised as NAME(...), which is honest but useless to a model.
+    return base + [(reg[k][2] if len(reg[k]) > 2 else "%s(...)" % k) for k in sorted(reg)]

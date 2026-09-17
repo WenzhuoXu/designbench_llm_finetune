@@ -230,7 +230,11 @@ class CatalogueDomain(Domain):
                     newk[i] = s
             return _apply(dom, st, newk)
 
-        return {"CATALOGUE_PASS": (sample_pass, apply_pass),
-                "UPGRADE": (sample_step, apply_up),
-                "DOWNGRADE": (sample_step, apply_down),
-                "SET_SECTION": (sample_set, apply_set)}
+        return {"CATALOGUE_PASS": (sample_pass, apply_pass,
+                                  "CATALOGUE_PASS(margin=<0.95-1.35>)"),
+                "UPGRADE": (sample_step, apply_up,
+                            "UPGRADE(ids=[<element ids>])"),
+                "DOWNGRADE": (sample_step, apply_down,
+                              "DOWNGRADE(ids=[<element ids>])"),
+                "SET_SECTION": (sample_set, apply_set,
+                                "SET_SECTION(ids=[<element ids>], section=<0-%d>)" % (NK - 1))}

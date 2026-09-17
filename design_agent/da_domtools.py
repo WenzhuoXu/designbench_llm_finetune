@@ -10,7 +10,14 @@ in terms of get/set on a parameter. Topology was carrying most of the truss resu
 So the interface gains one method. A Domain may register extra tools:
 
     tools() -> {name: (sample(dom, st, rng) -> args or None,
-                       apply(dom, st, args)  -> new state or None)}
+                       apply(dom, st, args)  -> new state or None,
+                       signature)}
+
+where signature is the call as a model must write it, e.g.
+"REMOVE_MEMBER(i=<member id>)". It is what the system prompt shows, so it lives
+beside the apply function that reads those argument names rather than in the
+prompt, where the two would drift apart. A two-element entry still works and is
+advertised as NAME(...), which tells a model nothing about its arguments.
 
 The base returns nothing, so every existing domain is unaffected and the search above the
 interface does not change -- it simply asks the domain what else it can do. The truss registers
@@ -101,9 +108,12 @@ def _truss_tools(self):
         return _rebuild(st, "MOVE_JOINT(%d, [%.4f, %.4f, 0.0])"
                         % (args["j"], args["x"], args["y"]))
 
-    return {"ADD_MEMBER": (sample_add, apply_add),
-            "REMOVE_MEMBER": (sample_remove, apply_remove),
-            "MOVE_JOINT": (sample_move, apply_move)}
+    return {"ADD_MEMBER": (sample_add, apply_add,
+                          "ADD_MEMBER(j1=<joint id>, j2=<joint id>)"),
+            "REMOVE_MEMBER": (sample_remove, apply_remove,
+                              "REMOVE_MEMBER(i=<member id>)"),
+            "MOVE_JOINT": (sample_move, apply_move,
+                           "MOVE_JOINT(j=<joint id>, x=<new x>, y=<new y>)")}
 
 
 TrussDomain.tools = _truss_tools

@@ -87,12 +87,45 @@ and identical action space for every arm, paired exact sign tests:
 | synth | 0.9000 | 0.2500 | — | 39–0 | 3.6e-12 |
 | pipe | 1.0000 | 0.0000 | — | 60–0 | 1.7e-18 |
 | catalogue | 1.0000 | 0.0000 | 0.7833 | 13–0 | 2.4e-04 |
-| cases | 1.0000 | 0.0500 | 0.1000 | 54–0 | 1.1e-16 |
+| cases | 1.0000 | 0.0500 | 0.4333 | 54–0 | 1.1e-16 |
 
 242–0 against the generic control across 300 problems; the search loses no
 problem to any control in any domain. Corpus: 232,373 supervised turns over
 129,179 trajectories, balanced to exactly 0.250 per domain, 571.7M tokens at two
 epochs.
+
+### The environment every arm acts in
+
+Each turn, before anyone chooses anything, the environment sizes every element to the
+stress it carries. That is not a control's move, it is the dynamics the teacher acted in:
+`gen_corpus.run_instance` applies it at the top of every turn, so every state the corpus
+stores is post-sizing, and the teacher's recorded action is what it did *on top of*
+sizing. The evaluation loop now does the same, which makes the arms read plainly:
+
+| arm | what it contributes on top of the environment |
+|---|---|
+| `fsd` | nothing — this arm is the sizing rule alone |
+| `native` | the domain's own heuristic, where it has one; otherwise identical to `fsd` |
+| `model` / `base` | one tool call per turn |
+| `search` | the teacher, unrestricted |
+
+The prompt lists each tool with the argument names its implementation actually reads, taken
+from the domain's own registry (`tools()` returns a signature beside each sample/apply
+pair) so prompt and code cannot drift. Before this, a domain's own tools were advertised as
+`ADD_MEMBER(...)` with no arguments at all — and those are the moves the search mostly
+uses, 21 `REMOVE_MEMBER` and 9 `MOVE_JOINT` among its first moves on the 60 truss problems.
+
+A call that does not parse, or that cannot be applied, is answered: the next turn opens with
+one line saying so and naming the call. Silence there was indistinguishable, from the
+model's side, from a move that applied and did nothing. A reply containing `<answer>` ends
+the episode, because that is how every corpus trajectory ends.
+
+**Known gap.** The state table lists members, never joints or their coordinates, so
+`ADD_MEMBER` and `MOVE_JOINT` cannot be aimed from what the model is shown. The teacher
+does not aim them either — it samples joints at random and keeps what survives rollout — so
+the corpus is consistent with the harness, but a model cannot do better than random on
+those moves. Closing that means regenerating the corpus, because observations are stored
+as text.
 
 ### The un-finetuned model: the bar a checkpoint has to clear (DRC, 2026-09-14)
 
@@ -120,6 +153,12 @@ arm. All arms ran in one job, so the tests are paired.
 Rows and log: `/ocean/projects/mch250030p/shared/designbench/results/base_control_truss_20260914/`.
 An earlier run with the previous, leaked worked example gave 0.4500; it is
 superseded and should not be cited.
+
+**Superseded by the harness fix above**, which was made after this run: the model now sees
+real tool signatures, is told when a call fails, and acts in the same sized environment as
+the teacher. The rerun is in flight; the model-free arms are unaffected and were
+re-measured unchanged, except `cases` `native` (0.1000 to 0.4333), which had been played
+without the environment's sizing rule.
 
 **Compare a checkpoint only against a search arm from the same machine and job.**
 On DRC the search solves 53 / 60, against 54 / 60 on Bridges-2. Seeds now match
