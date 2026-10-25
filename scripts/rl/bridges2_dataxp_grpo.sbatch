@@ -15,4 +15,17 @@ export MODEL_PATH=$O/hf_models/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff601
 export CACHE_DIR=$O/rl/cache HF_HOME=$O/rl/cache/hf
 export CONFIG=${CONFIG:-configs/rl/dataxp_grpo_p2_bridges2.yaml} RUN_DIR=${RUN_DIR:-$O/rl/runs/b2_canary}
 export NVLLM=${NVLLM:-2} NTRAIN=${NTRAIN:-2}
+echo "=== $(date '+%F %T %Z') host=$(hostname) job=${SLURM_JOB_ID:-none} commit=$(cat "$REPO/GIT_COMMIT" 2>/dev/null)"
+# Pre-check on this node's CPU before any GPU work: the trainer and harness tests under Bridges-2's
+# own envs (transformers 5.5 / peft 0.18 / numpy 2.4 here, 5.17 / 0.21 / 1.26 on Orchard). A failure
+# ends the job within minutes instead of after the servers and the 27B trainer have loaded.
+if [ -z "${SKIP_PRECHECK:-}" ]; then
+  PRE="$O/rl/logs/precheck_${SLURM_JOB_ID:-x}.log"
+  ( cd "$REPO" && PYTHONPATH="$REPO" DX_HARNESS_DIR="$O/rl/harness" OMP_NUM_THREADS=8 CUDA_VISIBLE_DEVICES= \
+      "$TRAIN_PY" -m pytest tests/test_rl_dataxp_core.py tests/test_rl_dataxp_trainer.py \
+      tests/test_rl_dataxp_harness.py -q -x -p no:cacheprovider ) > "$PRE" 2>&1
+  rc=$?
+  grep -v "falling back" "$PRE" | tail -12
+  [ $rc -eq 0 ] || { echo "ABORT: pre-check tests failed (rc=$rc), see $PRE"; exit 3; }
+fi
 bash "$REPO/scripts/rl/orchard_dataxp_grpo.sh"
