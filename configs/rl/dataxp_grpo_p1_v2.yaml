@@ -1,0 +1,59 @@
+# Multi-turn GRPO on the collaborator's v2 protocol (the October 22 artifact's setup):
+# circuit2, frame3d2, grid2, seir2, traffic2; SET_PARAM spelling, V2 instruction + parameter-name
+# line, thinking ON, 2,048-token replies; thermal2 and inventory2 held out.
+#
+# Three inputs are not on Orchard yet; the run refuses to start until they are set:
+#   1. a pre-verb dataxp copy (drc: the sftprobe's dataxp_code_v2_w1fix). With dataxp_code_v3 the
+#      v2 domains have verb surfaces and the harness would serve them verb-spelled, which is not the
+#      protocol S was trained and evaluated on.
+#   2. S's adapter: the merged model as one adapter (python -m llm_finetune.rl_dataxp.adapters
+#      --adapter <with_reasoning> --adapter <moves_only> --weight 1 --weight 0.5 --out <dir>);
+#      launch with MAX_LORA_RANK = its summed rank (128 for two rank-64 adapters).
+#   3. the training-problem file built against that dataxp copy.
+# Keys not given here take llm_finetune/rl_dataxp/trainer.py DEFAULTS (configs do not chain).
+seed: 0
+
+model:
+  path: /project/community/wxu2/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  gradient_checkpointing: true
+
+policy:
+  init_adapter: null            # REQUIRED for P1: S as one PEFT adapter (see above)
+  require_init_adapter: true
+  lora:
+    target_modules: "model\\.language_model\\.layers\\.\\d+\\.(linear_attn\\.(in_proj_qkv|in_proj_z|in_proj_a|in_proj_b|out_proj)|self_attn\\.(q_proj|k_proj|v_proj|o_proj)|mlp\\.(gate_proj|up_proj|down_proj))"
+
+harness:
+  script: /project/community/wxu2/corpus/harness/scripts/dataxp_policy_eval_v3.py
+  # REQUIRED: replace CODE_V2 with the pre-verb dataxp copy's directory
+  argv: [--code, CODE_V2, --obs, v2, --param-line, --max-tokens, "2048",
+         --instruction-file, /project/community/wxu2/corpus/harness/configs/task_instruction_V2.txt]
+  env:
+    DX_ORIG_SCRIPTS: /project/community/wxu2/corpus/harness/scripts
+
+rollout:
+  python: /project/community/wxu2/envs/corpus_o/bin/python
+  problems_file: null           # REQUIRED: built with --code CODE_V2
+  variants: [circuit2, frame3d2, grid2, seir2, traffic2]
+  problems_per_step: 8
+  group_size: 8
+  horizon: 12
+  temperature: 0.8
+  inject: {return_token_ids: true, logprobs: true, top_p: 1.0, top_k: 0}
+  workers: 64
+
+reward:
+  speed_bonus: 0.2
+
+grpo:
+  steps: 150
+  lr: 1.0e-5
+  warmup_steps: 3
+  kl_coef: 0.04
+  kl_reference: base
+  iterations: 1
+
+guards:
+  enabled: true

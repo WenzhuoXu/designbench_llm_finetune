@@ -1,0 +1,60 @@
+# The datav4 protocol (as configs/rl/dataxp_grpo_p2_datav4.yaml) on Bridges-2, v2 families only:
+# Bridges-2 has the trainer env (d27_env), vLLM 0.29 (vllm_env) and the Qwen3.8-27B snapshot, but not
+# the native simulators (grid2op, ceviche, engibench), so grid2op / engibench / photonics are left out.
+# Used for the infrastructure canary (scripts/rl/bridges2_dataxp_grpo.sbatch, SMOKE=1).
+seed: 0
+
+model:
+  path: /ocean/projects/mch250030p/wxu7/hf_models/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  gradient_checkpointing: true
+
+policy:
+  init_adapter: null
+  lora:
+    r: 64
+    lora_alpha: 128
+    lora_dropout: 0.0
+    target_modules: "model\\.language_model\\.layers\\.\\d+\\.(linear_attn\\.(in_proj_qkv|in_proj_z|in_proj_a|in_proj_b|out_proj)|self_attn\\.(q_proj|k_proj|v_proj|o_proj)|mlp\\.(gate_proj|up_proj|down_proj))"
+
+harness:
+  script: /ocean/projects/mch250030p/wxu7/rl/harness/scripts/dataxp_policy_eval_v3.py
+  argv: [--code, /ocean/projects/mch250030p/wxu7/rl/harness/dataxp_code_v3, --no-think, --max-tokens, "1024",
+         --native-prompt, served, --instruction-file, /ocean/projects/mch250030p/wxu7/rl/harness/configs/task_instruction_V2.txt]
+  env:
+    DX_ORIG_SCRIPTS: /ocean/projects/mch250030p/wxu7/rl/harness/scripts
+    DATAXP_SPELLING: multitool
+
+rollout:
+  python: /ocean/projects/mch250030p/wxu7/envs/d27_env/bin/python
+  problems_file: /ocean/projects/mch250030p/wxu7/rl/problems/train_p2_v2five.jsonl
+  variants: [circuit2, frame3d2, grid2, seir2, traffic2]
+  problems_per_step: 8
+  group_size: 8
+  horizon: 12
+  temperature: 0.8
+  inject: {return_token_ids: true, logprobs: true, top_p: 1.0, top_k: 0}
+  workers: 64
+  keep_full_every: 10
+
+reward:
+  speed_bonus: 0.2
+
+grpo:
+  steps: 150
+  lr: 1.0e-5
+  warmup_steps: 3
+  kl_coef: 0.04
+  kl_reference: base
+  iterations: 1
+  scale_rewards: group
+  max_grad_norm: 1.0
+
+checkpoint:
+  keep_last: 2
+  keep_adapter_every: 25
+  keep_adapter_steps: [50, 150]
+
+guards:
+  enabled: true

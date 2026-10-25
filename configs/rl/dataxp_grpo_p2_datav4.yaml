@@ -1,0 +1,75 @@
+# Multi-turn GRPO on the datav4 protocol (Orchard v3 harness, DX-37's evaluation setup):
+# the eight training families, verb-spelled (multitool) prompts, thinking off, 1,024-token replies.
+# Held out entirely (no training problem, ever): thermal2, inventory2, molopt.
+#
+#   bash scripts/rl/orchard_dataxp_grpo.sh  (CONFIG=configs/rl/dataxp_grpo_p2_datav4.yaml RUN_DIR=...)
+#
+# run_dir and rollout.servers are set by the launcher. Everything in harness.argv is passed to
+# dataxp_policy_eval_v3.py exactly as dx_eval_orchard.sh passes it for a nothink arm, so a training
+# rollout at T=0 is an evaluation episode (tests/test_rl_dataxp_harness.py checks this).
+seed: 0
+
+model:
+  path: /project/community/wxu2/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  gradient_checkpointing: true
+
+policy:
+  # null = a fresh rank-64 LoRA from the base. For a start from an SFT adapter give its PEFT dir
+  # (a weight-space merge of two adapters: python -m llm_finetune.rl_dataxp.adapters, then serve
+  # with MAX_LORA_RANK = the summed rank).
+  init_adapter: null
+  lora:
+    r: 64
+    lora_alpha: 128
+    lora_dropout: 0.0
+    # configs/model/qwen38_27b.yaml: anchored on model.language_model, reaches all 48 linear-attention layers
+    target_modules: "model\\.language_model\\.layers\\.\\d+\\.(linear_attn\\.(in_proj_qkv|in_proj_z|in_proj_a|in_proj_b|out_proj)|self_attn\\.(q_proj|k_proj|v_proj|o_proj)|mlp\\.(gate_proj|up_proj|down_proj))"
+
+harness:
+  script: /project/community/wxu2/corpus/harness/scripts/dataxp_policy_eval_v3.py
+  argv: [--code, /project/community/wxu2/corpus/harness/dataxp_code_v3, --no-think, --max-tokens, "1024",
+         --native-prompt, served, --instruction-file, /project/community/wxu2/corpus/harness/configs/task_instruction_V2.txt]
+  env:
+    DX_ORIG_SCRIPTS: /project/community/wxu2/corpus/harness/scripts
+    DATAXP_SPELLING: multitool
+
+rollout:
+  python: /project/community/wxu2/envs/corpus_o/bin/python
+  # built by python -m llm_finetune.rl_dataxp.problems (see docs/rl_dataxp_infra.md)
+  problems_file: /home/wxu2/rl/problems/train_p2_datav4.jsonl     # $HOME: /project/community is wiped every two weeks
+  variants: [circuit2, frame3d2, grid2, seir2, traffic2, grid2op, engibench, photonics]
+  problems_per_step: 8
+  group_size: 8
+  horizon: 12
+  temperature: 0.8
+  inject: {return_token_ids: true, logprobs: true, top_p: 1.0, top_k: 0}
+  workers: 64
+  keep_full_every: 10
+
+reward:
+  speed_bonus: 0.2
+
+grpo:
+  steps: 150
+  lr: 1.0e-5
+  warmup_steps: 3
+  kl_coef: 0.04
+  kl_reference: base
+  iterations: 1
+  scale_rewards: group
+  max_grad_norm: 1.0
+
+checkpoint:
+  keep_last: 2
+  keep_adapter_every: 25
+  keep_adapter_steps: [50, 150]
+
+guards:
+  enabled: true
+  window: 5
+  parse_drop: 0.10
+  kl_increase_max: 0.10
+  stall_steps: 30
+  stall_kl: 0.005
