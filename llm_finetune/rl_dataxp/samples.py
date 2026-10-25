@@ -10,7 +10,10 @@ one step.
 from __future__ import annotations
 
 import collections
+import json
 import math
+import random
+import zlib
 from typing import Optional
 
 from .reward import episode_reward, invalid_reason
@@ -37,11 +40,23 @@ def group_advantages(rewards: list[float], scale: str = "group", eps: float = 1e
     raise ValueError("scale must be 'group' or 'none', got %r" % scale)
 
 
+def subsample_turns(n: int, k: Optional[int], key: str, seed: int, step: int) -> tuple[list[int], float]:
+    """Which of an episode's n turns to train on, and the weight n/k that keeps the token-sum
+    gradient unbiased (each turn is kept with probability k/n). k None or >= n: all turns, weight 1.
+    Deterministic in (seed, step, key), so every rank and every resumed run picks the same turns."""
+    if not k or n <= k:
+        return list(range(n)), 1.0
+    rng = random.Random(zlib.crc32(json.dumps([seed, step, key]).encode()))
+    return sorted(rng.sample(range(n), k)), n / k
+
+
 def build_step_samples(records: list[dict], horizon: int, speed_bonus: float,
-                       scale: str = "group") -> tuple[list[dict], dict]:
+                       scale: str = "group", max_turns: Optional[int] = None,
+                       seed: int = 0, step: int = 0) -> tuple[list[dict], dict]:
     """(samples, stats). Every sample is a dict with prompt_ids, completion_ids, advantage,
-    vllm_logprobs (or None), key, turn, variant, finish. Samples come in a deterministic order
-    (records sorted by key, calls in turn order), so every rank builds the same list."""
+    weight, vllm_logprobs (or None), key, turn, variant, finish. Samples come in a deterministic
+    order (records sorted by key, calls in turn order), so every rank builds the same list.
+    max_turns: train on at most this many turns per episode (subsample_turns), weight n/k."""
     by_group = collections.defaultdict(list)
     for r in sorted(records, key=lambda r: r["key"]):
         by_group[r["group"]].append(r)
@@ -96,11 +111,15 @@ def build_step_samples(records: list[dict], horizon: int, speed_bonus: float,
             if len(calls) != n_turns:
                 raise RuntimeError("%s: %d model calls for %d turns; the loop guard must be off for RL"
                                    % (r["key"], len(calls), n_turns))
-            for k, c in enumerate(calls):
-                if not c.get("token_ids"):
-                    continue                     # a call that produced no token (cannot train on it)
+            usable = [k for k, c in enumerate(calls) if c.get("token_ids")]   # a call with no token cannot train
+            st["samples_full"] += len(usable)
+            st["tokens_full"] += sum(len(calls[k]["token_ids"]) for k in usable)
+            pick, w = subsample_turns(len(usable), max_turns, r["key"], seed, step)
+            for j in pick:
+                k = usable[j]
+                c = calls[k]
                 samples.append({"prompt_ids": c["prompt_token_ids"], "completion_ids": c["token_ids"],
-                                "advantage": float(a), "vllm_logprobs": c.get("logprobs"),
+                                "advantage": float(a), "weight": w, "vllm_logprobs": c.get("logprobs"),
                                 "key": r["key"], "turn": k, "variant": r["variant"],
                                 "finish": c.get("finish")})
     n_tok = sum(len(s["completion_ids"]) for s in samples)
@@ -112,6 +131,7 @@ def build_step_samples(records: list[dict], horizon: int, speed_bonus: float,
         "reward_mean": sum(rewards_all) / len(rewards_all) if rewards_all else None,
         "feasible_rate": (sum(1 for x in rewards_all if x > 0) / len(rewards_all)) if rewards_all else None,
         "samples": len(samples), "completion_tokens": n_tok,
+        "samples_full": st["samples_full"], "completion_tokens_full": st["tokens_full"],
         "prompt_tokens": sum(len(s["prompt_ids"]) for s in samples),
         "fails": dict(fails), "finish": dict(finish),
         "per_variant": {

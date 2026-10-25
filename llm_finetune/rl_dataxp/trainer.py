@@ -68,7 +68,7 @@ DEFAULTS = {
     "grpo": {"steps": 150, "lr": 1.0e-5, "warmup_steps": 3, "betas": [0.9, 0.99], "eps": 1.0e-8,
              "weight_decay": 0.0, "max_grad_norm": 1.0, "kl_coef": 0.04, "kl_reference": "base",
              "clip_eps_low": 0.2, "clip_eps_high": 0.28, "iterations": 1, "scale_rewards": "group",
-             "tis_cap": None},
+             "tis_cap": None, "max_turns_per_episode": None},
     "checkpoint": {"keep_last": 2, "keep_adapter_every": 25, "keep_adapter_steps": [50, 150]},
     "guards": {"enabled": True, "window": 5, "parse_drop": 0.10, "kl_increase_max": 0.10,
                "stall_steps": 30, "stall_kl": 0.005, "ignore_stopped": False},
@@ -82,7 +82,8 @@ FINGERPRINT_KEYS = [("seed",), ("model", "path"), ("policy",), ("harness",), ("r
                     ("rollout", "temperature"), ("rollout", "inject"), ("rollout", "variants"),
                     ("grpo", "lr"), ("grpo", "warmup_steps"), ("grpo", "kl_coef"), ("grpo", "kl_reference"),
                     ("grpo", "iterations"), ("grpo", "scale_rewards"), ("grpo", "clip_eps_low"),
-                    ("grpo", "clip_eps_high"), ("grpo", "tis_cap"), ("grpo", "max_grad_norm")]
+                    ("grpo", "clip_eps_high"), ("grpo", "tis_cap"), ("grpo", "max_grad_norm"),
+                    ("grpo", "max_turns_per_episode")]
 
 
 # ------------------------------------------------------------------ config
@@ -618,7 +619,8 @@ def train_on_samples(policy: Policy, samples: list[dict], dist: Dist, cfg: dict,
     g = cfg["grpo"]
     T = float(cfg["rollout"]["temperature"])
     mine = shard_samples(samples, dist.world, dist.rank)
-    n_tok = sum(len(s["completion_ids"]) for s in samples)
+    # the per-step constant: completion tokens of the full (not subsampled) set, in expectation
+    n_tok = sum(s.get("weight", 1.0) * len(s["completion_ids"]) for s in samples)
     stats = torch.zeros(9, dtype=torch.float64, device=policy.device)
     # 0 tokens 1 pg 2 kl 3 logp 4 clipped 5 gap_abs 6 gap_n 7 adv*tokens 8 samples
     if n_tok == 0:
@@ -646,7 +648,7 @@ def train_on_samples(policy: Policy, samples: list[dict], dist: Dist, cfg: dict,
                 d = ref[i] - lp
                 kl = torch.exp(d) - d - 1
                 loss_tok = loss_tok + g["kl_coef"] * kl
-            (loss_tok.sum() / n_tok).backward()
+            (float(s.get("weight", 1.0)) * loss_tok.sum() / n_tok).backward()
             if it == 0:
                 with torch.no_grad():
                     stats[0] += lp.numel()
@@ -752,7 +754,8 @@ def train(cfg: dict, backend=None, log: Callable[[str], None] = print) -> dict:
                 records = backend.load(step, eps)
             t_roll = time.time() - t0
             samples, sstats = build_step_samples(records, int(r["horizon"]), float(cfg["reward"]["speed_bonus"]),
-                                                 g["scale_rewards"])
+                                                 g["scale_rewards"], g.get("max_turns_per_episode"),
+                                                 int(cfg["seed"]), step)
             t1 = time.time()
             tstats = train_on_samples(policy, samples, dist, cfg, opt, sched)
             t_train = time.time() - t1

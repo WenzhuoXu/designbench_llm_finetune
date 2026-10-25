@@ -186,3 +186,28 @@ def test_subprocess_rollout_checks_paths(tmp_path):
         cfg["harness"]["argv"] = argv
         with pytest.raises(SystemExit, match=msg):
             SubprocessRollout(cfg, str(tmp_path / "run"))
+
+
+def test_turn_subsampling_is_unbiased_and_deterministic():
+    from llm_finetune.rl_dataxp.samples import subsample_turns
+    assert subsample_turns(5, None, "k", 0, 0) == ([0, 1, 2, 3, 4], 1.0)
+    assert subsample_turns(3, 4, "k", 0, 0) == ([0, 1, 2], 1.0)
+    pick, w = subsample_turns(12, 4, "g/m0", 7, 3)
+    assert len(pick) == 4 and w == 3.0 and pick == subsample_turns(12, 4, "g/m0", 7, 3)[0]
+    # E[sum over kept turns of w * x_t] = sum_t x_t
+    x = [float(t * t + 1) for t in range(12)]
+    est = []
+    for s in range(4000):
+        p, w = subsample_turns(12, 4, "g/m%d" % s, 0, 0)
+        est.append(sum(w * x[t] for t in p))
+    assert sum(est) / len(est) == pytest.approx(sum(x), rel=0.02)
+
+
+def test_build_step_samples_with_max_turns():
+    recs = [rec("g0/m0", "g0", None, 9), rec("g0/m1", "g0", 2, 2)]
+    samples, st = build_step_samples(recs, 12, 0.2, max_turns=3, seed=1, step=0)
+    a = [s for s in samples if s["key"] == "g0/m0"]
+    b = [s for s in samples if s["key"] == "g0/m1"]
+    assert len(a) == 3 and all(s["weight"] == 3.0 for s in a)
+    assert len(b) == 2 and all(s["weight"] == 1.0 for s in b)
+    assert st["samples_full"] == 11 and st["samples"] == 5

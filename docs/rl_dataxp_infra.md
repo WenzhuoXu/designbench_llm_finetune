@@ -82,7 +82,7 @@ A stopped run will not restart unless `guards.ignore_stopped=true`.
 
 ## What is verified (local, 2026-10-25)
 
-`pytest tests/test_rl_dataxp_core.py` (15 tests, no dependencies). Run the harness tests with
+`pytest tests/test_rl_dataxp_core.py` (17 tests, no dependencies). Run the harness tests with
 `DX_HARNESS_DIR=<copy of Orchard's corpus/harness>` (6 tests), and the trainer tests with
 transformers 5.17 + peft 0.21 + omegaconf (9 tests, CPU, a tiny `Qwen3_5ForConditionalGeneration`).
 
@@ -108,24 +108,38 @@ transformers 5.17 + peft 0.21 + omegaconf (9 tests, CPU, a tiny `Qwen3_5ForCondi
 - **Adapter sum is exact.** It matches explicit weight merging to 1e-5, and disabling it gives the
   base.
 
-## Not verified yet (needs the GPU canary)
+## GPU canary (Orchard, 2026-10-25): passed
 
-- vLLM 0.29 returning `prompt_token_ids` / `token_ids` for Qwen3.8-27B chat completions, and
-  runtime LoRA loading of a PEFT adapter saved by this trainer. The flags exist in the installed
-  source; behaviour is unchecked.
-- NCCL gradient all-reduce with a gloo group for the rollout wait (only gloo-only was tested), and
-  memory and throughput of the 27B trainer on H100: 54 GB of weights plus LoRA/Adam state is about
-  60 GB before activations.
-- Rollout throughput per step.
+Job 161701 ran on `advanced` with 3 H100s (1 vLLM server, 2 training ranks), `SMOKE=1`: 3 steps of
+2 problems × 4 rollouts × 3 turns over the datav4 families, 0.77 GPU-h. Job 161703 then extended
+the same run by one step from its checkpoint, 0.30 GPU-h.
 
-**Canary** (`SMOKE=1`: 3 steps, 2 problems × 4 rollouts, 3 turns; ~1 h on 4 GPUs) passes when:
+| check | result |
+|---|---|
+| vLLM 0.29 returns token ids for Qwen3.8-27B chat completions | yes, every call of every episode (0 without ids, 0 crashes) |
+| runtime LoRA loading of the trainer's PEFT adapter | `policy_s00000` to `policy_s00003` loaded and served, one per step |
+| trainer on H100 with fla, 2 NCCL ranks + gloo wait group | loads in ~8 s per rank (bf16, 466.9M trainable LoRA parameters); grad norm 0.56 / 0.87 |
+| KL to the base | 0.000 at step 0 (fresh adapter), 0.0007 after one update |
+| vLLM vs trainer log-prob gap (T = 1, completion tokens) | 0.012–0.016 nats/token |
+| all-equal groups | step 2: both groups zero-variance, update skipped, run continued |
+| checkpoint + resume | ~23 s per checkpoint. `resumed from step 3` loaded adapter (checksum verified), optimizer and scheduler, served the step-3 adapter, wrote step 4; pruning kept step 0's adapter plus the last two |
 
-- every episode has token ids;
-- the per-token gap between vLLM and trainer log-probs (`vllm_gap_abs`) is of the documented size
-  (≲ 0.2 nats);
-- `grad_norm` is finite and above 0;
-- the step-k adapter is the one served at step k (`policy_s0000k` in the server log);
-- a kill after step 1 resumes at step 1 or 2 without rerunning finished episodes.
+**Throughput (the number that matters for planning).**
+- **Training.** Step 1 trained 11 samples (50,431 prompt + 2,803 completion tokens) in 50 s on
+  2 ranks, about 1,070 tokens/s, policy and reference passes included. Step 0 took 195 s,
+  including first-use kernel compilation. Native prompts run to ~6k tokens per turn.
+  `causal_conv1d` is not installed in `d27o`, so the linear-attention convolution uses the PyTorch
+  fallback.
+- **Rollouts.** About 18 s per turn with all episodes in flight on one server.
+- **Full configuration.** At 8 problems × 8 rollouts × 12 turns (~9 turns per episode, ~600
+  samples, ~3.5M tokens), training alone would take about 55 min per step on 2 ranks.
+- **The lever.** `grpo.max_turns_per_episode: k` trains on k random turns per episode, weighted
+  n/k. It is unbiased (`samples.subsample_turns`, tested) and cuts trainer time about n/k.
+  - With k = 3 and 3 training ranks (`NVLLM=1 NTRAIN=3`), a full step is roughly 15–25 min
+    including rollouts: 150 steps ≈ 40–60 h ≈ 160–240 GPU-h, over two or three resumed
+    24-h `advanced` jobs.
+  - Not yet used: installing `causal_conv1d` in a separate env, and packing several short samples
+    per forward.
 
 ## Running (datav4 protocol, P2)
 
@@ -146,9 +160,9 @@ It holds 5,752 problems:
 | family | read | kept | dropped |
 |---|---|---|---|
 | circuit2 | 910 | 795 | 115 feasible starts |
-| frame3d2 | 910 | 910 | � |
-| grid2 | 910 | 910 | � |
-| seir2 | 910 | 910 | � |
+| frame3d2 | 910 | 910 | – |
+| grid2 | 910 | 910 | – |
+| seir2 | 910 | 910 | – |
 | traffic2 | 910 | 907 | 3 feasible starts |
 | grid2op | 491 | 431 | 60 evaluation ids |
 | engibench | 520 | 434 | 60 evaluation ids, 26 feasible starts |
@@ -194,7 +208,7 @@ one flag raised there first.
   environments and model snapshot that other tracks keep under `/project/community/wxu2` are
   exposed to the same wipe.
 - **Bridges-2.** `configs/rl/dataxp_grpo_p2_bridges2.yaml` + `scripts/rl/bridges2_dataxp_grpo.sbatch`
-  run the same launcher on a whole 8�H100 node. It covers the v2 families only, because
+  run the same launcher on a whole 8×H100 node. It covers the v2 families only, because
   Bridges-2 has no native simulators.
 - **Truss code untouched.** The truss GRPO code (`llm_finetune/training/rl/`, `scripts/train_grpo.py`)
   is left as it is: the ledger's results and `tests/test_rewards.py` /
