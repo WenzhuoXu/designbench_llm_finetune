@@ -15,6 +15,17 @@ The top-level README, manifest, instruction and grammar files are not updated. E
 self-describing (`BATCH.md` + `manifest.json`), and its served instruction and grammars are checked to
 equal the spelling directory's `instruction.txt` and `grammar/<family>.txt`.
 
+## Status 2026-10-26: native appends stopped after b015
+
+b001-b015 are on bridges2 (13,712 multitool / 14,679 set_parameter rows; per-batch counts in each
+spelling's `BATCHES.md`). **No further native batches** (grid2op, engibench, photonics). Every new
+grid2op problem shares a chronic with an evaluation problem, and every new photonics problem shares
+a reference design with one. A large share of engibench problems share a base design. All of these
+are flagged in `datav4_corpus/*/eval_overlap.json` and `shared_base_with_eval.json`. grid2op's
+generator also has no new overload start at index 732. Native batches (b015: 147 multitool rows for
+~3.7 GPU-h) were adding near-copies of evaluation problems, not new problems. The owner agreed to
+stop them on 2026-10-26. v2 appends (~1,400 rows per batch) continue: b016 = v2 indices 1170-1299.
+
 ## Batches
 
 | batch | content | families | states | replies (both spellings) | GPU-h (Orchard, estimate) |
