@@ -1,0 +1,10 @@
+# dataxp/domains/grid2op.py - Grid2Op / L2RPN power-grid operation
+# Installed and smoke-tested locally on Windows (Python 3.12.7) on 2026-10-22
+# with these exact versions; numpy stays at the repo's 1.26.x (grid2op pulls
+# pandapower, which pins numpy<2 for this combination).
+grid2op==1.12.6
+lightsim2grid==1.2.0
+pandapower==3.5.6
+numpy<2
+scipy>=1.13
+# optional, only for reading grid2op's own notebooks/plots: matplotlib, networkx

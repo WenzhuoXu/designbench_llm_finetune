@@ -1,0 +1,24 @@
+# dataxp photonics domain (dataxp/domains/photonics.py)
+# Simulator: ceviche-challenges (Google) on ceviche FDFD, differentiated with
+# autograd. invrs-gym is NOT required at runtime: its lightweight ceviche
+# challenge definitions (geometry, 40 nm grid, 1270/1290 nm, targets, 3 px
+# minimum feature) are ported into the module and were checked line by line
+# against invrs-gym 1.6.2 (invrs_gym/challenges/ceviche/defaults.py and
+# challenge.py); invrs-gym pulls jax 0.12, which needs numpy >= 2.2 and
+# conflicts with this repository's numpy 1.26 / scipy 1.13 pin (installed
+# here only to read its sources, then numpy/scipy were restored).
+# Installed and run on Windows (local); no cluster needed.
+numpy==1.26.4
+scipy==1.13.1
+ceviche-challenges==1.0.2
+ceviche==0.1.3
+autograd>=1.6
+unyt>=2.9          # ceviche-challenges units
+matplotlib>=3.5    # imported by ceviche_challenges.modes
+threadpoolctl>=3.0 # the module caps BLAS threads at 1 (SuperLU is single-threaded;
+                   # spinning BLAS threads on a loaded box inflated solves 100x);
+                   # without it set OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 yourself
+# optional: mkl-service (ships with Anaconda) is used for the same cap when present
+# The reference designs are cached in dataxp/domains/photonics_refs.json (10
+# entries: 5 families x min feature 3/4 px); a missing entry is recomputed on
+# first use (2 x 160 Adam steps, 1-15 min per entry single-threaded).

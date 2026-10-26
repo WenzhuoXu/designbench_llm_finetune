@@ -1,0 +1,20 @@
+# dataxp/domains/engibench.py (variant "engibench") — verified 2026-10-22 on Windows,
+# Python 3.12.7. The project pins numpy 1.26 / scipy 1.13; `pip install engibench`
+# alone upgrades numpy to 2.5 and pandas to 3.x, so install in this order and then
+# re-pin (the last three lines undo what engibench's resolver pulls in).
+engibench==0.2.0          # EngiBench (Felten et al., NeurIPS 2025); pulls gymnasium, datasets, matplotlib, pandas, pyarrow
+cvxopt==1.3.3             # beams2d backend (cholmod sparse solve)
+mmapy==0.3.1              # thermoelastic2d imports its MMA subroutine at module import
+ceviche==0.1.3            # photonics2d FDFD solver (pure python; uses scipy spsolve)
+autograd>=1.6             # ceviche / photonics backend (1.9.1 used)
+seaborn>=0.13             # imported by engibench.problems.beams2d.v0 (render only)
+threadpoolctl>=3.1        # the module pins BLAS/MKL to 1 thread around every simulator call
+                          # (anaconda's MKL numpy otherwise spins 24 threads per process; with
+                          # several processes a 0.65 s photonics evaluate() took ~200 s, 2026-10-23).
+                          # Also set MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 on multi-worker runs.
+numpy==1.26.4             # project pin — reinstall after engibench
+pandas<3                  # project pin (streamlit) — reinstall after engibench
+contourpy<1.4             # matplotlib dependency that needs numpy>=2 at 1.4; pin back
+# Sidecar builder only (not needed at run time): huggingface_hub, datasets (pulled by engibench).
+# NOT installable / not used: NeuralFoil (airfoil substitute; forces numpy 2.5 + scipy 1.18),
+# docker/apptainer (airfoil MACH-Aero, heatconduction dolfin-adjoint), ngspice (power electronics).

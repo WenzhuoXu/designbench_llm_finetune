@@ -64,3 +64,8 @@ figures/
 # Editor and pipeline scratch
 *.bak
 *.orig
+
+# Stray local quick-run outputs and the PyTDC oracle cache (2026-10)
+/circuit2/
+/thermal2/
+/oracle/

@@ -1,0 +1,57 @@
+# dataxp/domains/molopt.py (variant "molopt") — PMO molecular optimisation.
+# Installed and smoke-tested LOCALLY on Windows 11, Python 3.12.7, 2026-10-23
+# with these exact versions. No compiler, no GPU, no Linux-only piece: the
+# oracles are rdkit descriptors, fingerprint similarities and two pickled
+# sklearn models, so this domain needs no drc.
+rdkit==2026.9.1           # molecule graph, sanitisation, descriptors, SA score fragment table
+pytdc==1.1.15             # tdc.Oracle: the PMO / GuacaMol oracle implementations
+scikit-learn==1.5.1       # loads TDC's pickled models (drd2); see the jnk3 note below
+numpy==1.26.4             # project pin — PyTDC does not force an upgrade
+scipy==1.13.1             # project pin
+pandas==2.3.3             # imported by tdc at module import
+requests>=2.32            # tdc downloads the oracle model files once
+tqdm>=4.66                # tdc's download progress bar
+fuzzywuzzy>=0.18          # imported by tdc.utils (name matching)
+seaborn>=0.13             # imported by tdc.chem_utils (plot helpers only)
+#
+# Oracle model files: PyTDC downloads them on first use (drd2 ~35 MB, sa
+# fragment scores ~9 MB) and hardcodes "./oracle" as the destination, so the
+# module creates and chdirs into DATAXP_MOLOPT_ORACLE_DIR (default
+# ~/.dataxp/molopt_oracle) while an Oracle is being built. Set that variable to
+# a shared path on a cluster so the workers do not each download a copy.
+#
+# Two packaging facts molopt._import_tdc() works around (no patching of the
+# installed packages needed):
+#   * tdc.chem_utils.oracle.oracle does `from rdkit.six import iteritems`;
+#     rdkit dropped that Python-2 shim, and tdc swallows the ImportError into a
+#     misleading "please install rdkit". The module installs a 3-line rdkit.six
+#     shim in sys.modules first.
+#   * the same module imports pkg_resources, which can re-resolve scipy to a
+#     copy built against another numpy; importing scipy.stats.mstats first pins
+#     the right one.
+#
+# NOT used (recorded in the module docstring and the report): PMO's gsk3b and
+# jnk3, whose pickled random forests will not unpickle under scikit-learn >= 1.3
+# (ValueError: incompatible tree node dtype - an environment failure, not a
+# design choice; both return for free if TDC reships the models),
+# valsartan_smarts (pure RDKit SMARTS, and it really is constant: exactly 0.0 on
+# all 194 molecules of a reachable-molecule pool, so no ranking signal) and
+# sitagliptin_mpo, which is excluded on the WEAKEST basis of the four: it is not
+# constant but flat to within noise (mean 0.0091, max 0.2513, 83 distinct values
+# over the same 194 molecules, none exactly 0.0), so a score0 + rho*(best-score0)
+# threshold would sit in that noise. It is the first candidate for re-inclusion.
+# (An earlier version of this line claimed "97% of reachable molecules score
+# exactly 0.0"; that was retracted in molopt.py (the docstring's "Excluded PMO
+# tasks" section and the EXCLUDED_ORACLES entry) - it does
+# not reproduce - and this line now carries the measured figures.) The remaining
+# 19 of PMO's 23 oracles are the pool.
+#
+# One more PyTDC fact the module has to work around, because it silently
+# falsifies scores rather than failing: the model-backed oracles load their
+# pickle LAZILY inside the scoring function from the RELATIVE path
+# "oracle/<name>_current.pkl", and tdc.Oracle.__call__ wraps the evaluator in a
+# bare `except:` that returns default_property = 0.0. An Oracle built under the
+# oracle dir but CALLED from anywhere else therefore scores every molecule
+# exactly 0.0 without raising. molopt._oracle() now warms each oracle up through
+# the unwrapped evaluator while the cwd is still the oracle dir, which performs
+# the lazy load once and makes an unloadable model a loud error.
