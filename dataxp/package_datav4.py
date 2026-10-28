@@ -103,7 +103,7 @@ instruction.txt / grammar/<family>.txt; rows of a problem whose canonical spec
 equals an evaluation problem of either file are DROPPED and counted (not a
 refusal); the sampling recipe is verified where the files record it (K per
 state, --prompt probe, the model name, no thinking text, reply tokens <= the
-cap, min_pct 90 / max_words 320 in the tier manifest, draw_pass <=
+cap, min_pct 90 and no reasoning word limit in the tier manifest, draw_pass <=
 --draw-passes, no dry-run replies); every row is stamped "batch" and
 "draw_passes" (the passes the batch ran: 1 = the K-reply draw, 2 = plus the one
 redraw of the truncated keys) and, when the sampler recorded it, "draw_pass"
@@ -142,7 +142,7 @@ BATCH_RE = re.compile(r"^b\d{3}$")
 CANON_DROP = ("problem_id", "domain_variant", "index")
 # the b001 recipe (docs/corpus_native_domains.md "datav4 delivered")
 RECIPE_DEFAULT = {"k": 4, "max_tokens": 2000, "temperature": 0.6, "prompt": "probe",
-                  "thinking": False, "model": "Qwen3.8-27B", "min_pct": 90.0, "max_words": 320,
+                  "thinking": False, "model": "Qwen3.8-27B", "min_pct": 90.0,
                   "mode": "own_nothink"}
 
 # Known provenance (docs/corpus_native_domains.md, docs/dataxp_v2.md,
@@ -211,8 +211,8 @@ ACCEPTANCE_RULE = (
     "`domain.parse_move` under this spelling, applied on a clone of the state and scored by its Phi "
     "percentile among `domain.legal_moves(st, rng)` (Phi via `dataxp.domain.PhiEvaluator`, offset rule "
     "`infeasible`; percentile = share of legal moves with Phi <= the pick's). Per state, among the "
-    "replies that parsed, applied, are not a no-op and carry a non-empty written reasoning of at most "
-    "`max_words` words without a `<think>` tag, the highest-percentile reply is taken (ties: lowest "
+    "replies that parsed, applied, are not a no-op and carry a non-empty written reasoning without a "
+    "`<think>` tag, the highest-percentile reply is taken (ties: lowest "
     "sample index); the state becomes a row iff that pick is at or above the `min_pct` percentile "
     "(90) OR equals the teacher's move (`Move.matches`, rel 1e-2). A state without such a reply is "
     "dropped from both arms, so `own` and `own_act` are matched row for row. The row's assistant turn "
@@ -595,7 +595,7 @@ def family_manifest_own(gm: dict, group: str, group_manifest_rel: str, group_sha
                                                    "same_move_share and reasoning_words_median "
                                                    "recomputed from this family's rows; dropped "
                                                    "reasons are group-level (see the group manifest)"},
-           "min_pct": gm.get("min_pct"), "max_words": gm.get("max_words"), "tag": gm.get("tag")}
+           "min_pct": gm.get("min_pct"), "tag": gm.get("tag")}
     for split, pre in (("train", "train_"), ("dev", "dev_in_")):
         g = gm.get(split) or {}
         per = (g.get("per_domain") or {}).get(fam, [0, 0])
@@ -1692,7 +1692,7 @@ def _reasoning_of(answer: str) -> str:
     return (a if i < 0 else a[:i]).strip()
 
 
-def family_funnel(fam: str, rec: dict, max_words: int, allow_noop: bool = False) -> dict:
+def family_funnel(fam: str, rec: dict, allow_noop: bool = False) -> dict:
     """states -> replies -> finished -> usable -> rows for one family of a group
     (rows filled in by the caller)."""
     st = {sid: s for sid, s in rec["states"].items() if s["variant"] == fam}
@@ -1732,7 +1732,7 @@ def family_funnel(fam: str, rec: dict, max_words: int, allow_noop: bool = False)
             if not x.get("ok") or x.get("pct") is None or (x.get("noop") and not allow_noop):
                 continue
             r = _reasoning_of(answers.get((sid, int(x["sample"])), ""))
-            if not r or len(r.split()) > max_words or "<think>" in r or "</think>" in r:
+            if not r or "<think>" in r or "</think>" in r:
                 continue
             n_use += 1
         f["usable"] += n_use
@@ -1800,9 +1800,11 @@ def recipe_findings(rec: dict, recipe: dict, draw_passes: int, allow_dry_run: bo
     if ks and ks != {recipe["k"]}:
         warns.append("group %s: replies per state %s, recipe K=%d" % (g, dict(obs["k_per_state"]), recipe["k"]))
     gm = rec["manifest"]
-    if float(gm.get("min_pct", -1)) != float(recipe["min_pct"]) or int(gm.get("max_words", -1)) != int(recipe["max_words"]):
-        errs.append("group %s: tiers built with min_pct %s / max_words %s, recipe %s / %s" % (
-            g, gm.get("min_pct"), gm.get("max_words"), recipe["min_pct"], recipe["max_words"]))
+    if float(gm.get("min_pct", -1)) != float(recipe["min_pct"]):
+        errs.append("group %s: tiers built with min_pct %s, recipe %s" % (g, gm.get("min_pct"), recipe["min_pct"]))
+    if "max_words" in gm:
+        errs.append("group %s: tiers built with a reasoning word limit (max_words %s); rebuild them with "
+                    "the current build_tiers, which has none" % (g, gm["max_words"]))
     for key in ("prompt", "mode", "model", "truncated_tokens", "k_per_state"):
         obs[key] = dict(obs[key])
     return errs, warns, obs
@@ -2071,7 +2073,7 @@ def _build_append(a, out: Path) -> int:
             write_text(rd / (t + ".jsonl"), "".join(l + "\n" for l in stamped[t]))
         write_json(rd / "manifest_own.json", family_manifest_own(
             rec["manifest"], g, "rows/_groups/%s/manifest_own.json" % g, rec["manifest_sha1"], fam, tiers))
-        funnel = family_funnel(fam, rec, int(rec["manifest"].get("max_words", recipe["max_words"])))
+        funnel = family_funnel(fam, rec)
         funnel["rows"] = {"train": rep["rows"]["train_own"], "dev": rep["rows"]["dev_in_own"]}
         funnel["dropped_eval"] = {"rows": dropped["train_own"] + dropped["dev_in_own"], "problems": sorted(collide),
                                   "why": collide}
@@ -2165,7 +2167,7 @@ def write_batch_md(out: Path, m: dict) -> None:
          "%d-token cap; mode `%s`" % (r["model"], r["prompt"], r["k"], r["temperature"], r["max_tokens"], r["mode"]),
          "- draw passes: %d (%s)" % (r["draw_passes"], "the K-reply draw only" if r["draw_passes"] == 1 else
                                      "the K-reply draw + " + r["redraw"]),
-         "- acceptance (min_pct %s, max_words %s): %s" % (r["min_pct"], r["max_words"], r["acceptance"]),
+         "- acceptance (min_pct %s): %s" % (r["min_pct"], r["acceptance"]),
          "- held out, never given rows: %s; evaluation problems never used (canonical spec checked against %s)" % (
              ", ".join(r["held_out"]), ", ".join("`%s`" % e["path"] for e in m["eval_sets"])),
          "- served instruction `%s` (%s), identical to the spelling directory's `instruction.txt`; grammars "
@@ -2201,7 +2203,7 @@ def write_batch_md(out: Path, m: dict) -> None:
         tot["truncated"], tot["usable"], tot["states_with_usable"], tot["rows_tr"], tot["rows_dev"], tot["drops"]), "",
           "states = the batch's selected repair-phase states; replies drawn = every draw over all passes (a key "
           "redrawn once counts twice); finished = keys whose final reply ended before the cap; usable = finished "
-          "replies that parsed, applied, were not a no-op and carry 1..max_words words of written reasoning "
+          "replies that parsed, applied, were not a no-op and carry non-empty written reasoning "
           "without a think tag; rows = states kept by the acceptance rule (own = own_act, row for row); eval "
           "drops = rows removed because their problem equals an evaluation problem.", "",
           "## Checks", "",

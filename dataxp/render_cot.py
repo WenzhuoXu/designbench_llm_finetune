@@ -56,7 +56,7 @@ Rules:
 - Use ONLY information in the observation, and read it exactly: values, comparisons and their size, element identities, and topology (which element feeds which, upstream/downstream).
 - Do NOT predict. Do not say what the change does, will do or is for in terms of its effect on anything: the changed element, a constraint, the objective, another element, a flow or a gradient. This applies in every tense and form. Not allowed: "increasing the radius raises its buckling capacity", "I cut G3 to reduce the flow on L5", "this relieves the queue", "adding a safety buffer", "which brings G3 to 69 MW", "without affecting the other members", "this should fix...". Allowed: "m8 carries the governing deficit and has room below its upper bound", "G5's listed sensitivity on L23 is -1 MW/MW", "I raise m8's radius, aimed at the buckling deficit it carries". Stating what a current result depends on is fine ("GBW is set by gm1 and Cc"); stating how this change moves it is not, even when the observation states the rule.
 - Do not use the words potential, score, ranking, candidate, option, or say that a search was run.
-- 60-150 words, first person, present tense. Follow the STYLE line; do not reuse a stock opening.
+- First person, present tense. Follow the STYLE line; do not reuse a stock opening.
 - End with exactly one action line, on its own line, in this form:
   <action>SET_PARAM(<element>, <parameter>, <value>)</action>"""
 
@@ -558,11 +558,6 @@ def check(text, turn, variant, exact, key, domain=None):
         reasons.append("banned")
     if PREDICTIVE.search(text):
         reasons.append("predictive")
-    if len(text.split()) < 40:
-        reasons.append("short")
-    # with --thinking the draft can leak into the answer (1/56 in v4)
-    if len(text.split()) > 220:
-        reasons.append("long")
     a = turn["action"]
     if _is_native(a) or _surface(domain):
         m = ACTION_TAG_RE.search(text)
@@ -608,7 +603,7 @@ def main(argv=None) -> int:
         args.max_tokens = 8000 if args.thinking else 450
 
     os.makedirs(args.out, exist_ok=True)
-    keys = ("n", "ok", "ungrounded", "banned", "predictive", "short", "long", "no_action",
+    keys = ("n", "ok", "ungrounded", "banned", "predictive", "no_action",
             "wrong_action", "empty", "err")
     grand = dict.fromkeys(keys, 0)
 
@@ -697,10 +692,10 @@ def main(argv=None) -> int:
                 fh.write(json.dumps(r) + "\n")
         for k in keys:
             grand[k] += stats.get(k, 0)
-        print("%-12s n=%-4d ok=%-4d ungrounded=%-3d banned=%-3d predictive=%-3d short=%-3d "
+        print("%-12s n=%-4d ok=%-4d ungrounded=%-3d banned=%-3d predictive=%-3d "
               "no_action=%-3d wrong_action=%-3d err=%-3d max_prompt=%d chars -> %s"
               % (variant, stats["n"], stats["ok"], stats["ungrounded"], stats["banned"],
-                 stats["predictive"], stats["short"], stats["no_action"],
+                 stats["predictive"], stats["no_action"],
                  stats["wrong_action"], stats["err"],
                  max(len(b[1]) for b in batch), path), flush=True)
 

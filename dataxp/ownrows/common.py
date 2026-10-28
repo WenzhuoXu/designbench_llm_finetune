@@ -86,8 +86,8 @@ assert INSTRUCTION_SET_PARAM_SHA1 != INSTRUCTION_NATIVE_SHA1
 # gold_probe.SYSTEM_OWN in its own_nothink form (written reasoning, thinking off)
 SYSTEM_OWN_NOTHINK = (
     "You are a design engineer working on a constrained design problem, one change per step. You "
-    "see the full current observation. Write your reasoning first (under 250 words: what is "
-    "violated, where the results place the problem, which change and why), then choose exactly "
+    "see the full current observation. Write your reasoning first (what is violated, where the "
+    "results place the problem, which change and why), then choose exactly "
     "ONE change that best moves the design toward meeting every constraint at low objective cost "
     "(feasibility first, then the objective). End your answer with exactly one line:\n"
     "<action>SET_PARAM(<element index>, <parameter>, <value>)</action>"

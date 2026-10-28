@@ -54,7 +54,7 @@ echo "=== $(date '+%F %T') score + tiers"
 for v in engibench photonics; do
   $PY -m dataxp.ownrows.score --states $W/$v/states_phi.jsonl --samples $W/$v/samples.jsonl --out $W/$v/scored.jsonl --workers 4 > $W/logs/score_$v.log 2>&1
   $PY -m dataxp.ownrows.build_tiers --states $W/$v/states_phi.jsonl --samples $W/$v/samples.jsonl --scored $W/$v/scored.jsonl \
-      --out $W/$v/tiers --min-pct 90 --max-words 320 --tag own > $W/logs/tiers_$v.log 2>&1
+      --out $W/$v/tiers --min-pct 90 --tag own > $W/logs/tiers_$v.log 2>&1
   tail -3 $W/logs/score_$v.log; tail -3 $W/logs/tiers_$v.log
 done
 echo "BW_ROWS3_DONE $(date '+%F %T')"

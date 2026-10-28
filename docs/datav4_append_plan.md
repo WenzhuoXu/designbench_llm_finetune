@@ -15,6 +15,24 @@ The top-level README, manifest, instruction and grammar files are not updated. E
 self-describing (`BATCH.md` + `manifest.json`), and its served instruction and grammars are checked to
 equal the spelling directory's `instruction.txt` and `grammar/<family>.txt`.
 
+## Status 2026-10-28: reasoning word limits removed
+
+`build_tiers --max-words 320` and the probe prompt's "under 250 words" were arbitrary numbers,
+carried over from the SFT probe's row builder and never chosen for datav4. On b025 multitool the
+320-word filter dropped 1,140 of 2,523 otherwise accepted states (1,383 rows kept vs 2,523 with no
+limit; grid2 96 vs 376, circuit2 176 vs 463). It also dropped those states from the action-only
+`own_act` arm, which carries no reasoning. Both are removed from the code:
+- `build_tiers` has no `--max-words`;
+- `package_datav4` refuses tiers built with one;
+- the probe prompt asks for no length;
+- the probe and render gates (`gold_probe`, `render_cot`) no longer have word bounds.
+
+b001-b027 keep their 320-word rows. A no-limit rebuild of b001-b025 from the same sampled replies
+goes to `datav4_multitool_nowordlimit/` and `datav4_set_parameter_nowordlimit/`. b001-b027's replies
+were still sampled under the "under 250 words" prompt. The served training instruction (`instruction.txt`,
+the collaborator's V2 text and the native/set_parameter forms derived from it) still says "in 60-150
+words"; that is the owner's call and is unchanged.
+
 ## Status 2026-10-26: native appends stopped after b015
 
 b001-b015 are on bridges2 (13,712 multitool / 14,679 set_parameter rows; per-batch counts in each
@@ -51,11 +69,13 @@ workers, photonics 6.7 h on 4, grid2op 1.6 h; the v2 five are minutes each).
    --twin-states <other spelling's rows root>` refuses a batch whose state set or splits differ.
 2. **The b001 recipe.** Own-action rows; K=4 replies per state from the un-tuned Qwen3.8-27B, thinking
    off, 2,000-token cap, temperature 0.6, `--prompt probe`; acceptance = the best pick is at or above the
-   90th Φ percentile of the legal set or equals the teacher's move; `--max-words 320`; plus **one** redraw
+   90th Φ percentile of the legal set or equals the teacher's move; plus **one** redraw
    pass of the truncated keys (`sample.py` re-run on the same output redraws exactly those). The packager
    checks what the files record: K per state, prompt `probe`, mode `own_nothink` (no dry-run replies),
-   the model name, no thinking text, reply tokens <= 2,000, `min_pct` 90 / `max_words` 320 in the tier
-   manifest, and no reply drawn in a pass above `--draw-passes`.
+   the model name, no thinking text, reply tokens <= 2,000, `min_pct` 90 and no `max_words` in the tier
+   manifest, and no reply drawn in a pass above `--draw-passes`. (b001-b027 were built with a
+   320-word reasoning limit and a probe prompt asking for "under 250 words". Both were arbitrary
+   and are removed from the code as of 2026-10-28; see the status note below.)
 3. **Rows record their batch.** Every row gets `"batch": "b00N"`, `"draw_passes"` (the passes the batch
    ran: 2 = the K-reply draw + the redraw pass) and, when the sampler recorded it, `"draw_pass"` (the
    pass that drew the row's own reply).

@@ -12,3 +12,8 @@ These scripts ran on the clusters and existed only there; they are copied here s
 The library code they drive is `dataxp/` (Move contract, native domains, verb surfaces, spellings,
 `ownrows/`, `package_datav4.py`); the design and status record is `docs/corpus_native_domains.md`,
 `docs/datav4_append_plan.md`, `docs/dataxp_spellings.md`, `docs/dataxp_verb_surface.md`.
+
+The `drc_pipeline/` scripts call `build_tiers` without `--max-words`. The runs themselves passed
+`--max-words 320`, which was removed from the code on 2026-10-28 (`docs/datav4_append_plan.md`,
+"Status 2026-10-28"). What each batch actually ran is recorded in its BATCH.md and manifests on
+bridges2.

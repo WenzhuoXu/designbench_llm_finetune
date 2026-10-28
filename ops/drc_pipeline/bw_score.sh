@@ -16,7 +16,7 @@ for g in ${GRPS:?}; do
   echo "=== $(date '+%F %T') score $g ($DATAXP_SPELLING)"
   $PY -m dataxp.ownrows.score --states $W/states_phi.jsonl --samples $W/samples.jsonl --out $W/scored.jsonl --workers 6 > $ROOT/logs/score_$g.log 2>&1; echo "score rc=$?"
   $PY -m dataxp.ownrows.build_tiers --states $W/states_phi.jsonl --samples $W/samples.jsonl --scored $W/scored.jsonl \
-      --out $W/tiers --min-pct 90 --max-words 320 --tag own > $ROOT/logs/tiers_$g.log 2>&1; echo "tiers rc=$?"
+      --out $W/tiers --min-pct 90 --tag own > $ROOT/logs/tiers_$g.log 2>&1; echo "tiers rc=$?"
   tail -4 $ROOT/logs/score_$g.log; cat $W/tiers/manifest_own.json 2>/dev/null | head -c 1500; echo
 done
 echo "BW_SCORE_DONE $(date '+%F %T')"

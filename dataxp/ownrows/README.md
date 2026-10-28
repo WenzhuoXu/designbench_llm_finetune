@@ -61,7 +61,7 @@ python -m dataxp.ownrows.score --states $W/states_phi.jsonl --samples $W/samples
 
 # 5. tiers
 python -m dataxp.ownrows.build_tiers --states $W/states_phi.jsonl --samples $W/samples.jsonl \
-    --scored $W/scored.jsonl --out $W/tiers --min-pct 90 --max-words 320 --tag own
+    --scored $W/scored.jsonl --out $W/tiers --min-pct 90 --tag own
 ```
 
 Outputs of step 5: `tiers/train_own.jsonl`, `tiers/dev_in_own.jsonl`, `tiers/train_own_act.jsonl`,
@@ -92,7 +92,7 @@ exposed) at seed `stable_seed(pid, "gp", i, p)` for SET_PARAM — gold_probe's s
 same way (`gold_phi`, `gold_pct`, `gold_in_legal`).
 
 **Sampling (step 3).** Default `--prompt probe`: gold_probe's `SYSTEM_OWN` in its own_nothink
-form (written reasoning under 250 words, then one `<action>` line); on a native domain its
+form (written reasoning, then one `<action>` line); on a native domain its
 `SET_PARAM` action line is replaced by `<action>VERB(arg, ...)</action>` + `domain.grammar()`,
 the substitution `render_cot.system_prompt` makes on the renderer's SYSTEM. User = the full
 observation (head + body, what the sftprobe stored as `obs`) + "Choose exactly ONE change for
@@ -110,11 +110,14 @@ SET_PARAM picks the sftprobe's looser `gold_probe._match` (same element and para
 direction, step within ×2) is recorded as `same_move_loose` but not used for selection.
 
 **Tiers (step 5).** Per state, among replies that parsed and applied, carry a non-empty written
-reasoning (text before the last `<action>`) of at most `--max-words` words with no `<think>`
+reasoning (text before the last `<action>`) with no `<think>`
 tag, and are not a no-op, take the highest-percentile one (ties: lowest sample index). Keep the
 state iff `pct >= --min-pct` (90) **or** `same_move`. A state without such a reply is dropped
-from both arms, so `own` and `own_act` are matched row for row. `--max-words` default 320
-(build_own's); the own_cands arm raised it to 900 (`docs/sft_probe_rat2.md`).
+from both arms, so `own` and `own_act` are matched row for row. There is no limit on the
+reasoning's length. Until 2026-10-28 the builder dropped replies with more than 320 words of
+reasoning (`--max-words`) and the probe prompt asked for "under 250 words". Both numbers were
+arbitrary, and both are removed. datav4 batches b001-b027 were built with them; their
+manifests record `max_words`.
 
 ## Row format
 

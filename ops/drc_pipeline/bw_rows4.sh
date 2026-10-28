@@ -46,7 +46,7 @@ echo "=== $(date '+%F %T') score + tiers"
 for d in v2verb grid2op; do
   $PY -m dataxp.ownrows.score --states $W/$d/states_phi.jsonl --samples $W/$d/samples.jsonl --out $W/$d/scored.jsonl --workers 4 > $W/logs/score_$d.log 2>&1
   $PY -m dataxp.ownrows.build_tiers --states $W/$d/states_phi.jsonl --samples $W/$d/samples.jsonl --scored $W/$d/scored.jsonl \
-      --out $W/$d/tiers --min-pct 90 --max-words 320 --tag own > $W/logs/tiers_$d.log 2>&1
+      --out $W/$d/tiers --min-pct 90 --tag own > $W/logs/tiers_$d.log 2>&1
   tail -3 $W/logs/score_$d.log; tail -3 $W/logs/tiers_$d.log
 done
 echo "BW_ROWS4_DONE $(date '+%F %T')"

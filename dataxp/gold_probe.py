@@ -262,7 +262,7 @@ def prompt_own(row, with_prev=False, with_post=False):
 
 SYSTEM_OWN_WRITTEN = SYSTEM_OWN.replace(
     "Think it through carefully, then choose",
-    "Write your reasoning first (under 250 words: what is violated, what each change you consider "
+    "Write your reasoning first (what is violated, what each change you consider "
     "would do according to the observation's own numbers, and why the one you choose wins), then choose")
 
 
@@ -306,7 +306,7 @@ Rules:
 - Every statement about the current design must be correct for the observation (values, comparisons, rankings, which element is which).
 - You may say what the change is expected to do, but only qualitatively (direction), and only if the actual outcome confirms it. Do not claim effects the outcome contradicts.
 - Explain why THIS element and THIS kind of change (and roughly this size), from what the observation shows.
-- 80-200 words, first person, present tense.
+- First person, present tense.
 - After the reasoning, put the action line, then a claims block:
 <action>SET_PARAM(<element index>, <parameter>, <value>)</action>
 <claims>{"effects": [{"metric": "<exact metric name from CONSTRAINT STATUS>", "direction": "up|down|unchanged"}]}</claims>
@@ -319,7 +319,7 @@ Rules:
 - Keep only what the working notes actually establish; do not add new arguments.
 - Every number must come from the observation (or be simple arithmetic on observation numbers that the notes performed). Drop numbers you cannot trace to the observation.
 - Do not mention the notes, a summary, or alternatives you did not consider in the notes.
-- 80-200 words, first person, present tense.
+- First person, present tense.
 - End with exactly the chosen action line, unchanged:
 <action>SET_PARAM(<element index>, <parameter>, <value>)</action>"""
 
@@ -345,7 +345,7 @@ SYSTEM_RAT2 = SYSTEM_RAT.replace(
 
 SYSTEM_RAT3 = """You write the internal reasoning of a design engineer at one step of an iterative design process. You are given the observation the engineer had, the change the engineer made at this step, and - for your information only - what actually happened afterwards. Write the reasoning as a short, explicit comparison of options that leads to that change.
 
-Structure (120-230 words, first person, present tense, plain prose, no headings):
+Structure (first person, present tense, plain prose, no headings):
 1. One or two sentences: which limits are violated and by how much, from CONSTRAINT STATUS.
 2. Options, 2 to 4 in total, one short sentence each; the made change must be one of them. Each option is a concrete change (element, parameter, new value) with its predicted effect on the violated metrics and on whatever it harms, each prediction derived from a number the observation gives for it (a sensitivity row, a what-if or preview line, a per-step row, a stated formula or scaling rule) and its cost in the objective. Include at least one alternative that attacks the same violation. If a previous step made some metric worse, include the option of reverting that step. Say in a few words why each rejected option loses.
 3. The decision: why the made change wins the comparison, in the terms the observation uses to compare designs (shortfalls against the objective).
@@ -442,7 +442,7 @@ def run(args):
             elif args.mode in ("own_nothink", "own_prev_nothink", "own_post_nothink"):
                 jobs.append((r, s, _system_for(dom, SYSTEM_OWN.replace(
                     "Think it through carefully, then choose",
-                    "Write your reasoning first (under 250 words: what is violated, where the "
+                    "Write your reasoning first (what is violated, where the "
                     "results place the problem, which change and why), then choose")),
                     prompt_own(r, with_prev=args.mode != "own_nothink",
                                with_post=args.mode == "own_post_nothink")))
@@ -609,8 +609,6 @@ def compress(args):
             reasons.append("action")
         if not ok_g:
             reasons.append("ungrounded")
-        if not (40 <= len(reasoning.split()) <= 320):
-            reasons.append("length")
         return {"sid": r["sid"], "sample": o["sample"], "variant": r["variant"], "cot": ans,
                 "reasons": reasons, "ungrounded": bad[:8], "pass": not reasons,
                 "own_tokens": o.get("tokens")}
@@ -727,9 +725,6 @@ def verify_rat(args):
                         rec["reasons"].append("leak")
             else:
                 rec["reasons"].append("ungrounded")
-        words = len(reasoning.split())
-        if words < 40 or words > 320:
-            rec["reasons"].append("length")
         cm = CLAIMS_RE.search(ans)
         effects = []
         if not cm:
@@ -797,7 +792,7 @@ def verify_rat(args):
         rec["effects"] = sorted((e.get("metric"), str(e.get("direction"))) for e in effects
                                 if isinstance(e, dict))
         rec["pass"] = not rec["reasons"]
-        rec["words"] = words
+        rec["words"] = len(reasoning.split())
         out.append(rec)
         per.setdefault(o["sid"], []).append(rec)
     with open(args.runs.replace(".jsonl", "_verified.jsonl"), "w", encoding="utf-8") as fh:

@@ -1,8 +1,7 @@
 """Step 5: build the own / own_act tiers and their manifest.
 
 Port of up_tools/build_own.py. Per state: among the replies that parsed,
-applied, and carry a non-empty written reasoning of at most --max-words words
-without a <think> tag, take the one with the highest Phi percentile (ties:
+applied, and carry a non-empty written reasoning without a <think> tag, take the one with the highest Phi percentile (ties:
 lowest sample index). Keep the state if that pick is at or above --min-pct
 (90, the 90th percentile of the enumerated legal moves) or is the teacher's
 move (same_move). A state with no such reply is dropped from BOTH arms, so the
@@ -23,7 +22,7 @@ Writes <out>/{train_,dev_in_}{<tag>,<tag>_act}.jsonl and <out>/manifest_<tag>.js
 
     python -m dataxp.ownrows.build_tiers --states <dir>/states_phi.jsonl \
         --samples <dir>/samples.jsonl --scored <dir>/scored.jsonl --out <dir>/tiers \
-        [--min-pct 90 --max-words 320 --tag own]
+        [--min-pct 90 --tag own]
 """
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ from .common import read_jsonl, reasoning_of, served_messages
 TEACHER = "qwen3.8-27b-own-nothink-phi-selected"
 
 
-def pick_best(scored_for_sid, answers, min_pct, max_words, allow_noop):
+def pick_best(scored_for_sid, answers, min_pct, allow_noop):
     """(best record, reasoning, drop reason). best is None when the state is dropped."""
     best = None
     why = collections.Counter()
@@ -54,9 +53,6 @@ def pick_best(scored_for_sid, answers, min_pct, max_words, allow_noop):
         reason = reasoning_of(answers.get((x["sid"], k), ""))
         if not reason:
             why["no_reasoning"] += 1
-            continue
-        if len(reason.split()) > max_words:
-            why["too_long"] += 1
             continue
         if "<think>" in reason or "</think>" in reason:
             why["think_leak"] += 1
@@ -101,8 +97,6 @@ def main(argv=None) -> int:
     ap.add_argument("--scored", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--min-pct", type=float, default=90.0)
-    ap.add_argument("--max-words", type=int, default=320,
-                    help="reasoning word cap (build_own default; own_cands used 900)")
     ap.add_argument("--tag", default="own", help="arms <tag> and <tag>_act")
     ap.add_argument("--allow-noop", action="store_true",
                     help="keep SET_PARAM picks that leave the value unchanged")
@@ -123,7 +117,7 @@ def main(argv=None) -> int:
     for r in read_jsonl(a.scored):
         scored[r["sid"]].append(r)
 
-    report = {"min_pct": a.min_pct, "max_words": a.max_words, "tag": a.tag}
+    report = {"min_pct": a.min_pct, "tag": a.tag}
     arms = (a.tag, a.tag + "_act")
     for split, prefix in (("train", "train_"), ("dev", "dev_in_")):
         rows = [s for s in states if s.get("split", "train") == split]
@@ -132,8 +126,7 @@ def main(argv=None) -> int:
         pcts, same, words = [], [], []
         for s in rows:
             per[s["variant"]][1] += 1
-            x, reason, why = pick_best(scored.get(s["sid"], []), answers, a.min_pct,
-                                       a.max_words, a.allow_noop)
+            x, reason, why = pick_best(scored.get(s["sid"], []), answers, a.min_pct, a.allow_noop)
             if x is None:
                 dropped[why.split("(")[0]] += 1
                 continue
