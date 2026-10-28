@@ -880,13 +880,22 @@ def md_code(text: str) -> str:
     return "```\n" + text.rstrip("\n") + "\n```"
 
 
+def dataset_name(spelling: str, suffix: Optional[str] = None) -> str:
+    """datav4_<spelling>, plus --dataset-suffix for a variant of the datasets
+    (e.g. datav4_multitool_nowordlimit)."""
+    return "datav4_" + spelling + (suffix or "")
+
+
 def write_readme(out: Path, spelling: str, manifest: dict, fam_info: dict, worker: dict, corpus_mode: str,
                  corpus_dir: Path, corpus_refs: dict, eval_ids: dict, prov: dict, rows_root: Optional[Path],
                  warnings: List[str]):
-    ds = "datav4_" + spelling
-    other = "datav4_" + ("set_parameter" if spelling == "multitool" else "multitool")
+    ds = manifest["dataset"]
+    other = dataset_name("set_parameter" if spelling == "multitool" else "multitool", manifest.get("dataset_suffix"))
     ins = manifest["instruction"]
-    L = ["# %s — own-action rows and corpora, `%s` spelling" % (ds, spelling), "",
+    L = ["# %s — own-action rows and corpora, `%s` spelling" % (ds, spelling), ""]
+    if manifest.get("readme_preamble"):
+        L += [manifest["readme_preamble"].rstrip("\n"), ""]
+    L += [
          "Built %s by `dataxp/package_datav4.py` (repo HEAD %s). Destination on bridges2: "
          "`%s/%s/`. Its twin is `%s/` (same states, same teacher, same rule, the other action syntax)."
          % (manifest["built"], (manifest.get("repo_head") or "n/a")[:12], BRIDGES2_ROOT, ds, other), "",
@@ -1044,8 +1053,8 @@ LAYOUT_TEXT = """%(ds)s/
 
 
 def write_corpus_md(out: Path, spelling: str, corpus_mode: str, corpus_dir: Path, corpus_families: dict,
-                    corpus_refs: dict):
-    ds = "datav4_" + spelling
+                    corpus_refs: dict, ds: Optional[str] = None):
+    ds = ds or dataset_name(spelling)
     L = ["# Corpora used by %s" % ds, ""]
     if corpus_mode == "shared":
         L += ["The spelling-independent corpora live ONCE in `%s/` next to this directory (bridges2: "
@@ -1130,7 +1139,7 @@ def build(a) -> int:
 def _build(a, out: Path) -> int:
     log = lambda s: print(s, flush=True)
     spelling = a.spelling
-    ds = "datav4_" + spelling
+    ds = dataset_name(spelling, a.dataset_suffix)
     if out.name != ds:
         log("note: --out basename is %r; the dataset is %s (bridges2 path %s/%s)" % (out.name, ds, BRIDGES2_ROOT, ds))
     corpus_mode = a.corpus_mode
@@ -1350,7 +1359,11 @@ def _build(a, out: Path) -> int:
                    "total_source_bytes": total_bytes, "families": corpus_families, "references": corpus_refs},
         "eval": ev, "warnings": warnings, "provenance": prov,
     }
-    write_corpus_md(out, spelling, corpus_mode, corpus_dir, corpus_families, corpus_refs)
+    if a.dataset_suffix:
+        manifest["dataset_suffix"] = a.dataset_suffix
+    if a.readme_preamble:
+        manifest["readme_preamble"] = read_text(Path(a.readme_preamble))
+    write_corpus_md(out, spelling, corpus_mode, corpus_dir, corpus_families, corpus_refs, ds)
     write_readme(out, spelling, manifest, fam_info, res, corpus_mode, corpus_dir, corpus_refs, eval_ids, prov,
                  rows_root, warnings)
     manifest["files"] = file_table(out, out, exclude=("manifest.json",))
@@ -1859,7 +1872,7 @@ def build_append(a) -> int:
 def _build_append(a, out: Path) -> int:
     log = lambda s: print(s, flush=True)
     spelling, batch = a.spelling, a.batch
-    ds = "datav4_" + spelling
+    ds = dataset_name(spelling, a.dataset_suffix)
     if out.name != batch:
         log("note: --out basename is %r; it becomes %s/%s/batches/%s on bridges2" % (out.name, BRIDGES2_ROOT, ds, batch))
     recipe = dict(RECIPE_DEFAULT, k=a.recipe_k, max_tokens=a.recipe_max_tokens, temperature=a.recipe_temperature)
@@ -2537,6 +2550,10 @@ def main(argv=None) -> int:
     ap.add_argument("--recipe-k", type=int, default=RECIPE_DEFAULT["k"])
     ap.add_argument("--recipe-max-tokens", type=int, default=RECIPE_DEFAULT["max_tokens"])
     ap.add_argument("--recipe-temperature", type=float, default=RECIPE_DEFAULT["temperature"])
+    ap.add_argument("--dataset-suffix", default="",
+                    help="name a variant of the datasets: datav4_<spelling><suffix> in README / BATCH.md / "
+                         "manifest (e.g. _nowordlimit); rows and checks are unchanged")
+    ap.add_argument("--readme-preamble", help="main build: a text file inserted under the README title")
     ap.add_argument("--allow-dry-run", action="store_true",
                     help="--append: accept dry-run replies (tests and demos only; recorded in the manifest)")
     ap.add_argument("--corpus-batch", help="write (or with --check verify) <corpus-dir>/<family>/accepted_<batch>/")
