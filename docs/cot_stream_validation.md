@@ -237,3 +237,50 @@ unchanged; three infrastructure and parser fixes:
   (`max_deflection_m` 0.0116 is shown as "0.012"). A review value now also counts as grounded when it
   equals the displayed value exactly.
 * **Smoke records** are kept in `out/smoke_qwen.jsonl` and are not part of the Stage 1 data.
+
+**2026-10-30, after the GPT smoke and the Qwen Stage 1 run.** These changes break the rule "after the main
+run starts, no changes", because the side question as written measured a different quantity for some
+writers. The streams themselves are unchanged.
+
+* **Side question, version 2.**
+  * **Defect.** Version 1 asked for each H move "applied alone to the current design". It did not say that
+    the chosen change is not applied. The "post" question comes after the writer's final `<action>`.
+  * **Evidence.** Each side answer was scored against two truths: H applied to the current design, and H
+    applied to the design after the final action. Only quantities where the two truths differ count. The
+    share of quantities closer to the after-action truth:
+    | writer | post | pre (control) | streams |
+    |---|---|---|---|
+    | sol | 76% | 13% | 10 smoke |
+    | terra | 52% | 15% | 10 smoke |
+    | Qwen | 25% | 19% | 242 Stage 1 |
+
+    On sol's smoke, the post score against the current design was 1.51, against 0.42 for the design after
+    the action.
+  * **New text** (`protocol.SIDE_HEAD`, `SIDE_VERSION = 2`), for "pre" and "post" and for all writers:
+    "Nothing has been applied to the design: not the changes you checked and not any change you chose.
+    … applied alone to the current design (the design in the observation at the start of this step)".
+  * **GPT writers.** The GPT smoke is rerun with version 2. The version-1 GPT smoke is kept
+    (`out/smoke_{sol,terra}.jsonl`) and is not used.
+  * **Check on the version-2 smoke** (`out/smoke2_*`): the post share closer to the after-action truth is
+    15% for sol and 11% for terra, against 12% pre for both. G1 holds with no failures for either writer.
+  * **Qwen.** Both side answers are re-asked with version 2 on the stored streams, with the same contexts
+    (`dataxp.stream.reask`; the version-1 answers are kept under `side_v1`). Qwen's G2 is decided on the
+    version-2 answers; the version-1 numbers are reported.
+* **Side-answer parser.**
+  * **Defect.** Version 1 scored 14 of Qwen's 500 Stage 1 side answers as missing:
+    * 6 were valid JSON without the `<predictions>` tags;
+    * 8 were tagged but had a nesting error: one closing brace missing between candidates, or a
+      non-number token such as `>999`.
+  * **Fix** (`protocol.parse_side`). The parser now reads untagged JSON. After a nesting error it parses
+    one candidate at a time, and a candidate that still fails counts as missing.
+  * **Effect on Qwen's version-1 answers:**
+    | | before the fix | after the fix |
+    |---|---|---|
+    | missing, pre | 5.8% | 0.0% |
+    | missing, post | 0.5% | 0.16% |
+    | G2 pre − post | +0.37 [+0.09, +0.69] | −0.12 [−0.20, −0.05] |
+
+    The earlier pass came from unparsed "pre" answers that each scored 10, not from better "post" answers.
+  * **Missing-answer rule.** The pre-registered rule (a missing quantity scores 10) stands.
+* **Secondary G2** (reported, not a gate). The same comparison on (H move, quantity) pairs parsed in both
+  answers, with the missing rates reported apart (`score.py`, `G2_answered_both`).

@@ -18,7 +18,7 @@ import numpy as np
 
 from ..render_cot import _fmt
 from .env import StreamState, element_of_text
-from .protocol import parse_json_block
+from .protocol import parse_json_block, parse_side
 
 ALPHA = 0.2
 CAP_IS = 10.0
@@ -75,7 +75,7 @@ def flat_candidate(c: dict, variant: str) -> Dict[str, tuple]:
 
 def side_candidates(ss: StreamState, H: List[str], text: str):
     """[{key: (lo, mid, hi)} or None] aligned with H; matched by position, else by action."""
-    d, how = parse_json_block(text, "predictions")
+    d, how = parse_side(text)
     cands = (d or {}).get("candidates") if isinstance(d, dict) else None
     out = [None] * len(H)
     if not isinstance(cands, list):
@@ -112,7 +112,7 @@ def score_pair(ss, key, iv, y, cur) -> dict:
 
 def score_side(ss: StreamState, H: List[str], text: Optional[str]) -> List[dict]:
     """One row per (H index, queried key) with a simulated truth."""
-    cands, _how = side_candidates(ss, H, text or "")
+    cands, how = side_candidates(ss, H, text or "")
     rows = []
     for i, h in enumerate(H):
         res = ss.check(h)
@@ -127,7 +127,7 @@ def score_side(ss: StreamState, H: List[str], text: Optional[str]) -> List[dict]
             iv = (cands[i] or {}).get(key) if cands[i] is not None else None
             r = score_pair(ss, key, iv, y, cur)
             r.update(h=i, h_text=h, element=("." in key),
-                     own=("." in key and key.split(".")[0] == own))
+                     own=("." in key and key.split(".")[0] == own), parse=how)
             rows.append(r)
     return rows
 
@@ -209,6 +209,9 @@ def main():
         writer = next(iter(streams.values())).get("writer", path)
         g1 = defaultdict(int)
         diffs, per_family, strata = [], defaultdict(list), defaultdict(list)
+        # secondary, not pre-registered (§6, 2026-10-30): pairs answered both times; missing counted apart
+        diffs_both, per_family_both, miss = [], defaultdict(list), {"pre": [0, 0], "post": [0, 0]}
+        parse_how = defaultdict(int)
         cov_pre, cov_post = [], []
         tok = defaultdict(float)
         for sid, st in sorted(streams.items()):
@@ -253,6 +256,20 @@ def main():
                          group=(recs[sid].get("pilot") or {}).get("group"), probed=r["h"] in probed,
                          probed_el=element_of_text(ss.v, r["h_text"]) in probed_el)
                 all_rows.append(r)
+            for tag, rs in (("pre", pre), ("post", post)):
+                parse_how["%s_%s" % (tag, rs[0]["parse"] if rs else "no_rows")] += 1
+            a_pre = {(r["h"], r["key"]): r for r in pre if r["h"] not in probed}
+            a_post = {(r["h"], r["key"]): r for r in post if r["h"] not in probed}
+            both = [k for k in a_pre if k in a_post]
+            for k in both:
+                for tag, a_ in (("pre", a_pre), ("post", a_post)):
+                    miss[tag][0] += int(a_[k]["missing"])
+                    miss[tag][1] += 1
+            both = [k for k in both if not a_pre[k]["missing"] and not a_post[k]["missing"]]
+            if both:
+                d_ = float(np.mean([a_pre[k]["nis"] for k in both]) - np.mean([a_post[k]["nis"] for k in both]))
+                diffs_both.append(d_)
+                per_family_both[(recs[sid].get("pilot") or {}).get("group")].append(d_)
             m_pre, m_post = state_means(pre, probed), state_means(post, probed)
             if m_pre is None or m_post is None:
                 continue
@@ -279,7 +296,16 @@ def main():
                    "per_group": {g: boot_ci(np.array(v))[:3] + (len(v),) for g, v in sorted(per_family.items())},
                    "strata": {k: boot_ci(np.array(v))[:3] + (len(v),) for k, v in strata.items()},
                    "coverage_pre": float(np.mean(cov_pre)) if cov_pre else None,
-                   "coverage_post": float(np.mean(cov_post)) if cov_post else None},
+                   "coverage_post": float(np.mean(cov_post)) if cov_post else None,
+                   "side_parse": dict(parse_how)},
+            "G2_answered_both": {
+                "note": "secondary, not pre-registered: (H move, quantity) pairs parsed in both answers",
+                "n_states": len(diffs_both),
+                "mean_pre_minus_post": boot_ci(np.array(diffs_both))[0] if diffs_both else None,
+                "ci95": list(boot_ci(np.array(diffs_both))[1:3]) if diffs_both else None,
+                "per_group": {g: boot_ci(np.array(v))[:3] + (len(v),) for g, v in sorted(per_family_both.items())},
+                "missing_rate_pre": miss["pre"][0] / max(1, miss["pre"][1]),
+                "missing_rate_post": miss["post"][0] / max(1, miss["post"][1])},
             "tokens": dict(tok)}
     json.dump(report, open(a.out, "w"), indent=1)
     if a.rows_out:

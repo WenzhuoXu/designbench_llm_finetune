@@ -30,10 +30,15 @@ Every message that makes or updates predictions includes one <predictions> block
 
 USER_TAIL = "\n\nChoose exactly ONE change for THIS step. You may check up to {cap} candidate changes with the simulator first."
 
-SIDE_HEAD = ("SIDE QUESTION (separate from your design work: it uses no check and changes nothing). Predict the "
-             "outcome of each of these changes, each applied alone to the current design, as an 80% interval "
-             "[low, expected, high] for every quantity listed. Use everything you know so far. Reply with only a "
-             "<predictions> block in the same JSON form, one candidate per change, in this order:")
+# Version 2 (2026-10-30, docs/cot_stream_validation.md §6): version 1 did not say that the chosen change is not
+# applied, and asked after the final <action> the GPT writers answered for the design after that action.
+SIDE_VERSION = 2
+SIDE_HEAD = ("SIDE QUESTION (separate from your design work: it uses no check and changes nothing). Nothing has "
+             "been applied to the design: not the changes you checked and not any change you chose. Predict the "
+             "outcome of each of these changes, each applied alone to the current design (the design in the "
+             "observation at the start of this step), as an 80% interval [low, expected, high] for every quantity "
+             "listed. Use everything you know so far. Reply with only a <predictions> block in the same JSON form, "
+             "one candidate per change, in this order:")
 
 NUDGE_FORMAT = "End your message with exactly one of <check>action</check> or <action>action</action>."
 NUDGE_CAP = "No checks are left for this step ({cap} used). Choose your change now and end with <action>action</action>."
@@ -125,7 +130,7 @@ def run_stream(ss, chat: Callable[[List[dict]], dict], cap: int = CAP, side: boo
     final = last_tag(msgs[-1]["content"])[1] if msgs[-1]["role"] == "assistant" and status == "done" else None
     return {"sid": rec["sid"], "variant": rec["variant"], "group": (rec.get("pilot") or {}).get("group"),
             "status": status, "cap": cap, "n_probes": len(probes), "probes": probes, "final_action": final,
-            "H": H, "side_question": sq, "side": side_ans, "calls": calls,
+            "H": H, "side_question": sq, "side_version": SIDE_VERSION, "side": side_ans, "calls": calls,
             "messages": [{k: v for k, v in m.items() if k != "_items"} for m in msgs]}
 
 
@@ -141,6 +146,54 @@ def parse_json_block(text: str, which: str = "predictions"):
     if not m:
         return None, None
     return loads_lenient(m[-1])
+
+
+CAND_START = re.compile(r'\{\s*"action"\s*:')
+
+
+def _close_open(s: str) -> str:
+    """s with the brackets it leaves open closed (brackets inside strings ignored)."""
+    stack, ins, esc = [], False, False
+    for ch in s:
+        if ins:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                ins = False
+        elif ch == '"':
+            ins = True
+        elif ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]" and stack and stack[-1] == ch:
+            stack.pop()
+    return s + "".join(reversed(stack))
+
+
+def parse_side(text: str):
+    """(predictions dict, how) for a side answer. how: strict | lenient (the tagged block), bare (no tags,
+    JSON in the reply), recovered (one candidate at a time, after a nesting error; a candidate that still
+    does not parse is None), or None."""
+    blocks = PRED_RE.findall(text or "")
+    if blocks:
+        body = blocks[-1]
+    else:
+        i = (text or "").find('{"candidates"')
+        body = text[i:] if i >= 0 else ""
+    d, how = loads_lenient(body) if body.strip() else (None, None)
+    if isinstance(d, dict):
+        return d, (how if blocks else "bare")
+    starts = [m.start() for m in CAND_START.finditer(body)]
+    if not starts:
+        return None, None
+    cands = []
+    for i, s in enumerate(starts):
+        seg = body[s:starts[i + 1] if i + 1 < len(starts) else len(body)]
+        seg = re.sub(r"[\s,\]\}]*$", "", seg)
+        c, _ = loads_lenient(_close_open(seg))
+        cands.append(c if isinstance(c, dict) else None)
+    return {"candidates": cands}, "recovered"
 
 
 def loads_lenient(s: str):
