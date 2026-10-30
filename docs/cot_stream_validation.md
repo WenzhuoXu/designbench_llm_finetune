@@ -284,3 +284,44 @@ writers. The streams themselves are unchanged.
   * **Missing-answer rule.** The pre-registered rule (a missing quantity scores 10) stands.
 * **Secondary G2** (reported, not a gate). The same comparison on (H move, quantity) pairs parsed in both
   answers, with the missing rates reported apart (`score.py`, `G2_answered_both`).
+
+### 2026-10-30, GPT writers stopped (owner's decision)
+
+* The OpenAI credit ran out during the GPT Stage 1 run. The owner chose to stop the GPT writers for now
+  rather than add credit or finish one of them.
+* Kept, not scored: sol 84 of 250 streams, terra 69 of 250. All are frame3d2 (hard complete, easy partial);
+  no other family was run. `dataxp.stream.run` resumes them by sid if the writers are restarted.
+* G1-G3 for sol and terra are **not measured**. Stage 1 below is decided on Qwen alone.
+
+## 7. Stage 1 result (2026-10-30)
+
+Writer: Qwen3.8-27B, thinking off, 250 states. Side answers re-asked with side question version 2
+(`out/final/stage1_qwen_side2.jsonl`, scored by `score.py` into `score_qwen_v2.json`).
+
+**G1: pass.** 247 of 250 streams ended with an action, 3 were truncated. Final actions legal 98.4%, probes
+legal 97.9% (695 of 710), review entries well formed 99.8%. 29 streams hit the 6-probe cap, 16 made no probe.
+
+**G2: fail.** Pre − post over 231 scored states: **−0.04, 95% CI [−0.17, +0.10]**. The pass rule (CI above 0)
+is not met.
+
+| group | n | pre − post | 95% CI |
+|---|---|---|---|
+| circuit2 | 23 | −0.02 | [−0.11, +0.05] |
+| frame3d2 easy | 48 | −0.38 | [−0.85, −0.07] |
+| frame3d2 hard | 44 | +0.16 | [−0.01, +0.35] |
+| frame3d2 joint | 23 | +0.50 | [−0.09, +1.46] |
+| frame3d2 notable | 23 | −0.26 | [−0.42, −0.11] |
+| grid2 | 20 | −0.25 | [−0.46, −0.06] |
+| seir2 | 25 | +0.12 | [+0.02, +0.22] |
+| traffic2 | 25 | +0.01 | [−0.02, +0.05] |
+
+* Not-probed-element stratum: −0.05 [−0.19, +0.08] (230 states).
+* Secondary, answered both (not a gate): −0.04 [−0.11, +0.02]; missing 0.5% pre, 0.4% post.
+* 80% interval coverage: 51% pre, 47% post. The intervals are too narrow, and they do not widen after
+  the probes.
+* Side-question version 1 on the same streams (corrected parser): −0.12 [−0.20, −0.05].
+* Only seir2 improves after the probes with a CI above 0; frame3d2 easy, frame3d2 notable and grid2 get worse.
+
+**Consequence (§3).** Qwen is dropped at G2. G3 does not run for it. No measured writer passes G2, so under
+§3 the stream is narration for the writers measured, and Stages 2 and 3 do not start. The GPT writers were
+not measured (above), so this result does not cover them.
