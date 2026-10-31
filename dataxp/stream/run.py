@@ -180,7 +180,8 @@ def main():
                 o = json.loads(l)
             except ValueError:
                 continue
-            if o.get("status") not in ("error", None):
+            # a side answer lost to an API error is not an answer: the stream runs again
+            if o.get("status") not in ("error", None) and not any((s or {}).get("error") for s in (o.get("side") or {}).values()):
                 done.add(o["sid"])
     todo = [r for r in recs if r["sid"] not in done]
     writer = a.writer or a.model

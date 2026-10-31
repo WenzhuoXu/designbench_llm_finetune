@@ -133,7 +133,7 @@ def cmd_score(a):
     for sid, st in sorted(streams.items()):
         ss = StreamState(recs[sid])
         H = st["H"]
-        probed = {i for i, h in enumerate(H) for p in st["probes"] if p.get("ok") and ss.same_move(p["text"], h)}
+        probed = {i for i, h in enumerate(H) for p in st["probes"] if p.get("ok") and ss.is_probe_of(p["text"], h)}
         for c in CONTEXTS:
             if (sid, c) not in ans:
                 continue

@@ -247,7 +247,10 @@ def main():
             side = st.get("side") or {}
             if "pre" not in side or "post" not in side or not st.get("n_probes"):
                 continue
-            probed = {i for i, h in enumerate(H) for p in st["probes"] if p.get("ok") and ss.same_move(p["text"], h)}
+            if any((s or {}).get("error") for s in side.values()):
+                parse_how["side_api_error"] += 1  # an API failure, not the writer's answer: not scored
+                continue
+            probed = {i for i, h in enumerate(H) for p in st["probes"] if p.get("ok") and ss.is_probe_of(p["text"], h)}
             probed_el = {element_of_text(ss.v, p["text"]) for p in st["probes"] if p.get("ok")}
             pre = score_side(ss, H, side["pre"].get("text"))
             post = score_side(ss, H, side["post"].get("text"))

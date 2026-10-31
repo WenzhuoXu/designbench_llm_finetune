@@ -293,6 +293,31 @@ writers. The streams themselves are unchanged.
   no other family was run. `dataxp.stream.run` resumes them by sid if the writers are restarted.
 * G1-G3 for sol and terra are **not measured**. Stage 1 below is decided on Qwen alone.
 
+### 2026-10-31, audit of the Qwen G2 fail: three scoring fixes (verdict unchanged)
+
+Three independent audits (scoring code, what the model saw, ground truth) found no defect that reverses the
+fail. They found three scoring defects, fixed after the result and logged here:
+* **Untagged JSON with whitespace after `{`** (`protocol.parse_side`) was still not found; one post answer
+  (`frame3d2_2500|2`) scored as entirely missing. The search is now `\{\s*"candidates"`.
+* **Bare `N/A`, `None` or `limit` as a value** made the whole candidate missing (one pre answer,
+  `frame3d2_2393|2`). Such a value is now null, so only that quantity is missing and scores 10, as §2 says.
+* **The "probed" exclusion** (§3) used `same_move`, whose 1% tolerance is relative to max(1, |value|): 1 cm on
+  a frame radius. It excluded 43 H moves the writer never probed (42 frame3d2, 1 seir2), for example H
+  `SET_RADIUS(57, 0.02802)` after probe `SET_RADIUS(57, 0.0336)`. It now uses `env.is_probe_of` (1% of the
+  value itself), in `score.py` and `g3.py`: 121 H moves excluded instead of 164.
+
+Effect on Qwen's G2: −0.036 [−0.168, +0.099] → −0.027 [−0.088, +0.037]. Still a fail.
+
+Checked and found correct: the score formula, cap, scale and bootstrap (recomputed independently); pre and post
+contexts (same side question, post saw the whole stream, same model snapshot, temperature and token limit as
+the main run); candidate order (all candidates name the H move at their position); truth (9,812 truths equal a
+fresh, uncached simulation; evaluations are deterministic).
+
+**API failures in side answers.** In the partial GPT runs, 4 post side answers were lost to "retries exhausted"
+when the credit ran out, in streams otherwise done. `score.py` now leaves a state with a side-answer API error
+unscored (counted as `side_api_error`) instead of scoring every quantity 10, and `run.py` reruns such a stream
+on resume.
+
 ## 7. Stage 1 result (2026-10-30)
 
 Writer: Qwen3.8-27B, thinking off, 250 states. Side answers re-asked with side question version 2
@@ -301,26 +326,35 @@ Writer: Qwen3.8-27B, thinking off, 250 states. Side answers re-asked with side q
 **G1: pass.** 247 of 250 streams ended with an action, 3 were truncated. Final actions legal 98.4%, probes
 legal 97.9% (695 of 710), review entries well formed 99.8%. 29 streams hit the 6-probe cap, 16 made no probe.
 
-**G2: fail.** Pre − post over 231 scored states: **−0.04, 95% CI [−0.17, +0.10]**. The pass rule (CI above 0)
-is not met.
+**G2: fail.** Pre − post over 231 scored states: **−0.03, 95% CI [−0.09, +0.04]** (with the 2026-10-31 scoring
+fixes in §6; first reported as −0.04 [−0.17, +0.10]). The pass rule (CI above 0) is not met.
 
 | group | n | pre − post | 95% CI |
 |---|---|---|---|
 | circuit2 | 23 | −0.02 | [−0.11, +0.05] |
-| frame3d2 easy | 48 | −0.38 | [−0.85, −0.07] |
-| frame3d2 hard | 44 | +0.16 | [−0.01, +0.35] |
-| frame3d2 joint | 23 | +0.50 | [−0.09, +1.46] |
+| frame3d2 easy | 48 | −0.16 | [−0.33, −0.02] |
+| frame3d2 hard | 44 | +0.17 | [+0.01, +0.36] |
+| frame3d2 joint | 23 | +0.10 | [−0.11, +0.36] |
 | frame3d2 notable | 23 | −0.26 | [−0.42, −0.11] |
 | grid2 | 20 | −0.25 | [−0.46, −0.06] |
-| seir2 | 25 | +0.12 | [+0.02, +0.22] |
+| seir2 | 25 | +0.12 | [+0.02, +0.23] |
 | traffic2 | 25 | +0.01 | [−0.02, +0.05] |
 
-* Not-probed-element stratum: −0.05 [−0.19, +0.08] (230 states).
-* Secondary, answered both (not a gate): −0.04 [−0.11, +0.02]; missing 0.5% pre, 0.4% post.
-* 80% interval coverage: 51% pre, 47% post. The intervals are too narrow, and they do not widen after
+* Not-probed-element stratum: −0.05 [−0.11, +0.01]; probed-element stratum: +0.04 [−0.03, +0.11].
+* Secondary, answered both (not a gate): −0.03 [−0.09, +0.03]; missing 0.08% pre, 0% post.
+* Post better in 115 states, worse in 116; median −0.000. With the top and bottom 5% of states clipped:
+  −0.04 [−0.08, +0.00].
+* 80% interval coverage: 51% pre, 48% post. The intervals are too narrow, and they do not widen after
   the probes.
 * Side-question version 1 on the same streams (corrected parser): −0.12 [−0.20, −0.05].
-* Only seir2 improves after the probes with a CI above 0; frame3d2 easy, frame3d2 notable and grid2 get worse.
+* frame3d2 hard and seir2 improve after the probes with a CI above 0; frame3d2 easy, frame3d2 notable and
+  grid2 get worse.
+* What drives the worst states (audit, 2026-10-31): genuinely worse post answers, such as compressive member
+  forces given as positive in frame3d2 easy, FOS_buckling confused with FOS_yielding, grid2 export and import
+  swapped. Pre answers show worked arithmetic in 130 of 231 states, post answers in 20. In frame3d2 notable
+  part of the loss is the pre-registered zero-scale rule: an interval such as [0, 0, 0.01] for a
+  `fos_shortfall` whose current and true values are 0 scores 10 (15 post cases, 2 pre). Dropping those pairs
+  moves frame3d2 notable to −0.15; the pooled verdict does not change.
 
 **Consequence (§3).** Qwen is dropped at G2. G3 does not run for it. No measured writer passes G2, so under
 §3 the stream is narration for the writers measured, and Stages 2 and 3 do not start. The GPT writers were

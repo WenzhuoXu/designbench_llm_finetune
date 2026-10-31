@@ -149,6 +149,7 @@ def parse_json_block(text: str, which: str = "predictions"):
 
 
 CAND_START = re.compile(r'\{\s*"action"\s*:')
+UNTAGGED = re.compile(r'\{\s*"candidates"')
 
 
 def _close_open(s: str) -> str:
@@ -179,8 +180,8 @@ def parse_side(text: str):
     if blocks:
         body = blocks[-1]
     else:
-        i = (text or "").find('{"candidates"')
-        body = text[i:] if i >= 0 else ""
+        m = UNTAGGED.search(text or "")
+        body = text[m.start():] if m else ""
     d, how = loads_lenient(body) if body.strip() else (None, None)
     if isinstance(d, dict):
         return d, (how if blocks else "bare")
@@ -207,6 +208,8 @@ def loads_lenient(s: str):
     t = re.sub(r"(?<![\w.])\+(\d)", r"\1", t)
     t = re.sub(r"\bInfinity\b|\binf\b", "1e309", t)
     t = re.sub(r"//[^\n]*", "", t)
+    # a bare word for a value (N/A, None, limit) is that value missing, not the whole candidate
+    t = re.sub(r"(?<=[\[,\s])(N/A|None|limit)(?=\s*[,\]])", "null", t)
     try:
         return json.loads(t), "lenient"
     except ValueError:

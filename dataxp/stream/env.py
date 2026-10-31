@@ -12,7 +12,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from ..domain import Move, stable_seed
+from ..domain import Move, _is_number, _plain, stable_seed
 from ..domains import get_domain
 from ..ladder import _binding_constraint
 from ..ownrows.common import evaluator, rebuild_state, try_apply
@@ -236,3 +236,23 @@ class StreamState:
         if ma is None or mb is None:
             return (a or "").replace(" ", "") == (b or "").replace(" ", "")
         return Move.matches(ma, mb, rel=1e-2)
+
+    def is_probe_of(self, probe: str, h: str) -> bool:
+        """The probe is the H move itself (§3 excludes probed H moves): same verb and arguments, each number
+        within 1% of its own value. same_move's 1% of max(1, |value|) is 1 cm on a frame radius."""
+        mp, mh = self.d.parse_move(probe or ""), self.d.parse_move(h or "")
+        if mp is None or mh is None:
+            return (probe or "").replace(" ", "") == (h or "").replace(" ", "")
+        if mp.verb != mh.verb:
+            return False
+        keys = (set(mp.args) | set(mh.args)) - {"v_old"}
+        for k in keys:
+            if k not in mp.args or k not in mh.args:
+                return False
+            a, b = mp.args[k], mh.args[k]
+            if _is_number(a) and _is_number(b):
+                if abs(float(a) - float(b)) > 1e-2 * max(abs(float(b)), 1e-12):
+                    return False
+            elif _plain(a) != _plain(b):
+                return False
+        return True
