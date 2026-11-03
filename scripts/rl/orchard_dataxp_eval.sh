@@ -38,6 +38,8 @@ export TMPDIR=$C/tmp XDG_CACHE_HOME=$C/xdg TRITON_CACHE_DIR=$C/triton TORCHINDUC
 export CUDA_CACHE_PATH=$C/nv VLLM_CACHE_ROOT=$C/vllm FLASHINFER_WORKSPACE_BASE=$C/flashinfer MPLBACKEND=Agg
 export VLLM_NO_USAGE_STATS=1 DO_NOT_TRACK=1 VLLM_USE_FLASHINFER_SAMPLER=0
 export DX_ORIG_SCRIPTS=$H/scripts DATAXP_SPELLING=multitool
+# molopt's PyTDC model files (built once on the login node, which has internet): $H/molopt_oracle/oracle/
+export DATAXP_MOLOPT_ORACLE_DIR="${DATAXP_MOLOPT_ORACLE_DIR:-$H/molopt_oracle}"
 mkdir -p "$OUT/logs" "$TMPDIR" "$C/xdg"
 cd "$REPO"
 echo "=== $(date '+%F %T %Z') host=$(hostname) job=${SLURM_JOB_ID:-none} restarts=${SLURM_RESTART_COUNT:-0}"
