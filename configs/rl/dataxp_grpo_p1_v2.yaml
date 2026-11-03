@@ -28,7 +28,7 @@ policy:
 harness:
   script: /home/wxu2/rl/harness/scripts/dataxp_policy_eval_v3.py
   # REQUIRED: replace CODE_V2 with the pre-verb dataxp copy's directory
-  argv: [--code, CODE_V2, --obs, v2, --param-line, --max-tokens, "2048",
+  argv: [--code, CODE_V2, --obs, v2, --param-line,
          --instruction-file, /home/wxu2/rl/harness/configs/task_instruction_V2.txt]
   env:
     DX_ORIG_SCRIPTS: /home/wxu2/rl/harness/scripts
@@ -41,7 +41,8 @@ rollout:
   group_size: 8
   horizon: 12
   temperature: 0.8
-  inject: {return_token_ids: true, logprobs: true, top_p: 1.0, top_k: 0}
+  # no completion cap (max_tokens null): a reply ends at EOS or the context length
+  inject: {return_token_ids: true, logprobs: true, top_p: 1.0, top_k: 0, max_tokens: null}
   workers: 64
 
 reward:

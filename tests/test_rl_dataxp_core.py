@@ -211,3 +211,16 @@ def test_build_step_samples_with_max_turns():
     assert len(a) == 3 and all(s["weight"] == 3.0 for s in a)
     assert len(b) == 2 and all(s["weight"] == 1.0 for s in b)
     assert st["samples_full"] == 11 and st["samples"] == 5
+
+
+def test_no_completion_cap_anywhere():
+    """No reply cap is invented: the default request carries max_tokens null, and no config passes
+    the harness a --max-tokens."""
+    import os
+    import yaml
+    assert DEFAULTS["rollout"]["inject"]["max_tokens"] is None
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ("dataxp_grpo_p2_datav4.yaml", "dataxp_grpo_p1_v2.yaml", "dataxp_grpo_p2_bridges2.yaml"):
+        cfg = yaml.safe_load(open(os.path.join(here, "configs", "rl", name), encoding="utf-8"))
+        assert "--max-tokens" not in [str(x) for x in cfg["harness"]["argv"]], name
+        assert cfg["rollout"]["inject"]["max_tokens"] is None, name

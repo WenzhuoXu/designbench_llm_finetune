@@ -20,7 +20,7 @@ policy:
 
 harness:
   script: /ocean/projects/mch250030p/wxu7/rl/harness/scripts/dataxp_policy_eval_v3.py
-  argv: [--code, /ocean/projects/mch250030p/wxu7/rl/harness/dataxp_code_v3, --no-think, --max-tokens, "1024",
+  argv: [--code, /ocean/projects/mch250030p/wxu7/rl/harness/dataxp_code_v3, --no-think,
          --native-prompt, served, --instruction-file, /ocean/projects/mch250030p/wxu7/rl/harness/configs/task_instruction_V2.txt]
   env:
     DX_ORIG_SCRIPTS: /ocean/projects/mch250030p/wxu7/rl/harness/scripts
@@ -34,7 +34,8 @@ rollout:
   group_size: 8
   horizon: 12
   temperature: 0.8
-  inject: {return_token_ids: true, logprobs: true, top_p: 1.0, top_k: 0}
+  # no completion cap (max_tokens null): a reply ends at EOS or the context length
+  inject: {return_token_ids: true, logprobs: true, top_p: 1.0, top_k: 0, max_tokens: null}
   workers: 64
   keep_full_every: 10
 

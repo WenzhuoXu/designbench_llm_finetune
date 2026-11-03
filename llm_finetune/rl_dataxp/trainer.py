@@ -62,13 +62,18 @@ DEFAULTS = {
     "rollout": {"backend": "subprocess", "python": None, "servers": [], "problems_file": None,
                 "variants": None, "problems_per_step": 8, "group_size": 8, "horizon": 12,
                 "temperature": 0.8,
-                "inject": {"return_token_ids": True, "logprobs": True, "top_p": 1.0, "top_k": 0},
+                # max_tokens None: no completion cap, a reply ends at EOS or the context length
+                "inject": {"return_token_ids": True, "logprobs": True, "top_p": 1.0, "top_k": 0,
+                           "max_tokens": None},
                 "workers": 64, "server_wait_s": 3600, "keep_full_every": 10, "max_crash_frac": 0.25},
     "reward": {"speed_bonus": 0.2},
     "grpo": {"steps": 150, "lr": 1.0e-5, "warmup_steps": 3, "betas": [0.9, 0.99], "eps": 1.0e-8,
              "weight_decay": 0.0, "max_grad_norm": 1.0, "kl_coef": 0.04, "kl_reference": "base",
              "clip_eps_low": 0.2, "clip_eps_high": 0.28, "iterations": 1, "scale_rewards": "group",
-             "tis_cap": None, "max_turns_per_episode": None},
+             "tis_cap": None, "max_turns_per_episode": None,
+             # long sequences: lm-head + loss over the completion in chunks of logit_chunk tokens;
+             # checkpointed layer inputs offloaded to CPU at or above offload_min_tokens
+             "logit_chunk": 2048, "offload_min_tokens": 8192},
     "checkpoint": {"keep_last": 2, "keep_adapter_every": 25, "keep_adapter_steps": [50, 150]},
     "guards": {"enabled": True, "window": 5, "parse_drop": 0.10, "kl_increase_max": 0.10,
                "stall_steps": 30, "stall_kl": 0.005, "ignore_stopped": False},
@@ -288,6 +293,70 @@ class SubprocessRollout:
         os.remove(p)
 
 
+# ------------------------------------------------------------------ long sequences
+
+class _OffloadedCheckpoint:
+    """Checkpointing that keeps a decoder layer's input on the CPU instead of the GPU.
+
+    Gradient checkpointing keeps one hidden-state tensor per layer for the backward pass:
+    64 layers x sequence x 5120 x bf16, about 26 GB at 40k tokens, which with the 27B weights and
+    the LoRA/Adam state does not fit an 80 GB GPU. With no completion cap a turn can be that long,
+    so above a threshold the saved input goes to pinned CPU memory and comes back for the
+    recomputation. Exact: the layer is recomputed with the same inputs (dropout is off)."""
+
+    @staticmethod
+    def make():
+        import torch
+
+        class Fn(torch.autograd.Function):
+            @staticmethod
+            def forward(ctx, run_fn, hidden):
+                ctx.run_fn = run_fn
+                ctx.device = hidden.device
+                cpu = torch.empty(hidden.shape, dtype=hidden.dtype, device="cpu",
+                                  pin_memory=hidden.is_cuda)
+                cpu.copy_(hidden.detach(), non_blocking=hidden.is_cuda)
+                ctx.cpu = cpu
+                with torch.no_grad():
+                    out = run_fn(hidden)
+                if not torch.is_tensor(out):
+                    raise TypeError("offloaded checkpointing expects a layer that returns one tensor")
+                return out
+
+            @staticmethod
+            def backward(ctx, grad_out):
+                h = ctx.cpu.to(ctx.device, non_blocking=True).detach().requires_grad_(True)
+                ctx.cpu = None
+                with torch.enable_grad():
+                    out = ctx.run_fn(h)
+                torch.autograd.backward(out, grad_out)
+                return None, h.grad
+
+        return Fn
+
+
+def install_checkpointing(model, state: dict) -> int:
+    """Replace every decoder layer's checkpoint function: torch's non-reentrant checkpoint below
+    state['offload_min_tokens'], the CPU-offloaded one at or above it (state['tokens'] is set per
+    forward). Returns the number of layers patched."""
+    import torch
+    from torch.utils.checkpoint import checkpoint
+    Fn = _OffloadedCheckpoint.make()
+
+    def ckpt(run_fn, *args, **kwargs):
+        thr = state.get("offload_min_tokens")
+        if thr and state.get("tokens", 0) >= thr and len(args) == 1 and torch.is_tensor(args[0]) and not kwargs:
+            return Fn.apply(run_fn, args[0])
+        return checkpoint(run_fn, *args, use_reentrant=False, **kwargs)
+
+    n = 0
+    for mod in model.modules():
+        if hasattr(mod, "_gradient_checkpointing_func"):
+            mod._gradient_checkpointing_func = ckpt
+            n += 1
+    return n
+
+
 # ------------------------------------------------------------------ policy
 
 class Policy:
@@ -316,10 +385,20 @@ class Policy:
         except TypeError:
             base = cls.from_pretrained(m["path"], torch_dtype=dtype, **kw)
         base.to(device)
+        self._ckpt_state = {"offload_min_tokens": cfg["grpo"].get("offload_min_tokens"), "tokens": 0}
         if m["gradient_checkpointing"]:
             base.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+            install_checkpointing(base, self._ckpt_state)
+            if self._ckpt_state["offload_min_tokens"]:
+                base.enable_input_require_grads()   # the offloaded (reentrant) path needs a grad-carrying input
         if hasattr(base, "config"):
             base.config.use_cache = False
+        # the trunk (last hidden state) and the output layer, called separately so the loss can run
+        # over the completion in chunks: the full logits of a long reply (tokens x 248k) never exist
+        self.trunk = getattr(base, "model", None)
+        self.head = base.get_output_embeddings()
+        if self.trunk is None or self.head is None:
+            raise RuntimeError("cannot find the decoder trunk / output layer of %s" % type(base).__name__)
         init = cfg["policy"]["init_adapter"]
         if cfg["policy"].get("require_init_adapter") and not init:
             raise SystemExit("policy.init_adapter is required by this config")
@@ -359,29 +438,31 @@ class Policy:
 
     def logprobs(self, prompt_ids, completion_ids, temperature: float, raw: bool = False):
         """Per-token log-probs of the completion at temperature T (with grad when enabled), and
-        optionally at T=1 (detached; vLLM reports unscaled log-probs by default)."""
+        optionally at T=1 (detached; vLLM reports unscaled log-probs by default). The trunk runs
+        once; the output layer and the loss run over the completion in checkpointed chunks."""
         import torch
         import torch.nn.functional as F
+        from torch.utils.checkpoint import checkpoint
         P, C = len(prompt_ids), len(completion_ids)
         ids = torch.tensor([list(prompt_ids) + list(completion_ids)], device=self.device)
-        try:
-            out = self.model(input_ids=ids, use_cache=False, logits_to_keep=C + 1)
-        except TypeError:
-            out = self.model(input_ids=ids, use_cache=False)
-        lg = out.logits[0]
-        if lg.shape[0] == C + 1:
-            lg = lg[:C]
-        elif lg.shape[0] == P + C:
-            lg = lg[P - 1:P - 1 + C]
-        else:
-            raise RuntimeError("unexpected logits length %d for prompt %d + completion %d" % (lg.shape[0], P, C))
+        self._ckpt_state["tokens"] = P + C
+        hid = self.trunk(input_ids=ids, use_cache=False).last_hidden_state[0, P - 1:P - 1 + C]
         tgt = torch.tensor(list(completion_ids), device=self.device)
-        lp = -F.cross_entropy(lg.float() / temperature, tgt, reduction="none")
-        rawlp = None
-        if raw:
-            with torch.no_grad():
-                rawlp = -F.cross_entropy(lg.detach().float(), tgt, reduction="none")
-        return lp, rawlp
+        step = int(self.cfg["grpo"].get("logit_chunk") or C) or C
+        head = self.head
+
+        def chunk_lp(h, t):
+            return -F.cross_entropy(head(h).float() / temperature, t, reduction="none")
+
+        parts, raws = [], []
+        for s in range(0, C, step):
+            h, t = hid[s:s + step], tgt[s:s + step]
+            parts.append(checkpoint(chunk_lp, h, t, use_reentrant=False) if torch.is_grad_enabled() else chunk_lp(h, t))
+            if raw:
+                with torch.no_grad():
+                    raws.append(-F.cross_entropy(head(h.detach()).float(), t, reduction="none"))
+        lp = torch.cat(parts)
+        return lp, (torch.cat(raws) if raw else None)
 
     def ref_logprobs(self, prompt_ids, completion_ids, temperature: float):
         import torch

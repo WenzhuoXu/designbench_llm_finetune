@@ -268,3 +268,36 @@ def test_two_ranks_match_one(tiny_model, tmp_path, problems_file):
     assert worst < 1e-5, worst
     m1, m2 = TR.read_metrics(str(tmp_path / "one")), TR.read_metrics(str(tmp_path / "two"))
     assert m1[1]["tokens"] == m2[1]["tokens"] and m1[1]["pg"] == pytest.approx(m2[1]["pg"], rel=1e-5)
+
+
+def _grads(pol, prompt, comp):
+    for p in pol.params:
+        p.grad = None
+    lp, _ = pol.logprobs(prompt, comp, 0.9)
+    (lp.sum() * 1.0).backward()
+    return lp.detach(), [p.grad.detach().clone() if p.grad is not None else None for p in pol.params]
+
+
+def test_chunked_logprobs_and_offloaded_checkpoints_are_exact(tiny_model, tmp_path, problems_file):
+    """Long-sequence paths: the loss over the completion in chunks of 2 tokens, and every layer's
+    checkpointed input offloaded (threshold 1 token), give the plain path's log-probs and grads."""
+    from peft import LoraConfig, get_peft_model
+    from transformers import Qwen3_5ForConditionalGeneration
+    init = tmp_path / "init_adapter"
+    torch.manual_seed(5)
+    get_peft_model(Qwen3_5ForConditionalGeneration.from_pretrained(tiny_model),
+                   LoraConfig(r=4, lora_alpha=8, target_modules=REGEX, init_lora_weights=False)).save_pretrained(str(init))
+    prompt, comp = [3, 5, 7, 9, 11, 13], [17, 19, 23, 29, 31]
+    runs = {}
+    for name, over in (("plain", {"grpo.logit_chunk": 0, "grpo.offload_min_tokens": None}),
+                       ("chunked", {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": None}),
+                       ("offload", {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": 1})):
+        cfg = make_cfg(tiny_model, tmp_path / name, problems_file, **dict(over, **{"policy.init_adapter": str(init)}))
+        runs[name] = _grads(policy_of(cfg), prompt, comp)
+    lp0, g0 = runs["plain"]
+    assert all(g is not None for g in g0)
+    for name in ("chunked", "offload"):
+        lp, g = runs[name]
+        assert torch.allclose(lp, lp0, atol=1e-5), name
+        worst = max((a - b).abs().max().item() for a, b in zip(g, g0))
+        assert worst < 1e-5, (name, worst)

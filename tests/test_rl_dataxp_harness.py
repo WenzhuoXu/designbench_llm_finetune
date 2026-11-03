@@ -238,3 +238,14 @@ def test_problems_builder_drops_eval_and_heldout(tmp_path):
 def P_args(script, code, corpus, evals, heldout, out):
     import argparse
     return argparse.Namespace(script=script, code=code, corpus=corpus, eval_problems=evals, heldout=heldout, out=out)
+
+
+def test_request_has_no_completion_cap(server):
+    sys.path.insert(0, REPO)
+    from llm_finetune.rl_dataxp.harness import run_one
+    p = problems()[0]
+    run_one({"script": paths()[0], "variant": p["variant"], "spec": p["spec"], "seed": 1,
+             "inject": {"return_token_ids": True, "max_tokens": None},
+             "argv": ["--code", paths()[1], "--no-think", "--model", "m", "--base-url", server.url,
+                      "--temperature", "0.8", "--turns", "2", "--out", os.devnull]})
+    assert server.bodies and all("max_tokens" in b and b["max_tokens"] is None for b in server.bodies)

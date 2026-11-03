@@ -11,7 +11,8 @@
 # SMOKE=1 is the canary: 3 steps of 2 problems x 4 rollouts, 3 turns (overrides appended last).
 # Knobs: BASE (site root for the defaults, Orchard /project/community/wxu2), REPO (this checkout; default
 # $HOME/rl/repo: persistent files stay out of Orchard's periodically wiped /project/community), VLLM_VENV,
-# TRAIN_PY, MODEL_PATH, CACHE_DIR, HF_HOME, MAX_MODEL_LEN (40960, as dx_eval_orchard.sh),
+# TRAIN_PY, MODEL_PATH, CACHE_DIR, HF_HOME, MAX_MODEL_LEN (default: the model's own
+# max_position_embeddings from its config.json; replies have no completion cap),
 # GPU_UTIL (0.90), MAX_SEQS (64), SERVER_WAIT_S (3600).
 # Exit status: the trainer's (0 done, 4 stopped by a guard, other = failure).
 set -uo pipefail
@@ -29,6 +30,10 @@ for f in "$CONFIG" "$TRAIN_PY" "$VENV/bin/vllm" "$MODEL_PATH/config.json"; do
   [ -e "$f" ] || { echo "ABORT: missing $f"; exit 2; }
 done
 
+# the model's own context length, unless MAX_MODEL_LEN says otherwise
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-$("$TRAIN_PY" -c 'import json, sys
+c = json.load(open(sys.argv[1])); t = c.get("text_config", c)
+print(t.get("max_position_embeddings") or c.get("max_position_embeddings"))' "$MODEL_PATH/config.json")}"
 export HF_HOME="${HF_HOME:-$B/rl/hf}"; export HF_HUB_CACHE="$HF_HOME/hub" HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HUB_DISABLE_XET=1
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 PYTHONHASHSEED=0 TOKENIZERS_PARALLELISM=false WANDB_MODE=disabled
 export TMPDIR=$C/tmp XDG_CACHE_HOME=$C/xdg TRITON_CACHE_DIR=$C/triton TORCHINDUCTOR_CACHE_DIR=$C/inductor
@@ -63,7 +68,7 @@ for s in ss: print(s.getsockname()[1])' "$NVLLM")
 URLS=()
 for k in $(seq 0 $((NVLLM-1))); do
   CUDA_VISIBLE_DEVICES=${DEVS[k]} setsid "$VENV/bin/vllm" serve "$MODEL_PATH" --served-model-name base \
-    --host 127.0.0.1 --port "${PORTS[k]}" --dtype bfloat16 --max-model-len "${MAX_MODEL_LEN:-40960}" \
+    --host 127.0.0.1 --port "${PORTS[k]}" --dtype bfloat16 --max-model-len "$MAX_MODEL_LEN" \
     --gpu-memory-utilization "${GPU_UTIL:-0.90}" --max-num-seqs "${MAX_SEQS:-64}" \
     --limit-mm-per-prompt '{"image":0,"video":0}' \
     --enable-lora --max-lora-rank "${MAX_LORA_RANK:-64}" --max-loras 2 --max-cpu-loras 2 \
