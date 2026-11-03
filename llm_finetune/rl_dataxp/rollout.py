@@ -59,7 +59,8 @@ def payload_for(req: dict, ep: dict) -> dict:
         "--temperature", str(req["temperature"]), "--turns", str(req["turns"]),
         "--policy-label", req.get("policy_label") or req["model"], "--out", os.devnull]
     return {"script": req["script"], "argv": argv, "variant": ep["variant"], "spec": ep["spec"],
-            "inject": req.get("inject") or {}, "seed": ep.get("seed")}
+            "inject": req.get("inject") or {}, "seed": ep.get("seed"),
+            "require_token_ids": req.get("require_token_ids", True)}
 
 
 def run_child(payload: dict, env: dict, python: str = sys.executable) -> tuple[int, dict | None, str]:
@@ -123,6 +124,66 @@ def cmd_run(a) -> int:
     return 4 if n_noids else 0
 
 
+def cmd_eval(a) -> int:
+    """Evaluation episodes through the same harness path as training: T=0, --turns 20 (the
+    harness default), no completion cap (max_tokens null), one record per (problem, run) in the
+    harness's own episode format (+ key/run), resumable by key. Then a feasible@12/@20 summary."""
+    probs = []
+    for path in a.problems:
+        for line in open(path):
+            if line.strip():
+                r = json.loads(line)
+                if not a.variants or r["variant"] in a.variants:
+                    probs.append(r)
+    eps = []
+    for run in range(1, a.runs + 1):
+        for j, r in enumerate(probs):
+            pid = r["spec"]["problem_id"]
+            eps.append({"key": "%s/r%d/%s" % (a.label, run, pid), "group": "%s/r%d" % (a.label, run),
+                        "member": run, "variant": r["variant"], "spec": r["spec"], "seed": None,
+                        "server": j % len(a.servers)})
+    req = {"script": a.script, "harness_argv": list(a.harness_argv), "servers": a.servers, "model": a.model,
+           "policy_label": a.label, "temperature": 0.0, "turns": a.turns,
+           "inject": {"max_tokens": None}, "require_token_ids": False, "workers": a.workers, "env": {},
+           "episodes": eps}
+    req_path = a.out + ".request.json"
+    with open(req_path, "w") as f:
+        json.dump(req, f)
+    ns = argparse.Namespace(request=req_path, out=a.out)
+    rc = cmd_run(ns)
+    summarize(a.out)
+    return rc
+
+
+def summarize(path: str) -> dict:
+    import collections
+    by = collections.defaultdict(lambda: collections.Counter())
+    for line in open(path):
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        ep = r["episode"]
+        if ep.get("feasible_start"):
+            continue
+        c = by[r["variant"]]
+        c["n"] += 1
+        t = ep.get("first_feasible_turn")
+        c["f12"] += int(t is not None and t <= 12)
+        c["f20"] += int(t is not None and t <= 20)
+        c["crashed"] += int(bool(ep.get("crashed")))
+        turns = ep.get("turns", [])
+        c["turns"] += len(turns)
+        c["at_eos_or_ctx"] += sum(1 for x in turns if x.get("finish") == "length")
+    out = {v: dict(c) for v, c in sorted(by.items())}
+    print("%-11s %5s %8s %8s %8s %8s" % ("variant", "n", "feas@12", "feas@20", "crashed", "len-stop"))
+    for v, c in out.items():
+        n = max(1, c["n"])
+        print("%-11s %5d %8.3f %8.3f %8d %8d" % (v, c["n"], c["f12"] / n, c["f20"] / n, c["crashed"], c["at_eos_or_ctx"]))
+    with open(path + ".summary.json", "w") as f:
+        json.dump(out, f, indent=1)
+    return out
+
+
 def _one_episode() -> None:
     """Hidden mode: one episode in this process; payload (pickle) on stdin, result on stdout."""
     import faulthandler
@@ -152,7 +213,22 @@ def main(argv=None) -> int:
     r = sub.add_parser("run")
     r.add_argument("--request", required=True)
     r.add_argument("--out", required=True)
+    e = sub.add_parser("eval", help="evaluation episodes: T=0, no completion cap, resumable")
+    e.add_argument("--script", required=True, help="dataxp_policy_eval_v3.py")
+    e.add_argument("--problems", nargs="+", required=True, help="{variant, spec} files (harness format)")
+    e.add_argument("--variants", nargs="*", default=None)
+    e.add_argument("--servers", nargs="+", required=True)
+    e.add_argument("--model", required=True, help="served name: base, or a LoRA adapter's name")
+    e.add_argument("--label", required=True)
+    e.add_argument("--runs", type=int, default=2)
+    e.add_argument("--turns", type=int, default=20)
+    e.add_argument("--workers", type=int, default=32)
+    e.add_argument("--out", required=True)
+    e.add_argument("harness_argv", nargs=argparse.REMAINDER, help="after --: the harness flags (--code ...)")
     a = ap.parse_args(argv)
+    if a.cmd == "eval":
+        a.harness_argv = [x for x in a.harness_argv if x != "--"]
+        return cmd_eval(a)
     return cmd_run(a)
 
 

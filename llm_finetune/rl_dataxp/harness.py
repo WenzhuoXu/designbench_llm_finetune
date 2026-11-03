@@ -127,7 +127,8 @@ def run_one(payload: dict) -> dict:
     with Recorder(payload.get("inject") or {}, payload.get("seed")) as rec:
         ep = H.run_episode(mods, payload["variant"], payload["spec"], a, H.LLM(a), instruction)
     rl_error = None
-    if any(not c.get("prompt_token_ids") or c.get("token_ids") is None for c in rec.calls):
+    if payload.get("require_token_ids", True) and any(
+            not c.get("prompt_token_ids") or c.get("token_ids") is None for c in rec.calls):
         rl_error = "no_token_ids"          # the server ignored return_token_ids: cannot train
     elif len(rec.calls) != len(ep.get("turns", [])):
         rl_error = "calls_turns_mismatch"

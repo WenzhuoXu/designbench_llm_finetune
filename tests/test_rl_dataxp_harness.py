@@ -249,3 +249,32 @@ def test_request_has_no_completion_cap(server):
              "argv": ["--code", paths()[1], "--no-think", "--model", "m", "--base-url", server.url,
                       "--temperature", "0.8", "--turns", "2", "--out", os.devnull]})
     assert server.bodies and all("max_tokens" in b and b["max_tokens"] is None for b in server.bodies)
+
+
+def test_eval_mode_matches_the_harness_and_summarizes(server, tmp_path):
+    """rollout.py eval = the harness's episodes at T=0 (here 6 turns), one record per problem and
+    run, plus a summary; with a server that ignores max_tokens the episodes equal the harness's."""
+    script, code, probs_file = paths()
+    out = tmp_path / "ev"
+    pr = subprocess.run([sys.executable, script, "episodes", "--code", code, "--no-think", "--policy", "llm",
+                         "--model", "base", "--base-url", server.url, "--temperature", "0", "--turns", "6",
+                         "--variants", "circuit2", "thermal2", "frame3d2", "--n", "1", "--problems-file", probs_file,
+                         "--workers", "3", "--out", str(out)], env=env(), capture_output=True, text=True)
+    assert pr.returncode == 0, pr.stderr
+    ref = {json.loads(l)["problem_id"]: json.loads(l) for l in open(str(out) + ".episodes.jsonl")}
+    o2 = tmp_path / "rl_eval.jsonl"
+    pr = subprocess.run([sys.executable, "-m", "llm_finetune.rl_dataxp.rollout", "eval", "--script", script,
+                         "--problems", probs_file, "--servers", server.url, "--model", "base", "--label", "b",
+                         "--runs", "2", "--turns", "6", "--workers", "3", "--out", str(o2), "--", "--code", code,
+                         "--no-think"], cwd=REPO, env=env(), capture_output=True, text=True)
+    assert pr.returncode == 0, pr.stdout + pr.stderr
+    recs = [json.loads(l) for l in open(o2)]
+    assert len(recs) == 6 and {r["member"] for r in recs} == {1, 2}
+    for r in recs:
+        a, b = dict(ref[r["problem_id"]]), dict(r["episode"])
+        a.pop("policy"), b.pop("policy")
+        assert a == b
+    assert all(b.get("max_tokens", "missing") is None for b in server.bodies if b["model"] == "base"
+               and "return_token_ids" in b)
+    summ = json.load(open(str(o2) + ".summary.json"))
+    assert set(summ) == {"circuit2", "thermal2", "frame3d2"} and all(v["n"] == 2 for v in summ.values())
