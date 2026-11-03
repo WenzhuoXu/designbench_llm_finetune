@@ -43,10 +43,13 @@ build_train() {
   $P -m pip install -q "transformers==5.17.0" "peft==0.21.0" "trl==1.13.0" "accelerate==1.15.0" \
       "flash-linear-attention==0.5.2" "fla-core==0.5.2" safetensors "omegaconf==2.3.0" "hydra-core==1.3.2" \
       pyyaml pytest numpy scipy "torch==2.9.1"
-  $P -m pip install -q --no-deps "triton==3.8.0"
   $P -m pip install -q --no-build-isolation "causal-conv1d==1.7.0" 2>&1 | tail -2 || echo "[train] causal-conv1d: no wheel (fallback kernel)"
+  # last: causal-conv1d's dependency resolution puts back torch 2.9.1's own triton 3.5.1, and fla
+  # refuses Triton < 3.7.1 on Hopper (wrong gated chunk_bwd_dqkwg gradients)
+  $P -m pip install -q --no-deps "triton==3.8.0"
   $P -m pip freeze > "$E/freeze.txt"
-  $P -c "import torch, transformers, peft, fla, triton; print('[train]', torch.__version__, transformers.__version__, peft.__version__, triton.__version__)" \
+  $P -c "import torch, transformers, peft, fla, triton; print('[train]', torch.__version__, transformers.__version__, peft.__version__, triton.__version__)
+assert triton.__version__ == '3.8.0', triton.__version__" \
     && touch "$E/.done"
 }
 
