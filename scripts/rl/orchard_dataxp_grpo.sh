@@ -13,7 +13,8 @@
 # $HOME/rl/repo: persistent files stay out of Orchard's periodically wiped /project/community), VLLM_VENV,
 # TRAIN_PY, MODEL_PATH, CACHE_DIR, HF_HOME, MAX_MODEL_LEN (default: the model's own
 # max_position_embeddings from its config.json; replies have no completion cap),
-# GPU_UTIL (0.90), MAX_SEQS (64), SERVER_WAIT_S (3600).
+# GPU_UTIL (0.95: at 0.90 a 27B server on one H100 has 15.3 GiB of KV cache, less than the 16.32 GiB
+# one 262,144-token sequence needs; vLLM then refuses to start), MAX_SEQS (64), SERVER_WAIT_S (3600).
 # Exit status: the trainer's (0 done, 4 stopped by a guard, other = failure).
 set -uo pipefail
 B="${BASE:-/project/community/wxu2}"
@@ -69,7 +70,7 @@ URLS=()
 for k in $(seq 0 $((NVLLM-1))); do
   CUDA_VISIBLE_DEVICES=${DEVS[k]} setsid "$VENV/bin/vllm" serve "$MODEL_PATH" --served-model-name base \
     --host 127.0.0.1 --port "${PORTS[k]}" --dtype bfloat16 --max-model-len "$MAX_MODEL_LEN" \
-    --gpu-memory-utilization "${GPU_UTIL:-0.90}" --max-num-seqs "${MAX_SEQS:-64}" \
+    --gpu-memory-utilization "${GPU_UTIL:-0.95}" --max-num-seqs "${MAX_SEQS:-64}" \
     --limit-mm-per-prompt '{"image":0,"video":0}' \
     --enable-lora --max-lora-rank "${MAX_LORA_RANK:-64}" --max-loras 2 --max-cpu-loras 2 \
     > "$RUN_DIR/logs/vllm_server_${k}_job${SLURM_JOB_ID:-x}.log" 2>&1 &
