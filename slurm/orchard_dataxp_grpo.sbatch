@@ -1,6 +1,7 @@
 #!/bin/bash
 # Multi-turn GRPO on dataxp (llm_finetune/rl_dataxp), one Orchard node, 4 GPUs:
-# 2 vLLM servers + 2 training ranks. `advanced` is not preempted (24 h, one node per user);
+# NVLLM vLLM servers + NTRAIN training ranks (default 2 + 2; the P2 run uses NVLLM=1 NTRAIN=3).
+# `advanced` is not preempted (24 h, one node per user);
 # --requeue covers node failures. A job that hits the time limit is simply resubmitted: the
 # trainer resumes from its newest complete checkpoint.
 #   sbatch --export=ALL,RUN_DIR=/project/community/wxu2/rl/runs/<name>,CONFIG=configs/rl/dataxp_grpo_p2_datav4.yaml \

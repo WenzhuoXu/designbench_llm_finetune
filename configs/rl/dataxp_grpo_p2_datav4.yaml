@@ -1,5 +1,5 @@
 # Multi-turn GRPO on the datav4 protocol (Orchard v3 harness, DX-37's evaluation setup):
-# the eight training families, verb-spelled (multitool) prompts, thinking off, 1,024-token replies.
+# the eight training families, verb-spelled (multitool) prompts, thinking off, no reply cap.
 # Held out entirely (no training problem, ever): thermal2, inventory2, molopt.
 #
 #   bash scripts/rl/orchard_dataxp_grpo.sh  (CONFIG=configs/rl/dataxp_grpo_p2_datav4.yaml RUN_DIR=...)
