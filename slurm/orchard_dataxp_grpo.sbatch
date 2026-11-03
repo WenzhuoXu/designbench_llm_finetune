@@ -15,5 +15,5 @@
 #SBATCH --mem=600G
 #SBATCH --requeue
 #SBATCH --open-mode=append
-#SBATCH -o /project/community/wxu2/rl/logs/dx_grpo_%j.out
+#SBATCH -o /home/wxu2/rl/logs/dx_grpo_%j.out
 bash "${REPO:-$HOME/rl/repo}/scripts/rl/orchard_dataxp_grpo.sh"

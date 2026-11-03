@@ -10,7 +10,7 @@
 seed: 0
 
 model:
-  path: /project/community/wxu2/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+  path: /project/community/wxu2/rl/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
   torch_dtype: bfloat16
   attn_implementation: sdpa
   gradient_checkpointing: true
@@ -28,15 +28,15 @@ policy:
     target_modules: "model\\.language_model\\.layers\\.\\d+\\.(linear_attn\\.(in_proj_qkv|in_proj_z|in_proj_a|in_proj_b|out_proj)|self_attn\\.(q_proj|k_proj|v_proj|o_proj)|mlp\\.(gate_proj|up_proj|down_proj))"
 
 harness:
-  script: /project/community/wxu2/corpus/harness/scripts/dataxp_policy_eval_v3.py
-  argv: [--code, /project/community/wxu2/corpus/harness/dataxp_code_v3, --no-think, --max-tokens, "1024",
-         --native-prompt, served, --instruction-file, /project/community/wxu2/corpus/harness/configs/task_instruction_V2.txt]
+  script: /home/wxu2/rl/harness/scripts/dataxp_policy_eval_v3.py
+  argv: [--code, /home/wxu2/rl/harness/dataxp_code_v3, --no-think, --max-tokens, "1024",
+         --native-prompt, served, --instruction-file, /home/wxu2/rl/harness/configs/task_instruction_V2.txt]
   env:
-    DX_ORIG_SCRIPTS: /project/community/wxu2/corpus/harness/scripts
+    DX_ORIG_SCRIPTS: /home/wxu2/rl/harness/scripts
     DATAXP_SPELLING: multitool
 
 rollout:
-  python: /project/community/wxu2/envs/corpus_o/bin/python
+  python: /project/community/wxu2/rl/envs/sim/bin/python
   # built by python -m llm_finetune.rl_dataxp.problems (see docs/rl_dataxp_infra.md)
   problems_file: /home/wxu2/rl/problems/train_p2_datav4.jsonl     # $HOME: /project/community is wiped every two weeks
   variants: [circuit2, frame3d2, grid2, seir2, traffic2, grid2op, engibench, photonics]

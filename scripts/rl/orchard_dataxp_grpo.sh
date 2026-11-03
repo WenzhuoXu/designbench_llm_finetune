@@ -21,15 +21,15 @@ RUN_DIR="${RUN_DIR:?run directory}"
 CONFIG="${CONFIG:?config yaml (relative to REPO or absolute)}"
 [ "${CONFIG:0:1}" = / ] || CONFIG="$REPO/$CONFIG"
 NVLLM=${NVLLM:-2}; NTRAIN=${NTRAIN:-2}
-VENV="${VLLM_VENV:-$B/envs/vllm029}"
-TRAIN_PY="${TRAIN_PY:-$B/envs/d27o/bin/python}"
-MODEL_PATH="${MODEL_PATH:-$B/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0}"
+VENV="${VLLM_VENV:-$B/rl/envs/vllm}"          # scripts/rl/orchard_rebuild.sbatch builds these
+TRAIN_PY="${TRAIN_PY:-$B/rl/envs/train/bin/python}"
+MODEL_PATH="${MODEL_PATH:-$B/rl/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0}"
 C="${CACHE_DIR:-$B/rl/cache}"
 for f in "$CONFIG" "$TRAIN_PY" "$VENV/bin/vllm" "$MODEL_PATH/config.json"; do
   [ -e "$f" ] || { echo "ABORT: missing $f"; exit 2; }
 done
 
-export HF_HOME="${HF_HOME:-$B/hf}"; export HF_HUB_CACHE="$HF_HOME/hub" HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HUB_DISABLE_XET=1
+export HF_HOME="${HF_HOME:-$B/rl/hf}"; export HF_HUB_CACHE="$HF_HOME/hub" HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HUB_DISABLE_XET=1
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 PYTHONHASHSEED=0 TOKENIZERS_PARALLELISM=false WANDB_MODE=disabled
 export TMPDIR=$C/tmp XDG_CACHE_HOME=$C/xdg TRITON_CACHE_DIR=$C/triton TORCHINDUCTOR_CACHE_DIR=$C/inductor
 export CUDA_CACHE_PATH=$C/nv VLLM_CACHE_ROOT=$C/vllm FLASHINFER_WORKSPACE_BASE=$C/flashinfer MPLBACKEND=Agg

@@ -141,6 +141,23 @@ the same run by one step from its checkpoint, 0.30 GPU-h.
   - Not yet used: installing `causal_conv1d` in a separate env, and packing several short samples
     per forward.
 
+## Where things live on Orchard, and after a wipe
+
+`/project/community` is wiped every two weeks. The 2026-11-02 wipe removed the harness, every env
+and the model snapshot.
+
+- **Persistent, in `$HOME/rl`:**
+  - `repo/`: a git export, also on GitHub;
+  - `harness/`: the evaluation harness copy, dataxp code, problem files and molopt oracle;
+  - `problems/`;
+  - `logs/`: sbatch output.
+- **Rebuildable, in `/project/community/wxu2/rl`:**
+  - `envs/{train,vllm,sim}` and `hf/`, recreated by `scripts/rl/orchard_rebuild.sbatch`
+    (pinned versions; the simulator env from `scripts/rl/corpus_env_lock.txt`, drc's exact pins);
+  - `runs/` and `cache/`.
+
+  Copy kept adapters and `metrics.jsonl` off it when a run ends.
+
 ## Running (datav4 protocol, P2)
 
 Storage rule: code lives in git (this repo, pushed to GitHub). Persistent files on Orchard live in
