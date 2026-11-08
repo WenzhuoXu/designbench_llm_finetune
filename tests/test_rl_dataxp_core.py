@@ -220,7 +220,8 @@ def test_no_completion_cap_anywhere():
     import yaml
     assert DEFAULTS["rollout"]["inject"]["max_tokens"] is None
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    for name in ("dataxp_grpo_p2_datav4.yaml", "dataxp_grpo_p1_v2.yaml", "dataxp_grpo_p2_bridges2.yaml"):
+    for name in ("dataxp_grpo_p2_datav4.yaml", "dataxp_grpo_p2_datav4_dx38mtR.yaml", "dataxp_grpo_p1_v2.yaml",
+                 "dataxp_grpo_p2_bridges2.yaml"):
         cfg = yaml.safe_load(open(os.path.join(here, "configs", "rl", name), encoding="utf-8"))
         assert "--max-tokens" not in [str(x) for x in cfg["harness"]["argv"]], name
         assert cfg["rollout"]["inject"]["max_tokens"] is None, name

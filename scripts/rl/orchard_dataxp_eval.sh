@@ -6,11 +6,12 @@
 # redoes only the unfinished ones.
 #
 #   OUT=/home/wxu2/rl/eval/<label> LABEL=base PROBLEMS="/home/wxu2/rl/harness/problems_v2.jsonl ..." \
-#   [ADAPTER=/path/to/peft_dir] [VARIANTS="circuit2 ..."] [RUNS=2] [TURNS=20] [NSERVERS=4] \
+#   [ADAPTER=/path/to/peft_dir] [THINK=1] [VARIANTS="circuit2 ..."] [RUNS=2] [TURNS=20] [NSERVERS=4] \
 #   bash scripts/rl/orchard_dataxp_eval.sh
 #
 # ADAPTER: serve a LoRA adapter under LABEL and evaluate it (default: the un-tuned base, served as
-# 'base'). Knobs as orchard_dataxp_grpo.sh: BASE, REPO, VLLM_VENV, SIM_PY, MODEL_PATH, CACHE_DIR,
+# 'base'). THINK=1: thinking on (no --no-think), for a policy trained with its rationale inside the
+# think block (dataxp_grpo_p2_datav4_dx38mtR.yaml); default thinking off, as P2. Knobs as orchard_dataxp_grpo.sh: BASE, REPO, VLLM_VENV, SIM_PY, MODEL_PATH, CACHE_DIR,
 # HF_HOME, MAX_MODEL_LEN (the model's own max_position_embeddings), GPU_UTIL (0.95), MAX_SEQS (64),
 # MAX_LORA_RANK (64), WORKERS (32), SERVER_WAIT_S (3600), HARNESS (/home/wxu2/rl/harness).
 set -uo pipefail
@@ -43,7 +44,7 @@ export DATAXP_MOLOPT_ORACLE_DIR="${DATAXP_MOLOPT_ORACLE_DIR:-$H/molopt_oracle}"
 mkdir -p "$OUT/logs" "$TMPDIR" "$C/xdg"
 cd "$REPO"
 echo "=== $(date '+%F %T %Z') host=$(hostname) job=${SLURM_JOB_ID:-none} restarts=${SLURM_RESTART_COUNT:-0}"
-echo "=== repo=$REPO ($(cat "$REPO/GIT_COMMIT" 2>/dev/null || git -C "$REPO" rev-parse --short HEAD 2>/dev/null)) label=$LABEL adapter=${ADAPTER:-none} out=$OUT"
+echo "=== repo=$REPO ($(cat "$REPO/GIT_COMMIT" 2>/dev/null || git -C "$REPO" rev-parse --short HEAD 2>/dev/null)) label=$LABEL adapter=${ADAPTER:-none} think=${THINK:-0} out=$OUT"
 
 if [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then IFS=, read -r -a DEVS <<< "$CUDA_VISIBLE_DEVICES"
 else NG=$(nvidia-smi -L | wc -l); DEVS=(); for i in $(seq 0 $((NG-1))); do DEVS+=("$i"); done; fi
@@ -59,6 +60,7 @@ trap cleanup EXIT
 trap 'cleanup; exit 143' TERM
 trap 'cleanup; exit 130' INT
 
+NOTHINK=(--no-think); [ -n "${THINK:-}" ] && NOTHINK=()
 LORA_ARGS=(); SERVED=base
 if [ -n "${ADAPTER:-}" ]; then
   LORA_ARGS=(--enable-lora --max-lora-rank "${MAX_LORA_RANK:-64}" --lora-modules "$LABEL=$ADAPTER"); SERVED=$LABEL
@@ -94,7 +96,7 @@ PYTHONPATH="$REPO" "$SIM_PY" -m llm_finetune.rl_dataxp.rollout eval \
   --script "$H/scripts/dataxp_policy_eval_v3.py" --problems $PROBLEMS ${VARIANTS:+--variants $VARIANTS} \
   --servers "${URLS[@]}" --model "$SERVED" --label "$LABEL" --runs "${RUNS:-2}" --turns "${TURNS:-20}" \
   --workers "${WORKERS:-32}" --out "$OUT/$LABEL.episodes.jsonl" -- \
-  --code "$H/dataxp_code_v3" --no-think --native-prompt served --instruction-file "$H/configs/task_instruction_V2.txt" \
+  --code "$H/dataxp_code_v3" "${NOTHINK[@]}" --native-prompt served --instruction-file "$H/configs/task_instruction_V2.txt" \
   2>&1 | tee -a "$OUT/logs/eval.log"
 rc=${PIPESTATUS[0]}
 ELAPSED=$(( $(date +%s) - T0 ))
