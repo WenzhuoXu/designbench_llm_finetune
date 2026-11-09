@@ -39,6 +39,7 @@ import json
 import math
 import os
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -72,8 +73,10 @@ DEFAULTS = {
              "clip_eps_low": 0.2, "clip_eps_high": 0.28, "iterations": 1, "scale_rewards": "group",
              "tis_cap": None, "max_turns_per_episode": None,
              # long sequences: lm-head + loss over the completion in chunks of logit_chunk tokens;
-             # checkpointed layer inputs offloaded to CPU at or above offload_min_tokens
-             "logit_chunk": 2048, "offload_min_tokens": 8192},
+             # checkpointed layer inputs offloaded to CPU at or above offload_min_tokens, and at or
+             # above it each layer's MLP and token-mixer LoRA projections run over the sequence in
+             # (checkpointed) chunks of seq_chunk tokens. Memory only: none of them changes the math.
+             "logit_chunk": 2048, "offload_min_tokens": 8192, "seq_chunk": 4096},
     "checkpoint": {"keep_last": 2, "keep_adapter_every": 25, "keep_adapter_steps": [50, 150]},
     "guards": {"enabled": True, "window": 5, "parse_drop": 0.10, "kl_increase_max": 0.10,
                "stall_steps": 30, "stall_kl": 0.005, "ignore_stopped": False},
@@ -357,6 +360,45 @@ def install_checkpointing(model, state: dict) -> int:
     return n
 
 
+# a decoder layer's per-token modules: the MLP, and the LoRA-wrapped projections of its token mixer
+_SEQ_CHUNK_MODULES = re.compile(r"(^|\.)layers\.\d+\.(mlp|linear_attn\.(in_proj_qkv|in_proj_z|in_proj_a|in_proj_b|out_proj)"
+                                r"|self_attn\.(q_proj|k_proj|v_proj|o_proj))$")
+
+
+def install_seq_chunking(model, state: dict) -> int:
+    """Run each decoder layer's per-token modules over the sequence in chunks of state['seq_chunk']
+    tokens when the sequence is long (state['tokens'] >= state['offload_min_tokens']).
+
+    Recomputing one layer of a 24k-token turn with grad keeps that layer's activations: the MLP's
+    17408-wide intermediates and the float32 copies of every LoRA input (PEFT casts the input to the
+    adapter's float32), about 12 GiB, which is what ran out on an 80 GB GPU (dx38mtR, step 13).
+    With grad, each chunk is checkpointed, so a layer keeps only its input and recomputes one chunk
+    at a time in the backward; without grad (the offloaded forward, the reference pass) the chunks
+    simply run one after another. The modules act on each token separately, so the result is the
+    unchunked one up to float summation order. Returns the number of modules wrapped."""
+    import torch
+    from torch.utils.checkpoint import checkpoint
+
+    def wrap(fwd):
+        def run(x, *args, **kwargs):
+            step, thr = state.get("seq_chunk"), state.get("offload_min_tokens")
+            if (not step or not thr or args or kwargs or state.get("tokens", 0) < thr
+                    or not torch.is_tensor(x) or x.dim() != 3 or x.shape[1] <= step):
+                return fwd(x, *args, **kwargs)
+            parts = range(0, x.shape[1], int(step))
+            if torch.is_grad_enabled():
+                return torch.cat([checkpoint(fwd, x[:, s:s + step], use_reentrant=False) for s in parts], dim=1)
+            return torch.cat([fwd(x[:, s:s + step]) for s in parts], dim=1)
+        return run
+
+    n = 0
+    for name, mod in model.named_modules():
+        if _SEQ_CHUNK_MODULES.search(name):
+            mod.forward = wrap(mod.forward)
+            n += 1
+    return n
+
+
 # ------------------------------------------------------------------ policy
 
 class Policy:
@@ -385,7 +427,8 @@ class Policy:
         except TypeError:
             base = cls.from_pretrained(m["path"], torch_dtype=dtype, **kw)
         base.to(device)
-        self._ckpt_state = {"offload_min_tokens": cfg["grpo"].get("offload_min_tokens"), "tokens": 0}
+        self._ckpt_state = {"offload_min_tokens": cfg["grpo"].get("offload_min_tokens"),
+                            "seq_chunk": cfg["grpo"].get("seq_chunk"), "tokens": 0}
         if m["gradient_checkpointing"]:
             base.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
             install_checkpointing(base, self._ckpt_state)
@@ -402,8 +445,13 @@ class Policy:
         init = cfg["policy"]["init_adapter"]
         if cfg["policy"].get("require_init_adapter") and not init:
             raise SystemExit("policy.init_adapter is required by this config")
+        # torch_device: PEFT's default is "cuda", which safetensors reads as cuda:0, so every rank
+        # loaded the adapter (twice, with the ref copy) onto rank 0's GPU: 2.26 GiB per other rank
+        # there, the memory rank 0 lacked when it ran out (dx38mtR, step 13). On the CPU instead;
+        # the weights are then copied into the adapter's parameters on this rank's GPU.
         if init:
-            model = PeftModel.from_pretrained(base, init, is_trainable=True, adapter_name="default")
+            model = PeftModel.from_pretrained(base, init, is_trainable=True, adapter_name="default",
+                                              torch_device="cpu")
         else:
             lora = dict(cfg["policy"]["lora"])
             if not lora.get("target_modules"):
@@ -414,7 +462,7 @@ class Policy:
         if self.ref_mode not in ("base", "init"):
             raise SystemExit("grpo.kl_reference must be base or init")
         if self.ref_mode == "init" and init:
-            model.load_adapter(init, adapter_name="ref", is_trainable=False)
+            model.load_adapter(init, adapter_name="ref", is_trainable=False, torch_device="cpu")
             model.set_adapter("default")
         elif self.ref_mode == "init":
             self.ref_mode = "base"              # a fresh adapter starts at B = 0: init == base
@@ -422,6 +470,7 @@ class Policy:
             if isinstance(mod, torch.nn.Dropout):
                 mod.p = 0.0
         model.train()
+        self.n_seq_chunked = install_seq_chunking(model, self._ckpt_state)
         self.model = model
         self.trainable = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
         if not self.trainable:
@@ -528,10 +577,10 @@ class Dist:
         dist.broadcast_object_list(box, src=0, group=self.cpu_group)
         return box[0]
 
-    def all_reduce_(self, t):
+    def all_reduce_(self, t, op: str = "sum"):
         if self.world > 1:
             import torch.distributed as dist
-            dist.all_reduce(t)
+            dist.all_reduce(t, op=dist.ReduceOp.MAX if op == "max" else dist.ReduceOp.SUM)
         return t
 
     def all_reduce_grads(self, params, bucket_bytes: int = 256 << 20):
@@ -706,6 +755,9 @@ def train_on_samples(policy: Policy, samples: list[dict], dist: Dist, cfg: dict,
     # 0 tokens 1 pg 2 kl 3 logp 4 clipped 5 gap_abs 6 gap_n 7 adv*tokens 8 samples
     if n_tok == 0:
         return {"skipped_update": True}
+    cuda = policy.device.type == "cuda"
+    if cuda:
+        torch.cuda.reset_peak_memory_stats(policy.device)
     old, ref = {}, {}
     gn = 0.0
     for it in range(int(g["iterations"])):
@@ -750,12 +802,18 @@ def train_on_samples(policy: Policy, samples: list[dict], dist: Dist, cfg: dict,
         sched.step()
         opt.zero_grad(set_to_none=True)
     dist.all_reduce_(stats)
+    # the memory headroom: the largest peak over the ranks, and the longest sample it had to fit
+    peak = torch.tensor([torch.cuda.max_memory_allocated(policy.device) / 2 ** 30 if cuda else 0.0],
+                        dtype=torch.float64, device=policy.device)
+    dist.all_reduce_(peak, op="max")
     t = max(1.0, float(stats[0]))
     return {"tokens": int(stats[0]), "pg": float(stats[1]) / t, "kl": float(stats[2]) / t if g["kl_coef"] else None,
             "logp_mean": float(stats[3]) / t, "clip_frac": float(stats[4]) / t,
             "vllm_gap_abs": float(stats[5]) / float(stats[6]) if stats[6] > 0 else None,
             "adv_token_mean": float(stats[7]) / t, "trained_samples": int(stats[8]), "grad_norm": gn,
-            "lr": sched.get_last_lr()[0], "skipped_update": False}
+            "lr": sched.get_last_lr()[0], "skipped_update": False,
+            "peak_mem_gib": round(float(peak[0]), 2) if cuda else None,
+            "max_sample_tokens": max(len(s["prompt_ids"]) + len(s["completion_ids"]) for s in samples)}
 
 
 # ------------------------------------------------------------------ main loop
@@ -855,11 +913,11 @@ def train(cfg: dict, backend=None, log: Callable[[str], None] = print) -> dict:
                 if hasattr(backend, "compact") and not (kf and step % kf == 0):
                     backend.compact(step)
                 log("step %d | reward %s feas %s | groups %d/%d used (%d zero-var) | samples %d tok %d | pg %.4f kl %s "
-                    "gn %.3f lr %.2e | parse %.3f | roll %.0fs train %.0fs ckpt %.0fs" % (
+                    "gn %.3f lr %.2e | parse %.3f | roll %.0fs train %.0fs ckpt %.0fs | longest %s tok peak %s GiB" % (
                         step, _f(m["reward_mean"]), _f(m["feasible_rate"]), m["groups_used"], m["groups"],
                         m["groups_zero_var"], m["samples"], m["completion_tokens"], m.get("pg") or 0.0,
                         _f(m.get("kl")), m.get("grad_norm") or 0.0, m.get("lr") or 0.0, m["parse_rate"],
-                        t_roll, t_train, m["t_ckpt"]))
+                        t_roll, t_train, m["t_ckpt"], m.get("max_sample_tokens", "-"), m.get("peak_mem_gib", "-")))
             if stop:
                 if dist.rank == 0:
                     json.dump({"step": step, "reason": stop}, open(sp, "w"))
@@ -869,6 +927,19 @@ def train(cfg: dict, backend=None, log: Callable[[str], None] = print) -> dict:
         if dist.rank == 0:
             json.dump({"steps": int(g["steps"]), "time": time.strftime("%F %T")}, open(os.path.join(run_dir, "DONE"), "w"))
         return history
+    except GuardStop:
+        raise                                   # every rank stops at the same step, after a barrier
+    except BaseException:
+        if dist.world > 1:
+            # One rank failed; the others are waiting in a collective it will never join, and
+            # destroy_process_group would wait for them until the NCCL timeout (6 h lost after the
+            # dx38mtR OOM). Report and leave now: torchrun sees the exit and stops the other ranks.
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(1)
+        raise
     finally:
         dist.close()
 

@@ -279,8 +279,10 @@ def _grads(pol, prompt, comp):
 
 
 def test_chunked_logprobs_and_offloaded_checkpoints_are_exact(tiny_model, tmp_path, problems_file):
-    """Long-sequence paths: the loss over the completion in chunks of 2 tokens, and every layer's
-    checkpointed input offloaded (threshold 1 token), give the plain path's log-probs and grads."""
+    """Long-sequence paths: the loss over the completion in chunks of 2 tokens, every layer's
+    checkpointed input offloaded (threshold 1 token), and each layer's MLP and token-mixer LoRA
+    projections run over the sequence in checkpointed chunks of 3 tokens, give the plain path's
+    log-probs and grads."""
     from peft import LoraConfig, get_peft_model
     from transformers import Qwen3_5ForConditionalGeneration
     init = tmp_path / "init_adapter"
@@ -291,12 +293,22 @@ def test_chunked_logprobs_and_offloaded_checkpoints_are_exact(tiny_model, tmp_pa
     runs = {}
     for name, over in (("plain", {"grpo.logit_chunk": 0, "grpo.offload_min_tokens": None}),
                        ("chunked", {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": None}),
-                       ("offload", {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": 1})):
+                       ("offload", {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": 1}),
+                       ("seqchunk", {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": 1, "grpo.seq_chunk": 3})):
         cfg = make_cfg(tiny_model, tmp_path / name, problems_file, **dict(over, **{"policy.init_adapter": str(init)}))
-        runs[name] = _grads(policy_of(cfg), prompt, comp)
+        pol = policy_of(cfg)
+        if name == "seqchunk":
+            calls = []             # what the MLP's first projection sees: chunks, not the 11 tokens
+            gate = next(m for n, m in pol.model.named_modules() if n.endswith("layers.0.mlp.gate_proj"))
+            inner = gate.forward
+            gate.forward = lambda x, *a, **k: (calls.append(x.shape[1]), inner(x, *a, **k))[1]
+            assert pol.n_seq_chunked > 0
+        runs[name] = _grads(pol, prompt, comp)
+        if name == "seqchunk":
+            assert calls and max(calls) == 3 and sum(calls) % (len(prompt) + len(comp)) == 0, calls
     lp0, g0 = runs["plain"]
     assert all(g is not None for g in g0)
-    for name in ("chunked", "offload"):
+    for name in ("chunked", "offload", "seqchunk"):
         lp, g = runs[name]
         assert torch.allclose(lp, lp0, atol=1e-5), name
         worst = max((a - b).abs().max().item() for a, b in zip(g, g0))
