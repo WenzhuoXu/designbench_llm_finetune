@@ -75,4 +75,8 @@ guards:
   parse_drop: 0.10
   kl_increase_max: 0.10
   stall_steps: 30
-  stall_kl: 0.005
+  # Stall rule off (owner decision 2026-11-09). It stopped this run at step 29: the KL to the dx38
+  # start had moved 0.0022 < 0.005, but it was rising steadily (0.0005 at step 1, 0.0023 at step 25),
+  # while P2 at the same lr crossed 0.005 by step 8 and then stayed flat. The lr stays 1e-5 so the run
+  # matches P2 except for the starting point. STOPPED.json was renamed STOPPED.step29.json.
+  stall_kl: 0.0
