@@ -14,7 +14,8 @@
 # TRAIN_PY, MODEL_PATH, CACHE_DIR, HF_HOME, MAX_MODEL_LEN (default: the model's own
 # max_position_embeddings from its config.json; replies have no completion cap),
 # GPU_UTIL (0.95: at 0.90 a 27B server on one H100 has 15.3 GiB of KV cache, less than the 16.32 GiB
-# one 262,144-token sequence needs; vLLM then refuses to start), MAX_SEQS (64), SERVER_WAIT_S (3600).
+# one 262,144-token sequence needs; vLLM then refuses to start), MAX_SEQS (64), SERVER_WAIT_S (3600),
+# MIN_FREE_GB (8) and DISK_WAIT_S (7200): the job waits this long for that much free space under RUN_DIR.
 # Exit status: the trainer's (0 done, 4 stopped by a guard, other = failure).
 set -uo pipefail
 B="${BASE:-/project/community/wxu2}"
@@ -51,6 +52,39 @@ if [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then IFS=, read -r -a DEVS <<< "$CUDA_VIS
 else NG=$(nvidia-smi -L | wc -l); DEVS=(); for i in $(seq 0 $((NG-1))); do DEVS+=("$i"); done; fi
 [ $((NVLLM + NTRAIN)) -le ${#DEVS[@]} ] || { echo "ABORT: NVLLM=$NVLLM + NTRAIN=$NTRAIN > ${#DEVS[@]} GPUs"; exit 2; }
 TRAIN_DEVS=$(IFS=,; echo "${DEVS[*]:$NVLLM:$NTRAIN}")
+
+# A full file system fails the job at its first write (job 167223: the server log could not be created on
+# Orchard's shared pool at 0 bytes free, exit 7 after 17 s). Wait for room for a checkpoint before starting.
+# The directories are made again on every pass: the mkdir above fails too on a full pool.
+# Only a full file system is waited for: any other mkdir failure (permissions, a file in the way) and a
+# MIN_FREE_GB / DISK_WAIT_S that is not a whole number end the job at once instead of after DISK_WAIT_S.
+case "${MIN_FREE_GB:-8}${DISK_WAIT_S:-7200}" in
+  *[!0-9]*) echo "ABORT: MIN_FREE_GB='${MIN_FREE_GB:-}' and DISK_WAIT_S='${DISK_WAIT_S:-}' must be whole numbers"; exit 2;;
+esac
+PROBE="$RUN_DIR/logs/.space_probe_${SLURM_JOB_ID:-x}"
+space_ok() {
+  local e r
+  e=$(LC_ALL=C mkdir -p "$RUN_DIR/logs" "$TMPDIR" "$C/xdg" 2>&1) || {
+    case "$e" in
+      *"No space left on device"*|*"Disk quota exceeded"*) return 1;;
+      *) echo "ABORT: $e"; exit 2;;
+    esac
+  }
+  # in KiB: df -BG rounds up (7600 MiB free reads 8G). The probe is gone again before the next pass,
+  # so a job that is cancelled while it waits leaves none behind.
+  [ "$(df -k --output=avail "$RUN_DIR" 2>/dev/null | tail -1 | tr -dc 0-9)" -ge $(( 10#${MIN_FREE_GB:-8} * 1048576 )) ] 2>/dev/null \
+    || return 1
+  dd if=/dev/zero of="$PROBE" bs=1M count=1 conv=fsync 2>/dev/null; r=$?
+  rm -f "$PROBE"
+  return $r
+}
+TW=$(date +%s)
+until space_ok; do
+  [ $(( $(date +%s) - TW )) -lt "${DISK_WAIT_S:-7200}" ] \
+    || { echo "ABORT: under ${MIN_FREE_GB:-8}G free for $RUN_DIR after ${DISK_WAIT_S:-7200} s"; exit 8; }
+  echo "=== $(date '+%T') waiting for disk space: $(df -h --output=avail "$RUN_DIR" 2>/dev/null | tail -1 | tr -d ' ') free"
+  sleep 60
+done
 
 PIDS=()
 cleanup() {
@@ -98,7 +132,14 @@ echo "=== trainer on GPUs $TRAIN_DEVS ($NTRAIN rank(s)) $(date '+%T')"
 CUDA_VISIBLE_DEVICES=$TRAIN_DEVS PYTHONPATH="$REPO" "$TRAIN_PY" -m torch.distributed.run --standalone \
   --nproc_per_node "$NTRAIN" -m llm_finetune.rl_dataxp.trainer --config "$CONFIG" \
   run_dir="$RUN_DIR" "rollout.servers=$SERVERS" ${OVERRIDES:-} "${SMOKE_OV[@]}" \
-  2>&1 | tee -a "$RUN_DIR/logs/trainer.log"
+  2>&1 | { nl=; while IFS= read -r line || [ -n "$line" ]; do
+    # not tee: tee drops an output file for good after one failed write, so a pool that was full
+    # for a minute would leave trainer.log without the rest of the job. Opening the log per line
+    # costs throughput (measured on Orchard: 143 lines/s, tee 550,000); a job prints ~13 lines a step.
+    # After a failed (possibly cut) write the next one starts on a new line.
+    printf '%s\n' "$line"
+    if { printf '%s%s\n' "$nl" "$line" >> "$RUN_DIR/logs/trainer.log"; } 2>/dev/null; then nl=; else nl=$'\n'; fi
+  done; }
 rc=${PIPESTATUS[0]}
 ELAPSED=$(( $(date +%s) - T0 ))
 echo "=== trainer rc=$rc; wall ${ELAPSED} s, GPU-hours $(awk "BEGIN{printf \"%.2f\", $ELAPSED*($NVLLM+$NTRAIN)/3600}")"

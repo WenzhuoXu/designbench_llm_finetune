@@ -1,9 +1,19 @@
 """dataxp GRPO: the pure-Python pieces (no torch, no harness)."""
+import argparse
+import errno
 import json
 import math
+import os
+import pickle
+import subprocess
+import sys
+import time
 
 import pytest
 
+from llm_finetune.rl_dataxp import diskio
+from llm_finetune.rl_dataxp import rollout as RO
+from llm_finetune.rl_dataxp.diskio import disk_full
 from llm_finetune.rl_dataxp.reward import episode_reward, invalid_reason
 from llm_finetune.rl_dataxp.samples import build_step_samples, group_advantages, shard_samples
 from llm_finetune.rl_dataxp.trainer import (DEFAULTS, ProblemSampler, apply_overrides, check_guards,
@@ -225,3 +235,350 @@ def test_no_completion_cap_anywhere():
         cfg = yaml.safe_load(open(os.path.join(here, "configs", "rl", name), encoding="utf-8"))
         assert "--max-tokens" not in [str(x) for x in cfg["harness"]["argv"]], name
         assert cfg["rollout"]["inject"]["max_tokens"] is None, name
+
+
+# ---------------------------------------------------------------- a full file system
+
+class Clock:
+    """Stands in for the time module inside diskio: sleep() moves the clock, nothing waits."""
+
+    def __init__(self):
+        self.t, self.sleeps = 0.0, 0
+
+    def time(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+        self.sleeps += 1
+
+
+def enospc():
+    return OSError(errno.ENOSPC, "No space left on device")
+
+
+def test_disk_full_is_recognised():
+    assert disk_full(enospc()) and disk_full(OSError(errno.EDQUOT, "Disk quota exceeded"))
+    assert not disk_full(OSError(errno.EACCES, "Disk quota exceeded"))         # the errno decides when there is one
+    # what safetensors raised in job 167222: not an OSError, only the text is left
+    assert disk_full(Exception("Error while serializing: I/O error: Disk quota exceeded (os error 122)"))
+    assert disk_full(RuntimeError("write failed: No space left on device (os error 28)"))
+    assert not disk_full(RuntimeError("PytorchStreamWriter failed writing file data/0: file write failed"))
+    assert not disk_full(KeyError("optimizer"))
+
+
+def test_retry_when_full_waits_then_gives_up(monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(diskio, "time", clock)
+    logs, calls = [], []
+
+    def fn(fail):
+        calls.append(1)
+        if len(calls) <= fail:
+            raise enospc()
+        return "done"
+
+    assert diskio.retry_when_full(lambda: fn(3), "x", 10, logs.append) == "done"
+    assert clock.sleeps == 3 and len(calls) == 4
+    assert "file system full while writing x" in logs[0] and "x written after waiting 3.0 min" in logs[-1]
+    # nothing is logged, and nothing waits, when the write just works
+    logs.clear(); calls.clear(); clock.sleeps = 0
+    assert diskio.retry_when_full(lambda: fn(0), "x", 10, logs.append) == "done" and not logs and not clock.sleeps
+    # the wait is bounded: 5 minutes = the first attempt and 5 more, one a minute
+    calls.clear(); clock.sleeps = 0
+    with pytest.raises(OSError):
+        diskio.retry_when_full(lambda: fn(10 ** 9), "x", 5, logs.append)
+    assert clock.sleeps == 5 and len(calls) == 6
+    # 0 = fail at once; any other error is never retried
+    calls.clear(); clock.sleeps = 0
+    with pytest.raises(OSError):
+        diskio.retry_when_full(lambda: fn(1), "x", 0, logs.append)
+    assert len(calls) == 1 and clock.sleeps == 0
+
+    def other():
+        calls.append(1)
+        raise ValueError("not the disk")
+
+    calls.clear()
+    with pytest.raises(ValueError):
+        diskio.retry_when_full(other, "x", 10, logs.append)
+    assert len(calls) == 1 and clock.sleeps == 0
+
+
+def test_write_text_keeps_the_old_file_when_the_write_fails(tmp_path, monkeypatch):
+    p = str(tmp_path / "state.json")
+    diskio.write_text(p, "old")
+    real = os.fsync
+    with monkeypatch.context() as mp:
+        mp.setattr(diskio.os, "fsync", lambda fd: (_ for _ in ()).throw(enospc()))
+        with pytest.raises(OSError):
+            diskio.write_text(p, "new, and longer")
+    assert os.fsync is real and open(p).read() == "old"
+    diskio.write_text(p, "new")
+    assert open(p).read() == "new" and sorted(os.listdir(tmp_path)) == ["state.json"]
+
+
+def test_write_errors_keeps_the_os_error():
+    class Full:
+        def write(self, b):
+            raise enospc()
+
+        def tell(self):
+            return 7
+
+    w = diskio.WriteErrors(Full())
+    with pytest.raises(OSError):
+        w.write(b"x")
+    assert disk_full(w.error) and w.tell() == 7
+
+
+def test_outfile_keeps_no_half_and_no_double_record(tmp_path, monkeypatch):
+    p = str(tmp_path / "out.jsonl")
+    with open(p, "w") as f:
+        f.write(json.dumps({"key": "a"}) + "\n" + '{"key": "b", "calls": [1, 2')       # a job killed mid-write
+    clock = Clock()
+    monkeypatch.setattr(diskio, "time", clock)
+    real, left = os.fsync, [2]
+
+    def fsync(fd):                                   # the line reached the file, the flush to disk failed
+        if left[0]:
+            left[0] -= 1
+            raise enospc()
+        return real(fd)
+
+    monkeypatch.setattr(RO.os, "fsync", fsync)
+    with RO.OutFile(p, wait_min=10) as fo:
+        fo.write({"key": "c"})
+        fo.write({"key": "d"})
+    assert [json.loads(l)["key"] for l in open(p)] == ["a", "c", "d"]
+    assert clock.sleeps == 2 and RO.read_done(p) == {"a", "c", "d"}
+    # no wait allowed: the error comes out, and what is in the file is still whole records
+    left[0] = 1
+    with RO.OutFile(p, wait_min=0) as fo:
+        with pytest.raises(OSError):
+            fo.write({"key": "e"})
+        fo.write({"key": "f"})
+    assert [json.loads(l)["key"] for l in open(p)] == ["a", "c", "d", "f"]
+
+
+def test_outfile_waits_when_the_file_cannot_be_created(tmp_path, monkeypatch):
+    """The first record of a step creates the file; on a full pool that is the call that fails
+    (job 167223), and the repeat must not trip over the file not being there."""
+    p = str(tmp_path / "step_00007.jsonl")
+    clock = Clock()
+    monkeypatch.setattr(diskio, "time", clock)
+    real, left = open, [2]
+
+    def full_open(path, mode="r", *a, **k):
+        if "a" in mode and left[0]:
+            left[0] -= 1
+            raise OSError(errno.EDQUOT, "Disk quota exceeded")
+        return real(path, mode, *a, **k)
+
+    monkeypatch.setattr(RO, "open", full_open, raising=False)
+    with RO.OutFile(p, wait_min=10) as fo:
+        assert clock.sleeps == 2 and os.path.getsize(p) == 0
+        fo.write({"key": "a"})
+        fo.write({"key": "b"})
+    assert [json.loads(l)["key"] for l in open(p)] == ["a", "b"]
+    # the same when the file goes missing between two records and cannot be made again at once
+    os.remove(p)
+    left[0], clock.sleeps = 1, 0
+    with RO.OutFile(p, wait_min=10) as fo:
+        fo.f.close()
+        fo.f = None
+        os.remove(p)
+        left[0] = 1
+        fo.write({"key": "c"})
+    assert clock.sleeps == 2 and [json.loads(l)["key"] for l in open(p)] == ["c"]
+
+
+def test_outfile_exists_after_a_run_without_records(tmp_path):
+    p = str(tmp_path / "out.jsonl")
+    with RO.OutFile(p):
+        pass
+    assert os.path.getsize(p) == 0 and RO.read_done(p) == set()
+    assert RO.summarize(p) == {} and json.load(open(p + ".summary.json")) == {}
+
+
+def test_a_child_that_hit_the_full_disk_is_run_again_not_recorded_as_crashed(monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(diskio, "time", clock)
+    full = (RO.DISK_FULL_RC, None, "Traceback ...\nOSError: [Errno 28] No space left on device: '/pool/tmp/tmpk3'")
+    answers = []
+    monkeypatch.setattr(RO, "run_child", lambda payload, env: answers.pop(0))
+    # two failures on the full pool, then the episode runs: its result, no crash
+    answers[:] = [full, full, (0, {"episode": {}}, "")]
+    assert RO.run_episode({}, {}, "s7/g0/m1", wait_min=10) == ({"episode": {}}, None)
+    assert clock.sleeps == 2 and not answers
+    # any other failure is a crash after two attempts, as before, without waiting
+    clock.sleeps = 0
+    answers[:] = [(1, None, "Segmentation fault"), (139, None, "ValueError: singular matrix")]
+    assert RO.run_episode({}, {}, "s7/g0/m2", wait_min=10) == (None, "ValueError: singular matrix")
+    assert clock.sleeps == 0
+    # the exit status decides, not the text: a warning that names a full device next to a crash
+    noisy = ("UserWarning: [Errno 28] No space left on device.  joblib will operate in serial mode\n"
+             "Fatal Python error: Segmentation fault")
+    answers[:] = [(-11, None, noisy), (-11, None, noisy)]
+    assert RO.run_episode({}, {}, "s7/g0/m4", wait_min=10) == (None, noisy)
+    assert clock.sleeps == 0 and not answers
+    # past the wait the error is raised: no crash record is written for the episode
+    answers[:] = [full] * 20
+    with pytest.raises(OSError) as e:
+        RO.run_episode({}, {}, "s7/g0/m3", wait_min=3)
+    assert disk_full(e.value) and clock.sleeps == 3
+
+
+def test_the_child_reports_a_full_disk_by_its_exit_status():
+    code = "\n".join([
+        "import errno, sys",
+        "import llm_finetune.rl_dataxp.harness as H",
+        "from llm_finetune.rl_dataxp import rollout",
+        "def run_one(payload):",
+        "    print('a simulator prints: No space left on device')",
+        "    if payload['kind'] == 'full':",
+        "        try:",
+        "            raise OSError(errno.EDQUOT, 'Disk quota exceeded')",
+        "        except OSError as e:",
+        "            raise RuntimeError('simulator failed') from e",
+        "    if payload['kind'] == 'bug':",
+        "        raise ValueError('singular matrix')",
+        "    return {'kind': payload['kind']}",
+        "H.run_one = run_one",
+        "sys.exit(rollout.main(['_one_episode']))"])
+
+    def child(kind):
+        env = dict(os.environ, PYTHONPATH=RO.REPO_ROOT + os.pathsep + os.environ.get("PYTHONPATH", ""))
+        return subprocess.run([sys.executable, "-c", code], input=pickle.dumps({"kind": kind}),
+                              capture_output=True, env=env, cwd=RO.REPO_ROOT)
+
+    pr = child("full")                               # wrapped by the simulator: still a full disk
+    assert pr.returncode == RO.DISK_FULL_RC and b"Disk quota exceeded" in pr.stderr
+    pr = child("bug")                                # a crash, although its output names a full device
+    assert pr.returncode == 1 and b"singular matrix" in pr.stderr and b"No space left" in pr.stderr
+    pr = child("ok")
+    assert pr.returncode == 0 and pickle.loads(pr.stdout) == {"kind": "ok"}
+
+
+def test_outfile_starts_over_when_the_file_was_removed(tmp_path, monkeypatch):
+    """OUT gone in mid-run (a wiped pool) and then a failed write: the next attempt must not cut
+    the new, shorter file at the old length (that pads it with NUL bytes no resume can read)."""
+    p = str(tmp_path / "out.jsonl")
+    clock = Clock()
+    monkeypatch.setattr(diskio, "time", clock)
+    real, left = os.fsync, [0]
+
+    def fsync(fd):
+        if left[0]:
+            left[0] -= 1
+            raise enospc()
+        return real(fd)
+
+    monkeypatch.setattr(RO.os, "fsync", fsync)
+    with RO.OutFile(p, wait_min=10) as fo:
+        fo.write({"key": "a", "calls": list(range(50))})
+        fo.write({"key": "b", "calls": list(range(50))})
+        fo.close()                                   # Windows does not remove an open file
+        os.remove(p)
+        left[0] = 2
+        fo.write({"key": "c"})
+        fo.write({"key": "d"})
+    assert b"\0" not in open(p, "rb").read() and clock.sleeps == 2
+    assert [json.loads(l)["key"] for l in open(p)] == ["c", "d"] and RO.read_done(p) == {"c", "d"}
+
+
+@pytest.mark.parametrize("workers", [1, 2])
+def test_rollout_stops_starting_episodes_once_one_failed_for_good(tmp_path, monkeypatch, workers):
+    """The pool stays full past the wait: the episodes not started yet are dropped (each would wait
+    as long again), every episode that still finishes is recorded, the error comes out, and the
+    next run does only what is missing."""
+    eps = [{"key": "e%d" % i, "group": 0, "member": i, "variant": "v", "spec": {"problem_id": "e%d" % i}}
+           for i in range(8)]
+    req = {"script": "x.py", "harness_argv": [], "servers": ["http://127.0.0.1:1/v1"], "model": "m",
+           "temperature": 1.0, "turns": 3, "workers": workers, "episodes": eps}
+    rq, out = str(tmp_path / "req.json"), str(tmp_path / "out.jsonl")
+    with open(rq, "w") as f:
+        json.dump(req, f)
+    ns = argparse.Namespace(request=rq, out=out)
+    good = (0, {"episode": {"turns": []}, "calls": [], "rl_error": None}, "")
+    started = []
+
+    def run_child(payload, env):                     # two workers: e0 is still running when e1 fails
+        pid = payload["spec"]["problem_id"]
+        started.append(pid)
+        time.sleep(0.5 if pid == "e0" and workers > 1 else 0.05)
+        return (RO.DISK_FULL_RC, None, "OSError: [Errno 28] No space left on device") if pid == "e1" else good
+
+    monkeypatch.setattr(RO, "run_child", run_child)
+    with pytest.raises(OSError) as e:
+        RO.cmd_run(ns)
+    assert disk_full(e.value)
+    recorded = [json.loads(l)["key"] for l in open(out)]
+    # nothing is started after e1, also not by the thread whose episode just failed
+    assert recorded == ["e0"] and sorted(started) == ["e0", "e1"]
+    first = list(started)
+    monkeypatch.setattr(RO, "run_child", lambda payload, env: (started.append(payload["spec"]["problem_id"]), good)[1])
+    assert RO.cmd_run(ns) == 0
+    assert sorted(json.loads(l)["key"] for l in open(out)) == ["e%d" % i for i in range(8)]
+    assert sorted(started[len(first):]) == sorted(set("e%d" % i for i in range(8)) - set(recorded))
+
+
+@pytest.mark.parametrize("cut_to, d_len, keys", [(2, 5, "abde"), (2, 50, "abde"), (2, 200, "abde"), (0, 5, "de")])
+def test_outfile_goes_by_the_file_when_someone_cut_it(tmp_path, monkeypatch, cut_to, d_len, keys):
+    """OUT made shorter by someone else and then one failed write: the repeat must not cut the file
+    at the length remembered from before (NUL padding, a cut record glued to the repeated one, or
+    the record twice, depending on its length)."""
+    p = str(tmp_path / "out.jsonl")
+    monkeypatch.setattr(diskio, "time", Clock())
+    real, left = os.fsync, [0]
+
+    def fsync(fd):
+        if left[0]:
+            left[0] -= 1
+            raise enospc()
+        return real(fd)
+
+    monkeypatch.setattr(RO.os, "fsync", fsync)
+    with RO.OutFile(p, wait_min=10) as fo:
+        for k in "abc":
+            fo.write({"key": k, "calls": list(range(50))})
+        with open(p, "r+b") as f:
+            f.truncate(cut_to * (os.path.getsize(p) // 3))
+        left[0] = 1
+        fo.write({"key": "d", "calls": list(range(d_len))})
+        fo.write({"key": "e"})
+    assert b"\0" not in open(p, "rb").read()
+    assert [json.loads(l)["key"] for l in open(p)] == list(keys) and RO.read_done(p) == set(keys)
+
+
+def test_has_room(tmp_path, monkeypatch):
+    d = str(tmp_path)
+    assert diskio.has_room([d]) and diskio.has_room([]) and os.listdir(d) == []
+    assert diskio.has_room([os.path.join(d, "not there")])           # not a full disk
+    monkeypatch.setattr(diskio.os, "fsync", lambda fd: (_ for _ in ()).throw(enospc()))
+    assert not diskio.has_room([os.path.join(d, "not there"), d]) and os.listdir(d) == []
+
+
+def test_a_child_that_died_without_saying_why_on_a_full_disk_is_no_crash(monkeypatch):
+    """numpy's short write, a simulator's own sub-process, SIGBUS from a memory map: the child's
+    status is an ordinary failure, the file system it writes to has no room."""
+    clock = Clock()
+    monkeypatch.setattr(diskio, "time", clock)
+    answers, room, asked = [], [], []
+    monkeypatch.setattr(RO, "run_child", lambda payload, env: answers.pop(0))
+    monkeypatch.setattr(RO, "has_room", lambda dirs: (asked.append(dirs), room.pop(0))[1])
+    short = (1, None, "OSError: 50000 requested and 2032 written")
+    answers[:] = [short, (-7, None, "Fatal Python error: Bus error"), (0, {"episode": {}}, "")]
+    room[:] = [False, False]
+    assert RO.run_episode({}, {}, "s7/g0/m1", wait_min=10, dirs=("/pool/tmp",)) == ({"episode": {}}, None)
+    assert clock.sleeps == 2 and asked == [("/pool/tmp",)] * 2 and not answers
+    # the same failures with room on the file system: a crash after two attempts, no waiting
+    clock.sleeps = 0
+    answers[:], room[:] = [short, short], [True, True]
+    assert RO.run_episode({}, {}, "s7/g0/m2", wait_min=10, dirs=("/pool/tmp",)) == (None, short[2])
+    assert clock.sleeps == 0
+    # no room and no wait allowed (a trainer that does not send disk_full_wait_min): raised, no record
+    answers[:], room[:] = [short], [False]
+    with pytest.raises(OSError) as e:
+        RO.run_episode({}, {}, "s7/g0/m3", wait_min=0, dirs=("/pool/tmp",))
+    assert disk_full(e.value)

@@ -441,3 +441,160 @@ def test_start_up_check_catches_a_gradient_lost_at_a_segment_boundary(tiny_model
                    **{"policy.init_adapter": str(init), "grpo.offload_min_tokens": 1, "grpo.layer_segment": 4})
     with pytest.raises(RuntimeError, match="gradients differ"):
         policy_of(cfg)
+
+
+# ---------------------------------------------------------------- a full file system
+
+class _Clock:
+    """Stands in for the time module inside diskio: sleep() moves the clock, nothing waits."""
+
+    def __init__(self):
+        self.t, self.sleeps = 0.0, 0
+
+    def time(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+        self.sleeps += 1
+
+
+QUOTA = "Error while serializing: I/O error: Disk quota exceeded (os error 122)"    # safetensors, job 167222
+
+
+def _same(a, b):
+    if isinstance(a, torch.Tensor):
+        return torch.equal(a, b)
+    if isinstance(a, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    if isinstance(a, (list, tuple)):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    return a == b
+
+
+def _same_run(a, b, step=3):
+    from safetensors.torch import load_file
+    for name in ("optimizer.pt", "scheduler.pt", "rng_rank0.pt"):
+        x, y = (torch.load(os.path.join(str(r), "ckpt", "step_%05d" % step, name), weights_only=False) for r in (a, b))
+        assert _same(x, y), name
+    x, y = (load_file(os.path.join(str(r), "ckpt", "step_%05d" % step, "adapter", "adapter_model.safetensors"))
+            for r in (a, b))
+    assert _same(x, y)
+    ma, mb = TR.read_metrics(str(a)), TR.read_metrics(str(b))
+    assert sorted(ma) == sorted(mb) == list(range(step))
+    assert all(ma[s]["pg"] == mb[s]["pg"] and ma[s]["kl"] == mb[s]["kl"] for s in ma)
+
+
+def test_torch_save_reports_the_full_disk_itself(tmp_path, monkeypatch):
+    import errno
+
+    class FullFile:
+        def __init__(self, f):
+            self.f, self.n = f, 0
+
+        def write(self, b):
+            self.n += 1
+            if self.n > 1:
+                raise OSError(errno.ENOSPC, "No space left on device")
+            return self.f.write(b)
+
+        def __getattr__(self, k):
+            return getattr(self.f, k)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self.f.close()
+
+    obj = {"w": torch.arange(4096.0), "n": 3}
+    p = str(tmp_path / "optimizer.pt")
+    with monkeypatch.context() as mp:
+        mp.setattr(TR, "open", lambda path, mode="r": FullFile(open(path, mode)), raising=False)
+        with pytest.raises(OSError) as e:
+            TR.torch_save(obj, p)
+    assert e.value.errno == errno.ENOSPC
+    TR.torch_save(obj, p)                                 # the next attempt replaces what the failed one left
+    assert _same(torch.load(p), obj)
+
+
+def test_checkpoints_wait_out_a_full_file_system(tiny_model, tmp_path, problems_file, monkeypatch):
+    import errno
+    from llm_finetune.rl_dataxp import diskio
+    TR.train(make_cfg(tiny_model, tmp_path / "full", problems_file), backend=FakeBackend(), log=lambda s: None)
+
+    clock = _Clock()
+    monkeypatch.setattr(diskio, "time", clock)
+    left = {"adapter": 2, "optimizer": 1, "rng": 1, "metrics": 1}
+    save_adapter, torch_save, append_metrics = TR.Policy.save_adapter, TR.torch_save, TR.append_metrics
+
+    def full_adapter(self, path):
+        if "step_00002" in path and left["adapter"]:
+            left["adapter"] -= 1
+            os.makedirs(path, exist_ok=True)
+            with open(os.path.join(path, "adapter_model.safetensors"), "wb") as f:
+                f.write(b"half a file")
+            raise RuntimeError(QUOTA)
+        return save_adapter(self, path)
+
+    def full_torch_save(obj, path):
+        for name, key in (("optimizer.pt", "optimizer"), ("rng_rank0.pt", "rng")):
+            if path.endswith(os.path.join("step_00003.tmp", name)) and left[key]:
+                left[key] -= 1
+                with open(path, "wb") as f:
+                    f.write(b"half a file")
+                raise OSError(errno.ENOSPC, "No space left on device")
+        return torch_save(obj, path)
+
+    def full_metrics(run_dir, m):
+        if m["step"] == 1 and left["metrics"]:
+            left["metrics"] -= 1
+            raise OSError(errno.EDQUOT, "Disk quota exceeded")
+        return append_metrics(run_dir, m)
+
+    monkeypatch.setattr(TR.Policy, "save_adapter", full_adapter)
+    monkeypatch.setattr(TR, "torch_save", full_torch_save)
+    monkeypatch.setattr(TR, "append_metrics", full_metrics)
+    logs = []
+    TR.train(make_cfg(tiny_model, tmp_path / "part", problems_file), backend=FakeBackend(), log=logs.append)
+    assert not any(left.values()) and clock.sleeps == 5
+    assert any("file system full while writing checkpoint 2" in s for s in logs)
+    assert any("checkpoint 3 written after waiting 1.0 min" in s for s in logs)
+    assert not [d for d in os.listdir(tmp_path / "part" / "ckpt") if d.endswith(".tmp")]
+    _same_run(tmp_path / "full", tmp_path / "part")
+    assert os.path.exists(tmp_path / "part" / "DONE")
+
+
+def test_a_disk_full_past_the_wait_leaves_no_partial_checkpoint(tiny_model, tmp_path, problems_file, monkeypatch):
+    TR.train(make_cfg(tiny_model, tmp_path / "full", problems_file), backend=FakeBackend(), log=lambda s: None)
+    save_adapter = TR.Policy.save_adapter
+
+    def full_adapter(self, path):
+        if "step_00002" in path:
+            os.makedirs(path, exist_ok=True)
+            with open(os.path.join(path, "adapter_model.safetensors"), "wb") as f:
+                f.write(b"half a file")
+            raise RuntimeError(QUOTA)
+        return save_adapter(self, path)
+
+    run = tmp_path / "part"
+    with monkeypatch.context() as mp:
+        mp.setattr(TR.Policy, "save_adapter", full_adapter)
+        with pytest.raises(RuntimeError, match="Disk quota exceeded"):
+            TR.train(make_cfg(tiny_model, run, problems_file, disk_full_wait_min=0), backend=FakeBackend(),
+                     log=lambda s: None)
+    assert TR.latest_ckpt(str(run)) == 1 and not os.path.exists(run / "ckpt" / "step_00002")
+    assert sorted(TR.read_metrics(str(run))) == [0]
+    # the next job repeats step 1 and ends where an uninterrupted run does
+    be = FakeBackend()
+    TR.train(make_cfg(tiny_model, run, problems_file), backend=be, log=lambda s: None)
+    assert [os.path.basename(os.path.dirname(a)) for a in be.adapters] == ["step_00001", "step_00002"]
+    _same_run(tmp_path / "full", run)
+
+
+def test_append_metrics_replaces_the_file(tmp_path):
+    with open(tmp_path / "metrics.jsonl", "w") as f:
+        f.write(json.dumps({"step": 0, "kl": 0.1}))                # no newline at the end
+    TR.append_metrics(str(tmp_path), {"step": 1, "kl": 0.2})
+    assert open(tmp_path / "metrics.jsonl").read().splitlines() == ['{"step": 0, "kl": 0.1}', '{"step": 1, "kl": 0.2}']
+    assert sorted(TR.read_metrics(str(tmp_path))) == [0, 1] and sorted(os.listdir(tmp_path)) == ["metrics.jsonl"]

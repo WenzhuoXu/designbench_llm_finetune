@@ -48,6 +48,7 @@ import time
 import zlib
 from typing import Callable, Optional
 
+from .diskio import WriteErrors, fsync_tree, retry_when_full, write_text
 from .samples import build_step_samples, shard_samples
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -84,6 +85,14 @@ DEFAULTS = {
     "guards": {"enabled": True, "window": 5, "parse_drop": 0.10, "kl_increase_max": 0.10,
                "stall_steps": 30, "stall_kl": 0.005, "ignore_stopped": False},
     "dist": {"timeout_min": 360},
+    # a write (checkpoint, metrics, rollout records) that fails on a full file system is repeated
+    # every minute for this long before the run fails. 0 = fail at once. The limit is per write,
+    # and the other ranks wait meanwhile for at most dist.timeout_min: inside a checkpoint two
+    # writes can follow each other (2 x this must stay under dist.timeout_min); between two steps
+    # more can (metrics, compaction, the rollout request, each episode record), so a pool that
+    # stays full for hours and lets a write through now and then still ends the job, with a
+    # timeout on the waiting ranks. Nothing is lost then: the next job resumes.
+    "disk_full_wait_min": 120,
     "allow_config_change": False,
 }
 
@@ -239,8 +248,9 @@ class SubprocessRollout:
             if flag in argv:
                 raise SystemExit("harness.argv must not set %s (the trainer sets it per step)" % flag)
         self.cfg = cfg
+        self.wait_min = float(cfg.get("disk_full_wait_min") or 0)
         self.dir = os.path.join(run_dir, "rollouts")
-        os.makedirs(self.dir, exist_ok=True)
+        retry_when_full(lambda: os.makedirs(self.dir, exist_ok=True), self.dir, self.wait_min)
 
     def path(self, step: int) -> str:
         return os.path.join(self.dir, "step_%05d.jsonl" % step)
@@ -254,11 +264,10 @@ class SubprocessRollout:
         req = {"script": self.cfg["harness"]["script"], "harness_argv": self.cfg["harness"]["argv"],
                "servers": r["servers"], "model": name, "temperature": r["temperature"],
                "turns": r["horizon"], "inject": r["inject"], "workers": r["workers"],
-               "env": self.cfg["harness"].get("env") or {}, "episodes": episodes}
+               "env": self.cfg["harness"].get("env") or {}, "episodes": episodes,
+               "disk_full_wait_min": self.wait_min}
         req_path = os.path.join(self.dir, "step_%05d.request.json" % step)
-        with open(req_path + ".tmp", "w") as f:
-            json.dump(req, f)
-        os.replace(req_path + ".tmp", req_path)
+        retry_when_full(lambda: write_text(req_path, json.dumps(req)), "the rollout request", self.wait_min)
         env = dict(os.environ)
         env["PYTHONPATH"] = REPO_ROOT + os.pathsep + env.get("PYTHONPATH", "")
         env.pop("CUDA_VISIBLE_DEVICES", None)
@@ -285,18 +294,25 @@ class SubprocessRollout:
     def compact(self, step: int) -> None:
         """Drop the token arrays of a finished step (they are ~200 kB per episode)."""
         p = self.path(step)
-        if not os.path.exists(p):
-            return
-        with open(p + ".compact.tmp", "w") as fo:
-            for line in open(p):
-                if line.strip():
-                    rec = json.loads(line)
-                    rec["calls"] = [{"n_prompt": len(c.get("prompt_token_ids") or []),
-                                     "n_completion": len(c.get("token_ids") or []),
-                                     "finish": c.get("finish"), "seed": c.get("seed")} for c in rec.get("calls") or []]
-                    fo.write(json.dumps(rec) + "\n")
-        os.replace(p + ".compact.tmp", p.replace(".jsonl", ".compact.jsonl"))
-        os.remove(p)
+
+        def write():
+            if not os.path.exists(p):                # a repeat after the compact file replaced it
+                return
+            with open(p + ".compact.tmp", "w") as fo:
+                for line in open(p):
+                    if line.strip():
+                        rec = json.loads(line)
+                        rec["calls"] = [{"n_prompt": len(c.get("prompt_token_ids") or []),
+                                         "n_completion": len(c.get("token_ids") or []),
+                                         "finish": c.get("finish"), "seed": c.get("seed")}
+                                        for c in rec.get("calls") or []]
+                        fo.write(json.dumps(rec) + "\n")
+                fo.flush()
+                os.fsync(fo.fileno())                # the full file goes only once this one is on disk
+            os.replace(p + ".compact.tmp", p.replace(".jsonl", ".compact.jsonl"))
+            os.remove(p)
+
+        retry_when_full(write, "the compacted rollouts of step %d" % step, self.wait_min)
 
 
 # ------------------------------------------------------------------ long sequences
@@ -926,30 +942,73 @@ def latest_ckpt(run_dir: str) -> Optional[int]:
     return best
 
 
-def save_ckpt(run_dir, step, policy, opt, sched, dist, state: dict) -> None:
+def torch_save(obj, path: str) -> None:
+    """torch.save, flushed to disk; a failed write raises the OSError itself (torch reports a full
+    disk as "PytorchStreamWriter failed writing file", which does not say why)."""
+    import torch
+    with open(path, "wb") as f:
+        w = WriteErrors(f)
+        try:
+            torch.save(obj, w)
+            f.flush()
+            os.fsync(f.fileno())
+        except BaseException as e:
+            if w.error is not None and e is not w.error:
+                raise w.error from e
+            raise
+
+
+def save_ckpt(run_dir, step, policy, opt, sched, dist, state: dict, wait_min: float = 0.0,
+              log: Callable[[str], None] = print) -> None:
+    """Write ckpt/step_N.tmp, flush it to disk, mark it COMPLETE and rename it: a checkpoint
+    either is whole or does not exist. Each write is repeated for up to wait_min minutes while
+    the file system is full (the other ranks wait at the barriers)."""
     import torch
     d = ckpt_dir(run_dir, step)
     tmp = d + ".tmp"
-    if dist.rank == 0:
+    name = "checkpoint %d" % step
+
+    def start():
         if os.path.exists(tmp):
             shutil.rmtree(tmp)
         os.makedirs(tmp)
-    dist.barrier()
-    if dist.rank == 0:
+
+    def body():
         policy.save_adapter(os.path.join(tmp, "adapter"))
-        torch.save(opt.state_dict(), os.path.join(tmp, "optimizer.pt"))
-        torch.save(sched.state_dict(), os.path.join(tmp, "scheduler.pt"))
-        json.dump(dict(state, step=step, checksum=policy.checksum()), open(os.path.join(tmp, "state.json"), "w"))
-    rng = {"python": random.getstate(), "torch": torch.get_rng_state(),
-           "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None}
-    torch.save(rng, os.path.join(tmp, "rng_rank%d.pt" % dist.rank))
-    dist.barrier()
-    if dist.rank == 0:
-        open(os.path.join(tmp, "COMPLETE"), "w").write(time.strftime("%F %T"))
+        fsync_tree(os.path.join(tmp, "adapter"))
+        torch_save(opt.state_dict(), os.path.join(tmp, "optimizer.pt"))
+        torch_save(sched.state_dict(), os.path.join(tmp, "scheduler.pt"))
+        write_text(os.path.join(tmp, "state.json"), json.dumps(dict(state, step=step, checksum=policy.checksum())))
+
+    def commit():
+        write_text(os.path.join(tmp, "COMPLETE"), time.strftime("%F %T"))
         if os.path.exists(d):
             shutil.rmtree(d)
         os.replace(tmp, d)
+
+    if dist.rank == 0:
+        retry_when_full(start, name, wait_min, log)
     dist.barrier()
+    if dist.rank == 0:
+        retry_when_full(body, name, wait_min, log)
+    rng = {"python": random.getstate(), "torch": torch.get_rng_state(),
+           "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None}
+    retry_when_full(lambda: torch_save(rng, os.path.join(tmp, "rng_rank%d.pt" % dist.rank)),
+                    name + " (rank %d rng)" % dist.rank, wait_min,
+                    log if dist.rank == 0 else print)          # the log of the other ranks is silent
+    dist.barrier()
+    if dist.rank == 0:
+        retry_when_full(commit, name, wait_min, log)
+    dist.barrier()
+
+
+def append_metrics(run_dir: str, m: dict) -> None:
+    """Add a line to metrics.jsonl by replacing the file, so a failed write leaves no half line."""
+    p = os.path.join(run_dir, "metrics.jsonl")
+    old = open(p).read() if os.path.exists(p) else ""
+    if old and not old.endswith("\n"):
+        old += "\n"
+    write_text(p, old + json.dumps(m) + "\n")
 
 
 def load_ckpt(run_dir, step, policy, opt, sched, dist) -> dict:
@@ -1122,11 +1181,12 @@ def train(cfg: dict, backend=None, log: Callable[[str], None] = print) -> dict:
         if not val:
             raise SystemExit("%s must be set" % key)
     dist = Dist(int(cfg["dist"]["timeout_min"]))
+    wait_min = float(cfg.get("disk_full_wait_min") or 0)
     if dist.rank != 0:
         log = lambda s: None                                   # noqa: E731
     try:
         if dist.rank == 0:
-            os.makedirs(run_dir, exist_ok=True)
+            retry_when_full(lambda: os.makedirs(run_dir, exist_ok=True), run_dir, wait_min, log)
         dist.barrier()
         done = os.path.join(run_dir, "DONE")
         if os.path.exists(done) and json.load(open(done)).get("steps", 0) >= int(cfg["grpo"]["steps"]):
@@ -1158,7 +1218,7 @@ def train(cfg: dict, backend=None, log: Callable[[str], None] = print) -> dict:
         start = latest_ckpt(run_dir)
         if start is None:
             start = 0
-            save_ckpt(run_dir, 0, policy, opt, sched, dist, {"fingerprint": fp})
+            save_ckpt(run_dir, 0, policy, opt, sched, dist, {"fingerprint": fp}, wait_min, log)
             log("initial checkpoint written (adapter %s, checksum %.6g)"
                 % (cfg["policy"]["init_adapter"] or "fresh LoRA", policy.checksum()))
         else:
@@ -1168,8 +1228,9 @@ def train(cfg: dict, backend=None, log: Callable[[str], None] = print) -> dict:
                                  "to override)" % (fp, st.get("fingerprint")))
             log("resumed from step %d" % start)
         if dist.rank == 0:
-            json.dump(dict(cfg, fingerprint=fp, started_at_step=start),
-                      open(os.path.join(run_dir, "config.resolved.json"), "w"), indent=1)
+            resolved = json.dumps(dict(cfg, fingerprint=fp, started_at_step=start), indent=1)
+            retry_when_full(lambda: write_text(os.path.join(run_dir, "config.resolved.json"), resolved),
+                            "config.resolved.json", wait_min, log)
         if backend is None:
             backend = SubprocessRollout(cfg, run_dir) if dist.rank == 0 else _Reader(run_dir)
         history = read_metrics(run_dir)
@@ -1201,12 +1262,12 @@ def train(cfg: dict, backend=None, log: Callable[[str], None] = print) -> dict:
             history[step] = m
             stop = check_guards(history, cfg["guards"])
             t2 = time.time()
-            save_ckpt(run_dir, step + 1, policy, opt, sched, dist, {"fingerprint": fp})
+            save_ckpt(run_dir, step + 1, policy, opt, sched, dist, {"fingerprint": fp}, wait_min, log)
             m["t_ckpt"] = round(time.time() - t2, 1)
             if dist.rank == 0:
-                with open(os.path.join(run_dir, "metrics.jsonl"), "a") as f:
-                    f.write(json.dumps(m) + "\n")
-                prune_ckpts(run_dir, cfg, step + 1)
+                retry_when_full(lambda: append_metrics(run_dir, m), "metrics.jsonl", wait_min, log)
+                retry_when_full(lambda: prune_ckpts(run_dir, cfg, step + 1), "ckpt/ (removing old checkpoints)",
+                                wait_min, log)
                 kf = int(r.get("keep_full_every") or 0)
                 if hasattr(backend, "compact") and not (kf and step % kf == 0):
                     backend.compact(step)
@@ -1218,12 +1279,14 @@ def train(cfg: dict, backend=None, log: Callable[[str], None] = print) -> dict:
                         t_roll, t_train, m["t_ckpt"], m.get("max_sample_tokens", "-"), m.get("peak_mem_gib", "-")))
             if stop:
                 if dist.rank == 0:
-                    json.dump({"step": step, "reason": stop}, open(sp, "w"))
+                    stopped = json.dumps({"step": step, "reason": stop})
+                    retry_when_full(lambda: write_text(sp, stopped), "STOPPED.json", wait_min, log)
                     log("STOPPED at step %d: %s" % (step, stop))
                 dist.barrier()
                 raise GuardStop(stop)
         if dist.rank == 0:
-            json.dump({"steps": int(g["steps"]), "time": time.strftime("%F %T")}, open(os.path.join(run_dir, "DONE"), "w"))
+            done_text = json.dumps({"steps": int(g["steps"]), "time": time.strftime("%F %T")})
+            retry_when_full(lambda: write_text(done, done_text), "DONE", wait_min, log)
         return history
     except GuardStop:
         raise                                   # every rank stops at the same step, after a barrier
