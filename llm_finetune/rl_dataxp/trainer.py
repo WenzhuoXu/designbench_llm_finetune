@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import copy
 import datetime
+import functools
 import hashlib
 import json
 import math
@@ -75,8 +76,10 @@ DEFAULTS = {
              # long sequences: lm-head + loss over the completion in chunks of logit_chunk tokens;
              # checkpointed layer inputs offloaded to CPU at or above offload_min_tokens, and at or
              # above it each layer's MLP and token-mixer LoRA projections run over the sequence in
-             # (checkpointed) chunks of seq_chunk tokens. Memory only: none of them changes the math.
-             "logit_chunk": 2048, "offload_min_tokens": 8192, "seq_chunk": 4096},
+             # (checkpointed) chunks of seq_chunk tokens; and each decoder layer is itself run in
+             # pieces of layer_segment tokens (a multiple of 64, the delta rule's chunk; null = the
+             # whole layer at once). Memory only: none of them changes the math.
+             "logit_chunk": 2048, "offload_min_tokens": 8192, "seq_chunk": 4096, "layer_segment": 4096},
     "checkpoint": {"keep_last": 2, "keep_adapter_every": 25, "keep_adapter_steps": [50, 150]},
     "guards": {"enabled": True, "window": 5, "parse_drop": 0.10, "kl_increase_max": 0.10,
                "stall_steps": 30, "stall_kl": 0.005, "ignore_stopped": False},
@@ -338,10 +341,173 @@ class _OffloadedCheckpoint:
         return Fn
 
 
+def _segments(total: int, size: int) -> list:
+    """Lengths of consecutive pieces of `size` tokens covering `total`. A 1-token tail joins the
+    piece before it: with a state from earlier tokens, a 1-token call takes the model's
+    single-step decode path, which is a different kernel."""
+    size = max(2, int(size))
+    sizes = [size] * (total // size)
+    tail = total - size * len(sizes)
+    if tail == 1 and sizes:
+        sizes[-1] += 1
+    elif tail:
+        sizes.append(tail)
+    return sizes
+
+
+class _SegmentState:
+    """Stands in for the generation cache of ONE linear-attention layer over one segment: gives the
+    layer the state the segment before left (the conv's last inputs, the delta rule's recurrent
+    state) and keeps the state it leaves. Same arithmetic as transformers' LinearAttentionLayer
+    cache, without its in-place copies, so both states stay in the autograd graph."""
+
+    record_past = False
+
+    def __init__(self, layer_idx: int, rec=None, conv=None):
+        self.layer_idx = layer_idx
+        self.had_state = rec is not None
+        self.recurrent_states = {0: rec}
+        self.conv_states = {0: conv}
+        self.rec_out = self.conv_out = None
+
+    @property
+    def layers(self):                       # built per access: no reference cycle through self
+        return {self.layer_idx: self}
+
+    def has_previous_state(self, layer_idx=None, state_idx=None):
+        return self.had_state
+
+    def update_conv_state(self, conv_states, layer_idx, state_idx=0, conv_kernel_size=None, **kwargs):
+        import torch
+        k = int(conv_kernel_size or conv_states.shape[-1])
+        if self.had_state:
+            full = torch.cat([self.conv_states[0], conv_states], dim=-1)
+        else:
+            full = conv_states
+            if full.shape[-1] < k:
+                full = torch.nn.functional.pad(full, (k - full.shape[-1], 0), value=0)
+        # a copy, not a view: the next segment's checkpoint keeps its inputs until its backward, and a
+        # view would keep this segment's whole conv input alive with it (sequence x conv width per layer)
+        self.conv_out = full[..., -k:].clone()
+        return full
+
+    def update_recurrent_state(self, recurrent_states, layer_idx, state_idx=0, **kwargs):
+        self.rec_out = recurrent_states
+        return recurrent_states
+
+
+def _long_linear_layer(layer, call, kw: dict, hidden, seg: int):
+    """One linear-attention (gated delta net) decoder layer over a long sequence, a segment at a
+    time. The layer is causal with a fixed-size state, so segment i needs only its own tokens and
+    the state after segment i-1; with grad each segment is checkpointed, and the backward pass is
+    back-propagation through time over the segments: memory O(segment), not O(sequence). The
+    whole layer at once is what ran out at 54k tokens (dx38mtR, step 43): its float32 norms, the
+    conv and the delta rule's backward buffers all scale with the sequence."""
+    import torch
+    from torch.utils.checkpoint import checkpoint
+    idx = layer.linear_attn.layer_idx
+    mask = kw.get("attention_mask")
+    grad = torch.is_grad_enabled()
+
+    def run(x, rec=None, conv=None, m=None):
+        cache = _SegmentState(idx, rec, conv)
+        out = call(x, **dict(kw, past_key_values=cache, attention_mask=m))
+        if not torch.is_tensor(out) or cache.rec_out is None or cache.conv_out is None:
+            raise RuntimeError("layer %d did not go through the segment state" % idx)
+        return out, cache.rec_out, cache.conv_out
+
+    sizes = _segments(hidden.shape[1], seg)
+    masks = torch.split(mask, sizes, dim=1) if mask is not None else [None] * len(sizes)
+    outs, rec, conv = [], None, None
+    for x, m in zip(torch.split(hidden, sizes, dim=1), masks):
+        fn = functools.partial(run, m=m)
+        args = (x,) if rec is None else (x, rec, conv)
+        out, rec, conv = checkpoint(fn, *args, use_reentrant=False) if grad else fn(*args)
+        outs.append(out)
+    return outs[0] if len(outs) == 1 else torch.cat(outs, dim=1)
+
+
+def _long_attention_layer(layer, kw: dict, hidden, seg: int):
+    """One full-attention decoder layer over a long sequence in three stages: what happens before
+    the attention (input norm, q/k/v projections, their norms, rotary) per chunk of tokens, the
+    attention itself over the whole sequence (it needs every key), and what happens after it (gate,
+    output projection, residual, norm, MLP, residual) per chunk again. With grad the per-chunk
+    stages are checkpointed, so only q, k, v, the gate and the attention output are kept at full
+    length. The stages repeat Qwen3_5DecoderLayer.forward / Qwen3_5Attention.forward operation for
+    operation; Policy.check_long_path compares them against the stock layers at start-up."""
+    import torch
+    from torch.utils.checkpoint import checkpoint
+    att = layer.self_attn
+    mod = sys.modules[type(att).__module__]
+    cos, sin = kw["position_embeddings"]
+    grad = torch.is_grad_enabled()
+    extra = {k: v for k, v in kw.items() if k not in ("position_embeddings", "attention_mask", "past_key_values")}
+
+    def pre(x, c, s):
+        y = layer.input_layernorm(x)
+        shape = (*y.shape[:-1], -1, att.head_dim)
+        q, gate = torch.chunk(att.q_proj(y).view(*y.shape[:-1], -1, att.head_dim * 2), 2, dim=-1)
+        gate = gate.reshape(*y.shape[:-1], -1)
+        q = att.q_norm(q.view(shape)).transpose(1, 2)
+        k = att.k_norm(att.k_proj(y).view(shape)).transpose(1, 2)
+        v = att.v_proj(y).view(shape).transpose(1, 2)
+        q, k = mod.apply_rotary_pos_emb(q, k, c, s)
+        return q, k, v, gate
+
+    def post(x, a, gate):
+        a = a.reshape(*x.shape[:-1], -1).contiguous() * torch.sigmoid(gate)
+        x = x + att.o_proj(a)
+        return x + layer.mlp(layer.post_attention_layernorm(x))
+
+    sizes = _segments(hidden.shape[1], seg)
+    xs = torch.split(hidden, sizes, dim=1)
+    parts = [checkpoint(pre, x, c, s, use_reentrant=False) if grad else pre(x, c, s)
+             for x, c, s in zip(xs, torch.split(cos, sizes, dim=1), torch.split(sin, sizes, dim=1))]
+    q, k, v = (torch.cat([p[i] for p in parts], dim=2) for i in range(3))
+    gates = [p[3] for p in parts]
+    del parts
+    interface = mod.ALL_ATTENTION_FUNCTIONS.get_interface(att.config._attn_implementation,
+                                                          mod.eager_attention_forward)
+    a, _ = interface(att, q, k, v, kw.get("attention_mask"),
+                     dropout=0.0 if not att.training else att.attention_dropout, scaling=att.scaling, **extra)
+    del q, k, v
+    outs = [checkpoint(post, x, ai, g, use_reentrant=False) if grad else post(x, ai, g)
+            for x, ai, g in zip(xs, torch.split(a, sizes, dim=1), gates)]
+    return outs[0] if len(outs) == 1 else torch.cat(outs, dim=1)
+
+
+def _long_layer(run_fn, state: dict):
+    """The segmented equivalent of one checkpointed decoder-layer call (a function of the layer's
+    input), or None when the call is not one of the two layer kinds as this code knows them: the
+    caller then runs the layer whole, as before."""
+    import torch
+    seg = state.get("layer_segment")
+    call, kw = getattr(run_fn, "func", None), getattr(run_fn, "keywords", None)
+    layer = getattr(call, "__self__", None)
+    if not seg or layer is None or kw is None or getattr(run_fn, "args", None) or kw.get("past_key_values") is not None:
+        return None
+    kind, mask = getattr(layer, "block_type", None), kw.get("attention_mask")
+    if kind == "linear_attention" and hasattr(getattr(layer, "linear_attn", None), "layer_idx"):
+        if mask is not None and not (torch.is_tensor(mask) and mask.dim() == 2):
+            return None
+        return lambda h: _long_linear_layer(layer, call, kw, h, int(seg))
+    if kind == "full_attention" and hasattr(layer, "self_attn") and kw.get("position_embeddings") is not None:
+        att, mod = layer.self_attn, sys.modules.get(type(layer.self_attn).__module__)
+        if all(hasattr(att, n) for n in ("q_proj", "k_proj", "v_proj", "o_proj", "q_norm", "k_norm", "head_dim",
+                                         "scaling", "attention_dropout")) \
+                and all(hasattr(mod, n) for n in ("apply_rotary_pos_emb", "ALL_ATTENTION_FUNCTIONS",
+                                                  "eager_attention_forward")):
+            return lambda h: _long_attention_layer(layer, kw, h, int(seg))
+    return None
+
+
 def install_checkpointing(model, state: dict) -> int:
     """Replace every decoder layer's checkpoint function: torch's non-reentrant checkpoint below
-    state['offload_min_tokens'], the CPU-offloaded one at or above it (state['tokens'] is set per
-    forward). Returns the number of layers patched."""
+    state['offload_min_tokens']; at or above it (state['tokens'] is set per forward) the layer's
+    input is kept on the CPU and the layer runs in segments of state['layer_segment'] tokens
+    (_long_layer; state['long_calls'] counts the layer calls that did). Without grad (the reference
+    pass) the layer just runs, in segments, and nothing is kept. Returns the number of layers
+    patched."""
     import torch
     from torch.utils.checkpoint import checkpoint
     Fn = _OffloadedCheckpoint.make()
@@ -349,7 +515,11 @@ def install_checkpointing(model, state: dict) -> int:
     def ckpt(run_fn, *args, **kwargs):
         thr = state.get("offload_min_tokens")
         if thr and state.get("tokens", 0) >= thr and len(args) == 1 and torch.is_tensor(args[0]) and not kwargs:
-            return Fn.apply(run_fn, args[0])
+            fn = _long_layer(run_fn, state)
+            if fn is not None:
+                state["long_calls"] = state.get("long_calls", 0) + 1
+            fn = fn or run_fn
+            return Fn.apply(fn, args[0]) if torch.is_grad_enabled() else fn(args[0])
         return checkpoint(run_fn, *args, use_reentrant=False, **kwargs)
 
     n = 0
@@ -428,7 +598,8 @@ class Policy:
             base = cls.from_pretrained(m["path"], torch_dtype=dtype, **kw)
         base.to(device)
         self._ckpt_state = {"offload_min_tokens": cfg["grpo"].get("offload_min_tokens"),
-                            "seq_chunk": cfg["grpo"].get("seq_chunk"), "tokens": 0}
+                            "seq_chunk": cfg["grpo"].get("seq_chunk"),
+                            "layer_segment": cfg["grpo"].get("layer_segment"), "tokens": 0, "long_calls": 0}
         if m["gradient_checkpointing"]:
             base.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
             install_checkpointing(base, self._ckpt_state)
@@ -479,6 +650,127 @@ class Policy:
         if bad:
             raise RuntimeError("non-default adapter parameters are trainable: %s" % bad[:3])
         self.params = [p for _, p in self.trainable]
+        self.long_path = self.check_long_path()
+
+    def check_long_path(self, tokens: int = 300, tol: float = 0.05, grad_tol: float = 1e-3,
+                        trunk_cos_min: float = 0.9) -> dict:
+        """The segmented layers re-state the model's own layer code, so before training compare
+        them with it on a short random sequence, plain against the long-sequence path with 64-token
+        segments (called once, from __init__: it clears the parameters' .grad).
+        (1) Forward: every decoder layer must take the segmented path and the hidden states must
+        agree (to the model dtype's rounding: the operations are the same ones).
+        (2) Gradients, one layer of each kind, whole against segmented, in float32 (_layer_grad_err):
+        back-propagation across a segment boundary runs kernel code the whole layer never does (the
+        delta rule's gradient to its initial state and from its final state, the conv over
+        [state | segment]), and (1) says nothing about it. Limit grad_tol.
+        (3) Gradients of the whole trunk to the trainable parameters in the model's own dtype,
+        through the path training takes (offloaded checkpoints around the segments): the cosine must
+        be at least trunk_cos_min. Loose on purpose, bf16 rounding differs between the two orders of
+        operations; (2) is the sharp test."""
+        import torch
+        st = self._ckpt_state
+        if not (self.cfg["model"]["gradient_checkpointing"] and st.get("offload_min_tokens")
+                and st.get("layer_segment")):
+            return {}
+        layers = [m for m in self.trunk.modules()
+                  if hasattr(m, "_gradient_checkpointing_func") and hasattr(m, "block_type")]
+        n_layers = len(layers)
+        vocab = self.model.get_input_embeddings().num_embeddings
+        ids = torch.randint(0, vocab, (1, tokens), generator=torch.Generator().manual_seed(0)).to(self.device)
+        seen = {}                               # layer kind -> (a layer, its input, its keyword arguments)
+
+        def grab(mod, args, kwargs):
+            if mod.block_type not in seen and args and torch.is_tensor(args[0]):
+                seen[mod.block_type] = (mod, args[0].detach(), dict(kwargs))
+
+        def hidden():
+            with torch.no_grad():
+                return self.trunk(input_ids=ids, use_cache=False).last_hidden_state.float()
+
+        def grads():
+            with torch.enable_grad():
+                h = self.trunk(input_ids=ids, use_cache=False).last_hidden_state.float()
+                w = torch.randn(h.shape, generator=torch.Generator().manual_seed(1)).to(h.device)
+                (h * w).sum().backward()
+            out = [p.grad.detach().clone() if p.grad is not None else torch.zeros_like(p) for p in self.params]
+            for p in self.params:
+                p.grad = None
+            return out
+
+        hooks = [m.register_forward_pre_hook(grab, with_kwargs=True) for m in layers]
+        saved = dict(st)
+        try:
+            st["tokens"] = 0
+            plain = hidden()
+            for h in hooks:
+                h.remove()
+            g_plain = grads()
+            st.update(tokens=tokens, offload_min_tokens=1, layer_segment=64, seq_chunk=64, long_calls=0)
+            seg = hidden()
+            n_long = st["long_calls"]
+            g_seg = grads()
+        finally:
+            for h in hooks:
+                h.remove()
+            st.clear()
+            st.update(saved)
+        err = float((plain - seg).abs().max() / plain.abs().max().clamp_min(1e-9))
+        if n_long != n_layers or not err < tol:
+            raise RuntimeError("the segmented long-sequence layers do not reproduce the model's own: %d of %d layers "
+                               "segmented, relative error %.3g (limit %.3g). transformers changed? "
+                               "grpo.layer_segment=null runs layers whole" % (n_long, n_layers, err, tol))
+        dot = sum(float((a.double() * b.double()).sum()) for a, b in zip(g_plain, g_seg))
+        na, nb, nd = (math.sqrt(sum(float(v.double().pow(2).sum()) for v in vs))
+                      for vs in (g_plain, g_seg, (a - b for a, b in zip(g_plain, g_seg))))
+        cos, rel = dot / max(na * nb, 1e-300), nd / max(na, 1e-300)
+        del g_plain, g_seg
+        grad_err = {kind: self._layer_grad_err(*seen[kind]) for kind in sorted(seen)}
+        bad = {k: v for k, v in grad_err.items() if not v < grad_tol}
+        if bad or set(grad_err) != {m.block_type for m in layers} or not cos >= trunk_cos_min:
+            raise RuntimeError("the segmented layers' gradients differ from the whole layers': one layer of each kind, "
+                               "relative error %s (limit %.3g); whole trunk, cosine %.6f (at least %.3g), relative "
+                               "difference %.3g. grpo.layer_segment=null runs layers whole"
+                               % (grad_err, grad_tol, cos, trunk_cos_min, rel))
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
+        return {"layers": n_long, "rel_err": err, "grad_err": grad_err, "trunk_grad_cos": cos, "trunk_grad_rel": rel}
+
+    @staticmethod
+    def _layer_grad_err(layer, x, kw: dict, seg: int = 64) -> float:
+        """One decoder layer, whole against segmented, with gradients, on a float32 copy of it (in
+        bf16 the rounding would hide a small error; the kernels and the code are the same ones). The
+        largest of three relative differences: the output, the gradient to the layer's input, the
+        gradient to its trainable parameters, for a fixed random linear function of the output. A
+        boundary that drops or mangles the gradient of the carried state shows here."""
+        import torch
+        dt = torch.float64 if x.dtype == torch.float64 else torch.float32
+        lay = copy.deepcopy(layer).to(dt)
+        for m in lay.modules():                 # install_seq_chunking's wrappers call the ORIGINAL modules
+            m.__dict__.pop("forward", None)
+
+        def cast(v):
+            if isinstance(v, (tuple, list)):
+                return type(v)(cast(u) for u in v)
+            return v.to(dt) if torch.is_tensor(v) and v.is_floating_point() else v
+
+        kw = {k: cast(v) for k, v in kw.items()}
+        call = torch.nn.Module.__call__.__get__(lay)        # the layer itself, past its checkpointing wrapper
+        long_fn = _long_layer(functools.partial(call, **kw), {"layer_segment": seg})
+        if long_fn is None:
+            raise RuntimeError("no segmented path for a %s layer" % getattr(layer, "block_type", "?"))
+        ps = [p for p in lay.parameters() if p.requires_grad]
+        w = torch.randn(x.shape, generator=torch.Generator().manual_seed(1)).to(x.device, dt)
+        res = []
+        for fn in (lambda h: call(h, **kw), long_fn):
+            h = x.detach().clone().to(dt).requires_grad_(True)
+            with torch.enable_grad():
+                out = fn(h)
+                (out * w).sum().backward()
+            res.append([out.detach(), h.grad] + ([torch.cat([(p.grad if p.grad is not None else torch.zeros_like(p))
+                                                             .flatten() for p in ps])] if ps else []))
+            for p in ps:
+                p.grad = None
+        return max(float((a - b).double().norm() / a.double().norm().clamp_min(1e-30)) for a, b in zip(*res))
 
     def _restore_grad_flags(self):
         names = {n for n, _ in self.trainable}
@@ -851,6 +1143,12 @@ def train(cfg: dict, backend=None, log: Callable[[str], None] = print) -> dict:
         random.seed(int(cfg["seed"]) + dist.rank)
         torch.manual_seed(int(cfg["seed"]))
         policy = Policy(cfg, dist.device)
+        if policy.long_path:
+            lp = policy.long_path
+            log("long-sequence path checked: %d layers segmented, hidden states relative error %.3g; gradients, "
+                "one layer whole vs segmented in float32: %s; whole trunk: cosine %.6f, relative difference %.3g"
+                % (lp["layers"], lp["rel_err"], ", ".join("%s %.3g" % kv for kv in sorted(lp["grad_err"].items())),
+                   lp["trunk_grad_cos"], lp["trunk_grad_rel"]))
         dist.broadcast_params(policy.params)
         g = cfg["grpo"]
         opt = torch.optim.AdamW(policy.params, lr=float(g["lr"]), betas=tuple(g["betas"]), eps=float(g["eps"]),

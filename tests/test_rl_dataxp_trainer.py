@@ -270,6 +270,10 @@ def test_two_ranks_match_one(tiny_model, tmp_path, problems_file):
     assert m1[1]["tokens"] == m2[1]["tokens"] and m1[1]["pg"] == pytest.approx(m2[1]["pg"], rel=1e-5)
 
 
+def _decoder_layers(pol):
+    return [m for m in pol.trunk.modules() if hasattr(m, "block_type") and hasattr(m, "_gradient_checkpointing_func")]
+
+
 def _grads(pol, prompt, comp):
     for p in pol.params:
         p.grad = None
@@ -280,9 +284,10 @@ def _grads(pol, prompt, comp):
 
 def test_chunked_logprobs_and_offloaded_checkpoints_are_exact(tiny_model, tmp_path, problems_file):
     """Long-sequence paths: the loss over the completion in chunks of 2 tokens, every layer's
-    checkpointed input offloaded (threshold 1 token), and each layer's MLP and token-mixer LoRA
-    projections run over the sequence in checkpointed chunks of 3 tokens, give the plain path's
-    log-probs and grads."""
+    checkpointed input offloaded (threshold 1 token), each layer's MLP and token-mixer LoRA
+    projections run over the sequence in checkpointed chunks of 3 tokens, and each layer itself run
+    in segments (4 tokens: 4+4+3; 5 tokens: 5+6, the 1-token tail joined; 2 tokens with the
+    3-token chunks inside), give the plain path's log-probs and grads."""
     from peft import LoraConfig, get_peft_model
     from transformers import Qwen3_5ForConditionalGeneration
     init = tmp_path / "init_adapter"
@@ -290,26 +295,149 @@ def test_chunked_logprobs_and_offloaded_checkpoints_are_exact(tiny_model, tmp_pa
     get_peft_model(Qwen3_5ForConditionalGeneration.from_pretrained(tiny_model),
                    LoraConfig(r=4, lora_alpha=8, target_modules=REGEX, init_lora_weights=False)).save_pretrained(str(init))
     prompt, comp = [3, 5, 7, 9, 11, 13], [17, 19, 23, 29, 31]
-    runs = {}
+    whole = {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": 1, "grpo.layer_segment": None}
+    runs, long_calls = {}, {}
     for name, over in (("plain", {"grpo.logit_chunk": 0, "grpo.offload_min_tokens": None}),
                        ("chunked", {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": None}),
-                       ("offload", {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": 1}),
-                       ("seqchunk", {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": 1, "grpo.seq_chunk": 3})):
+                       ("offload", whole),
+                       ("seqchunk", dict(whole, **{"grpo.seq_chunk": 3})),
+                       ("segment", dict(whole, **{"grpo.layer_segment": 4, "grpo.seq_chunk": None})),
+                       ("segtail", dict(whole, **{"grpo.layer_segment": 5, "grpo.seq_chunk": None})),
+                       ("segseq", dict(whole, **{"grpo.layer_segment": 2, "grpo.seq_chunk": 3}))):
         cfg = make_cfg(tiny_model, tmp_path / name, problems_file, **dict(over, **{"policy.init_adapter": str(init)}))
         pol = policy_of(cfg)
+        assert bool(pol.long_path) == name.startswith("seg"), (name, pol.long_path)
+        if pol.long_path:                  # the start-up check: every layer segmented, same hidden states and grads
+            assert pol.long_path["layers"] == len(_decoder_layers(pol)) and pol.long_path["rel_err"] < 1e-4, pol.long_path
+            assert set(pol.long_path["grad_err"]) == {"linear_attention", "full_attention"}, pol.long_path
+            assert max(pol.long_path["grad_err"].values()) < 1e-4 and pol.long_path["trunk_grad_rel"] < 1e-3, pol.long_path
+            assert all(p.grad is None for p in pol.params) and pol._ckpt_state["long_calls"] == 0
         if name == "seqchunk":
             calls = []             # what the MLP's first projection sees: chunks, not the 11 tokens
             gate = next(m for n, m in pol.model.named_modules() if n.endswith("layers.0.mlp.gate_proj"))
             inner = gate.forward
             gate.forward = lambda x, *a, **k: (calls.append(x.shape[1]), inner(x, *a, **k))[1]
             assert pol.n_seq_chunked > 0
+        if name.startswith("seg"):
+            seen = {}              # tokens per call of each layer kind's token mixer
+            for layer in _decoder_layers(pol):
+                mixer = layer.linear_attn if layer.block_type == "linear_attention" else layer.self_attn.q_proj
+                mixer.register_forward_pre_hook(
+                    lambda mod, args, kwargs, kind=layer.block_type:
+                        seen.setdefault(kind, []).append((args[0] if args else kwargs["hidden_states"]).shape[1]),
+                    with_kwargs=True)
         runs[name] = _grads(pol, prompt, comp)
+        long_calls[name] = pol._ckpt_state["long_calls"]
         if name == "seqchunk":
             assert calls and max(calls) == 3 and sum(calls) % (len(prompt) + len(comp)) == 0, calls
+        if name.startswith("seg"):
+            assert set(seen) == {"linear_attention", "full_attention"}, seen
+            want = {"segment": [4, 4, 3], "segtail": [5, 6], "segseq": [2, 2, 2, 2, 3]}[name]
+            for kind, sizes in seen.items():       # the forward and the recomputations, per layer
+                assert sizes[:len(want)] == want and len(sizes) % len(want) == 0 and set(sizes) == set(want),                     (name, kind, sizes)
+            assert long_calls[name] == len(_decoder_layers(pol)), (name, long_calls[name])   # every layer
+        else:
+            assert long_calls[name] == 0, (name, long_calls[name])
     lp0, g0 = runs["plain"]
     assert all(g is not None for g in g0)
-    for name in ("chunked", "offload", "seqchunk"):
+    scale = max(g.abs().max().item() for g in g0)
+    for name in runs:
         lp, g = runs[name]
         assert torch.allclose(lp, lp0, atol=1e-5), name
         worst = max((a - b).abs().max().item() for a, b in zip(g, g0))
-        assert worst < 1e-5, (name, worst)
+        # a segment boundary inside one of the delta rule's 64-token chunks changes the order of its
+        # float32 sums: rounding only (test_segmented_layers_are_exact_in_float64)
+        assert worst < (1e-4 * scale if name.startswith("seg") else 1e-5), (name, worst, scale)
+
+
+def test_segmented_layers_are_exact_in_float64(tiny_model, tmp_path, problems_file, monkeypatch):
+    """The segmented layers are the same function, not an approximation: in float64 (with a float64
+    copy of the reference delta rule, which otherwise casts to float32 inside) log-probs and grads
+    agree with the plain path to 1e-10 for segments of 4, 5 (5+6 of 11 tokens: the joined 1-token
+    tail), 16, 64 and 2 with 3-token chunks inside."""
+    import inspect
+    import sys
+    from peft import LoraConfig, get_peft_model
+    from transformers import Qwen3_5ForConditionalGeneration
+    M = sys.modules[Qwen3_5ForConditionalGeneration.__module__]
+    src = inspect.getsource(M.torch_chunk_gated_delta_rule)
+    src = src[src.index("def torch_chunk_gated_delta_rule"):]
+    assert "torch.float32" in src
+    ns = dict(M.__dict__)
+    exec(src.replace("torch.float32", "torch.float64"), ns)
+    monkeypatch.setattr(M, "torch_chunk_gated_delta_rule", ns["torch_chunk_gated_delta_rule"])
+    init = tmp_path / "init_adapter"
+    torch.manual_seed(5)
+    get_peft_model(Qwen3_5ForConditionalGeneration.from_pretrained(tiny_model),
+                   LoraConfig(r=4, lora_alpha=8, target_modules=REGEX, init_lora_weights=False)).save_pretrained(str(init))
+    seg = {"grpo.logit_chunk": 2, "grpo.offload_min_tokens": 1, "grpo.seq_chunk": None}
+    for prompt, comp, sizes in (([3, 5, 7, 9, 11, 13], [17, 19, 23, 29, 31], (4, 5)),
+                                (list(range(3, 40)), list(range(50, 83)), (2, 16, 64))):
+        runs = {}
+        for name, over in [("plain", {"grpo.logit_chunk": 0, "grpo.offload_min_tokens": None})] +                 [("seg%d" % n, dict(seg, **{"grpo.layer_segment": n, "grpo.seq_chunk": 3 if n == 2 else None}))
+                 for n in sizes]:
+            cfg = make_cfg(tiny_model, tmp_path / ("%s_%d" % (name, len(prompt))), problems_file,
+                           **dict(over, **{"policy.init_adapter": str(init), "model.torch_dtype": "float64"}))
+            pol = policy_of(cfg)
+            runs[name] = _grads(pol, prompt, comp)
+            assert pol._ckpt_state["long_calls"] == (0 if name == "plain" else len(_decoder_layers(pol)))
+        lp0, g0 = runs["plain"]
+        scale = max(g.abs().max().item() for g in g0)
+        for name, (lp, g) in runs.items():
+            worst = max((a - b).abs().max().item() for a, b in zip(g, g0))
+            assert (lp - lp0).abs().max().item() < 1e-10 and worst < 1e-10 * scale, (name, worst, scale)
+
+
+def test_segmented_reference_pass_matches(tiny_model, tmp_path, problems_file):
+    """Without grad (the KL reference) a long sequence runs through the same segmented layers and
+    gives the plain path's log-probs; segment sizes cover a sequence, a 1-token tail joins."""
+    assert TR._segments(11, 4) == [4, 4, 3] and TR._segments(11, 5) == [5, 6] and TR._segments(8, 4) == [4, 4]
+    assert TR._segments(3, 64) == [3] and TR._segments(1, 4) == [1] and TR._segments(5, 1) == [2, 3]
+    from peft import LoraConfig, get_peft_model
+    from transformers import Qwen3_5ForConditionalGeneration
+    init = tmp_path / "init_adapter"
+    torch.manual_seed(7)
+    get_peft_model(Qwen3_5ForConditionalGeneration.from_pretrained(tiny_model),
+                   LoraConfig(r=4, lora_alpha=8, target_modules=REGEX, init_lora_weights=False)).save_pretrained(str(init))
+    prompt, comp = list(range(3, 40)), list(range(50, 83))            # 70 tokens
+    out = {}
+    for name, over in (("plain", {"grpo.offload_min_tokens": None}),
+                       ("seg", {"grpo.offload_min_tokens": 1, "grpo.layer_segment": 16, "grpo.seq_chunk": 8})):
+        cfg = make_cfg(tiny_model, tmp_path / name, problems_file,
+                       **dict(over, **{"policy.init_adapter": str(init), "grpo.kl_reference": "init"}))
+        pol = policy_of(cfg)
+        out[name] = pol.ref_logprobs(prompt, comp, 0.9)
+        assert pol._ckpt_state["long_calls"] == (len(_decoder_layers(pol)) if name == "seg" else 0)
+        assert all(p.requires_grad for p in pol.params)
+    assert torch.allclose(out["plain"], out["seg"], atol=1e-5), (out["plain"] - out["seg"]).abs().max()
+
+
+@pytest.mark.parametrize("state", ["recurrent", "conv"])
+def test_start_up_check_catches_a_gradient_lost_at_a_segment_boundary(tiny_model, tmp_path, problems_file,
+                                                                      monkeypatch, state):
+    """A segment state that reaches the next segment with the right values but cut from the graph
+    leaves the hidden states exact, so only the gradient part of the start-up check can see it: the
+    policy must refuse to build."""
+    from peft import LoraConfig, get_peft_model
+    from transformers import Qwen3_5ForConditionalGeneration
+    init = tmp_path / "init_adapter"
+    torch.manual_seed(5)
+    get_peft_model(Qwen3_5ForConditionalGeneration.from_pretrained(tiny_model),
+                   LoraConfig(r=4, lora_alpha=8, target_modules=REGEX, init_lora_weights=False)).save_pretrained(str(init))
+    if state == "recurrent":
+        def cut(self, recurrent_states, layer_idx, state_idx=0, **kwargs):
+            self.rec_out = recurrent_states.detach()
+            return recurrent_states
+        monkeypatch.setattr(TR._SegmentState, "update_recurrent_state", cut)
+    else:
+        inner = TR._SegmentState.update_conv_state
+
+        def cut(self, *args, **kwargs):
+            full = inner(self, *args, **kwargs)
+            self.conv_out = self.conv_out.detach()
+            return full
+        monkeypatch.setattr(TR._SegmentState, "update_conv_state", cut)
+    cfg = make_cfg(tiny_model, tmp_path / "run", problems_file,
+                   **{"policy.init_adapter": str(init), "grpo.offload_min_tokens": 1, "grpo.layer_segment": 4})
+    with pytest.raises(RuntimeError, match="gradients differ"):
+        policy_of(cfg)
