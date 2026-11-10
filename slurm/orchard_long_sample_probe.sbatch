@@ -32,4 +32,6 @@ nvidia-smi --query-gpu=index,name,memory.used --format=csv,noheader
 PYTHONPATH="$REPO" "$TRAIN_PY" scripts/rl/long_sample_probe.py --config "$CONFIG" --run-dir "$RUN_DIR" --step "$STEP" \
   --lengths "${LENGTHS:-65000,80000,100000,130000,165000,200000,262144}" --compare-max "${COMPARE_MAX:-14000}" \
   --out "${OUT:-$HOME/rl/logs/dx_probe_${SLURM_JOB_ID:-x}.json}" ${OVERRIDES:-}
-echo "DX_PROBE_DONE $(date '+%F %T %Z') rc=$?"
+rc=$?
+echo "DX_PROBE_DONE $(date '+%F %T %Z') rc=$rc"
+exit $rc

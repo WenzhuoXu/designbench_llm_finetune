@@ -140,36 +140,42 @@ def main(argv=None) -> int:
             s = dict(longest, completion_ids=list(longest["completion_ids"])[:a.compare_max - len(longest["prompt_ids"])],
                      vllm_logprobs=None)
         runs, outs, cmp = {}, {}, {"key": s["key"], "turn": s.get("turn"), "tokens": size(s), "cut": not cand}
-        seg0 = st["layer_segment"]
-        for name, seg in (("new", seg0), ("new_again", seg0), ("old", None), ("seg1024", 1024)):
-            st["layer_segment"] = seg
+        seg0, chunk0 = st["layer_segment"], st["seq_chunk"]
+        # (name, layer_segment, seq_chunk). The per-token modules run in pieces of seq_chunk tokens on
+        # both paths, so the two *_c1024 runs separate two things the seg1024 run mixes: old_c1024 is
+        # the whole-layer path with only its float rounding changed (other piece sizes), and
+        # seg1024_c1024 segments the layers on exactly those pieces.
+        variants = (("new", seg0, chunk0), ("new_again", seg0, chunk0), ("old", None, chunk0),
+                    ("old_again", None, chunk0), ("seg1024", 1024, chunk0), ("old_c1024", None, 1024),
+                    ("seg1024_c1024", 1024, 1024))
+        for name, seg, chunk in variants:
+            st["layer_segment"], st["seq_chunk"] = seg, chunk
             zero(policy, keep=True)
             outs[name] = {}
             m = one_sample(policy, s, cfg, n_tok, torch, outs[name])
             runs[name] = flat_grad(policy, torch)
             cmp[name] = m
             print("compare %s: %s" % (name, json.dumps(m)), flush=True)
-        st["layer_segment"] = seg0
+        st["layer_segment"], st["seq_chunk"] = seg0, chunk0
         zero(policy, keep=True)
-        ref = runs["old"].double()
-        for name in ("new", "new_again", "seg1024"):
-            x = runs[name].double()
-            cmp["%s_vs_old" % name] = {
-                "rel_l2": float((x - ref).norm() / ref.norm()), "cos": float((x @ ref) / (x.norm() * ref.norm())),
-                "max_abs": float((x - ref).abs().max()), "old_max_abs": float(ref.abs().max()),
-                "old_norm": float(ref.norm())}
-        x, y = runs["new"].double(), runs["new_again"].double()
-        cmp["new_vs_new_again"] = {"rel_l2": float((x - y).norm() / x.norm()), "max_abs": float((x - y).abs().max())}
-        for name in ("new", "new_again", "seg1024"):        # the log-probs themselves (policy and reference pass)
-            for k in ("lp", "ref"):
-                u, v = outs[name][k], outs["old"][k]
+        for name, base in (("new", "old"), ("new_again", "old"), ("new", "new_again"), ("old_again", "old"),
+                           ("seg1024", "old"), ("old_c1024", "old"), ("seg1024_c1024", "old_c1024")):
+            x, ref = runs[name].double(), runs[base].double()
+            d = {"rel_l2": float((x - ref).norm() / ref.norm()), "cos": float((x @ ref) / (x.norm() * ref.norm())),
+                 "max_abs": float((x - ref).abs().max()), "base_max_abs": float(ref.abs().max()),
+                 "base_norm": float(ref.norm())}
+            for k in ("lp", "ref"):                 # the log-probs themselves (policy and reference pass)
+                u, v = outs[name][k], outs[base][k]
                 if u is not None:
-                    cmp["%s_vs_old" % name]["%s_max_abs" % k] = float((u - v).abs().max())
-                    cmp["%s_vs_old" % name]["%s_mean_abs" % k] = float((u - v).abs().mean())
-        cmp["old_lp_mean"] = float(outs["old"]["lp"].mean())
+                    d["%s_max_abs" % k] = float((u - v).abs().max())
+                    d["%s_mean_abs" % k] = float((u - v).abs().mean())
+            cmp["%s_vs_%s" % (name, base)] = d
+        lp = outs["old"]["lp"]
+        cmp["old_lp"] = {"mean": float(lp.mean()), "n": int(lp.numel()), "n_below_-0.1": int((lp < -0.1).sum()),
+                         "n_below_-1": int((lp < -1).sum())}
         res["compare"] = cmp
-        print("compare:", json.dumps({k: v for k, v in cmp.items() if "_vs_" in k}), flush=True)
-        del runs, outs, ref, x, y
+        print("compare:", json.dumps({k: v for k, v in cmp.items() if "_vs_" in k or k == "old_lp"}), flush=True)
+        del runs, outs, ref, x, lp
         save()
 
     # 3. synthetic longer copies of the longest sample: the completion repeated up to the length
