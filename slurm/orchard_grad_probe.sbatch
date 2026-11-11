@@ -29,7 +29,9 @@ export HF_HOME="${HF_HOME:-$B/rl/hf}"; export HF_HUB_CACHE="$HF_HOME/hub" HF_HUB
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 PYTHONHASHSEED=0 TOKENIZERS_PARALLELISM=false WANDB_MODE=disabled
 export TMPDIR=$C/tmp XDG_CACHE_HOME=$C/xdg TRITON_CACHE_DIR=$C/triton TORCHINDUCTOR_CACHE_DIR=$C/inductor CUDA_CACHE_PATH=$C/nv
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS=4
-mkdir -p "$TMPDIR" "$C/xdg" "$OUT/logs"
+# the shard logs go to $HOME: the shared pool can be full, and a log that cannot be written kills its shard
+LOGD="${LOGD:-$HOME/rl/logs/dx_gprobe_${SLURM_JOB_ID:-x}}"
+mkdir -p "$TMPDIR" "$C/xdg" "$OUT" "$LOGD"
 cd "$REPO"
 if [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then IFS=, read -r -a DEVS <<< "$CUDA_VISIBLE_DEVICES"
 else NG=$(nvidia-smi -L | wc -l); DEVS=(); for i in $(seq 0 $((NG-1))); do DEVS+=("$i"); done; fi
@@ -40,11 +42,11 @@ trap 'kill "${PIDS[@]}" 2>/dev/null; exit 143' TERM INT
 for k in $(seq 0 $((N-1))); do
   CUDA_VISIBLE_DEVICES=${DEVS[k]} PYTHONPATH="$REPO" "$TRAIN_PY" -m llm_finetune.rl_dataxp.grad_probe --config "$CONFIG" \
     --run-dir "$RUN_DIR" --steps "$STEPS" --out "$OUT" --shard "$k" --shards "$N" --dim "${DIM:-65536}" \
-    --limit "${LIMIT:-0}" ${ARGS:-} ${OVERRIDES:-} > "$OUT/logs/shard_${k}_job${SLURM_JOB_ID:-x}.log" 2>&1 &
+    --limit "${LIMIT:-0}" ${ARGS:-} ${OVERRIDES:-} > "$LOGD/shard_${k}.log" 2>&1 &
   PIDS+=($!)
 done
 rc=0
 for p in "${PIDS[@]}"; do wait "$p" || rc=$?; done
-tail -n 3 "$OUT"/logs/shard_*_job${SLURM_JOB_ID:-x}.log
+tail -n 3 "$LOGD"/shard_*.log
 echo "DX_GPROBE_DONE $(date '+%F %T %Z') rc=$rc"
 exit $rc

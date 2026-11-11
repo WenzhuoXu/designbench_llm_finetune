@@ -124,6 +124,39 @@ def test_two_part_sketches_are_the_parts_of_the_gradient(tiny_model, tmp_path, p
     assert (r2["n_r"], r2["n_a"]) == (3, 0) and float(r2["sk_a"].abs().max()) == 0 and r2["g2_r"] > 0
 
 
+def test_step_files_wait_out_a_full_disk(tmp_path, monkeypatch):
+    import errno
+    import json
+    import numpy as np
+    from llm_finetune.rl_dataxp import diskio as DK
+    base = str(tmp_path / "s00003_k1")
+    arrs = {"seg": np.arange(24, dtype=np.float16).reshape(2, 3, 4), "h": np.ones((2, 5), dtype=np.float16)}
+    meta = [{"key": "a", "turn": 0}, {"key": "b", "turn": 1}]
+    real, calls, short = np.save, [], []
+
+    def flaky(path, arr):
+        calls.append(path)
+        if len(calls) == 2:                                    # the second array: the pool is full
+            raise OSError(errno.ENOSPC, "No space left on device")
+        if short:                                              # numpy's own wording, no errno
+            raise ValueError("50000 requested and 2032 written")
+        return real(path, arr)
+    monkeypatch.setattr(np, "save", flaky)
+    logs = []
+    DK.retry_when_full(lambda: GP.write_step_files(base, arrs, meta), "step 3", 1.0, log=logs.append, poll_s=0.01)
+    assert len(calls) == 4 and len(logs) == 2                 # one wait, then written whole
+    assert np.array_equal(np.load(base + ".seg.npy"), arrs["seg"]) and np.array_equal(np.load(base + ".h.npy"), arrs["h"])
+    assert [json.loads(x) for x in open(base + ".meta.jsonl")] == meta
+    assert not [p for p in tmp_path.iterdir() if ".tmp" in p.name]
+    short.append(1)
+    with pytest.raises(ValueError):                            # room is there: the error is the real one
+        GP.write_step_files(base, arrs, meta)
+    monkeypatch.setattr(DK, "has_room", lambda dirs, nbytes=1 << 20: False)
+    with pytest.raises(OSError) as ei:                         # no room: the same failure is a full disk
+        GP.write_step_files(base, arrs, meta)
+    assert ei.value.errno == errno.ENOSPC and DK.disk_full(ei.value)
+
+
 def test_segment_bounds_and_hidden_positions():
     assert GP.segment_bounds(10, 4) == [0, 2, 5, 7, 10]
     assert GP.segment_bounds(3, 4) == [0, 0, 1, 2, 3]            # fewer tokens than segments: an empty one

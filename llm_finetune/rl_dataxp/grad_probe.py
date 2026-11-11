@@ -227,9 +227,31 @@ def nearest_adapter(run_dir: str, step: int) -> tuple[int, str]:
     return k, os.path.join(d, "step_%05d" % k, "adapter")
 
 
+def write_step_files(base: str, arrs: dict, meta: list) -> None:
+    """The arrays (base.<suffix>.npy) and then base.meta.jsonl, each written under a temporary name,
+    fsync'd and renamed; the meta file comes last, so its presence marks the (step, shard) done.
+    Safe to repeat. A failure for lack of room is raised as ENOSPC whatever the library called it
+    (numpy reports a short write, not the reason)."""
+    import errno
+    import numpy as np
+    from . import diskio as DK
+    try:
+        for name, arr in arrs.items():
+            tmp = "%s.%s.tmp.npy" % (base, name)
+            np.save(tmp, arr)
+            DK.fsync_file(tmp)
+            os.replace(tmp, "%s.%s.npy" % (base, name))
+        DK.write_text(base + ".meta.jsonl", "".join(json.dumps(m) + "\n" for m in meta))
+    except Exception as e:                                   # noqa: BLE001
+        if not DK.disk_full(e) and not DK.has_room([os.path.dirname(base) or "."]):
+            raise OSError(errno.ENOSPC, "no room for %s (%s: %s)" % (base, type(e).__name__, str(e)[:200])) from e
+        raise
+
+
 def main(argv=None) -> int:
     import numpy as np
     import torch
+    from . import diskio as DK
     from . import trainer as TR
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
@@ -247,6 +269,8 @@ def main(argv=None) -> int:
     ap.add_argument("--hidden-points", type=int, default=0, help="also keep the last hidden state at this many "
                     "positions over the rationale (.h.npy, float16)")
     ap.add_argument("--no-grad", action="store_true", help="forward passes only: log-probs and hidden states")
+    ap.add_argument("--full-wait-min", type=float, default=720.0,
+                    help="how long a finished step waits for room when the output file system is full")
     ap.add_argument("overrides", nargs="*")
     a = ap.parse_args(argv)
     if a.no_grad and not a.hidden_points:
@@ -326,15 +350,9 @@ def main(argv=None) -> int:
                 print(tag, "step %d sample %d/%d  %.0f s  last %s" % (step, i + 1, len(mine), time.time() - t0,
                                                                     json.dumps({x: m.get(x) for x in ("n_r", "n_a", "t", "refwd")})),
                       flush=True)
-        for name, arr in arrs.items():
-            tmp = "%s.%s.tmp.npy" % (base, name)
-            np.save(tmp, arr)
-            os.replace(tmp, "%s.%s.npy" % (base, name))
-        tmp = base + ".meta.jsonl.tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            for m in meta:
-                f.write(json.dumps(m) + "\n")
-        os.replace(tmp, base + ".meta.jsonl")              # written last: its presence marks the step done
+        # the shared pool fills up and empties again: a finished step waits for room instead of being lost
+        DK.retry_when_full(lambda: write_step_files(base, arrs, meta), "step %d shard %d" % (step, a.shard),
+                           a.full_wait_min, log=lambda msg: print(tag, msg, flush=True))
         print(tag, "step %d done: %d samples in %.0f s" % (step, len(mine), time.time() - t0), flush=True)
     print(tag, "GRAD_PROBE_DONE", flush=True)
     return 0
