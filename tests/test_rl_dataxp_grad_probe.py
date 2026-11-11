@@ -124,6 +124,71 @@ def test_two_part_sketches_are_the_parts_of_the_gradient(tiny_model, tmp_path, p
     assert (r2["n_r"], r2["n_a"]) == (3, 0) and float(r2["sk_a"].abs().max()) == 0 and r2["g2_r"] > 0
 
 
+def test_segment_bounds_and_hidden_positions():
+    assert GP.segment_bounds(10, 4) == [0, 2, 5, 7, 10]
+    assert GP.segment_bounds(3, 4) == [0, 0, 1, 2, 3]            # fewer tokens than segments: an empty one
+    assert GP.segment_bounds(0, 3) == [0, 0, 0, 0]
+    assert GP.hidden_positions(8, 12, 5) == [0, 2, 4, 6, 8]      # both ends of the rationale
+    assert GP.hidden_positions(8, 12, 9) == GP.segment_bounds(8, 8)   # H = m*B + 1 contains the segment boundaries
+    assert GP.hidden_positions(5, 5, 3) == [0, 2, 4]             # nothing after the rationale: stop at the last state
+    with pytest.raises(ValueError):
+        GP.hidden_positions(5, 8, 1)
+
+
+@pytest.mark.skipif(not HAVE_MODEL, reason="needs the tiny Qwen3_5 model of the trainer tests")
+@pytest.mark.parametrize("long_path", [False, True])
+def test_segment_sketches_and_hidden_states(tiny_model, tmp_path, problems_file, long_path):  # noqa: F811
+    from peft import LoraConfig, get_peft_model
+    from transformers import Qwen3_5ForConditionalGeneration
+    from test_rl_dataxp_trainer import REGEX
+    init = tmp_path / "init_adapter"
+    torch.manual_seed(5)
+    get_peft_model(Qwen3_5ForConditionalGeneration.from_pretrained(tiny_model),
+                   LoraConfig(r=4, lora_alpha=8, target_modules=REGEX, init_lora_weights=False)).save_pretrained(str(init))
+    over = ({"grpo.logit_chunk": 2, "grpo.offload_min_tokens": 1, "grpo.layer_segment": 4, "grpo.seq_chunk": 3}
+            if long_path else {"grpo.logit_chunk": 0, "grpo.offload_min_tokens": None})
+    cfg = make_cfg(tiny_model, tmp_path, problems_file, **dict(over, **{"policy.init_adapter": str(init)}))
+    cfg["grpo"]["kl_reference"] = "base"
+    pol = policy_of(cfg)
+    dim, T, END = 1 << 12, 0.8, 9
+    s = {"prompt_ids": [3, 5, 7, 11, 13, 17], "completion_ids": [19, 23, 29, 31, 47, 53, END, 37, 41, 43]}
+    whole = GP.sample_sketches(pol, s, T, dim, END)
+    res = GP.sample_sketches(pol, s, T, dim, END, segments=3, hidden_points=4)
+    assert res["seg"] == [0, 2, 4, 7] and res["hpos"] == [0, 2, 4, 7]
+    assert res["sk_seg"].shape == (3, dim) and len(res["g2_seg"]) == 3 and "sk_r" not in res
+    assert res["refwd"] == (1 if long_path else 0)
+    assert all(p.grad is None or float(p.grad.abs().max()) == 0 for p in pol.params)
+    tol = 2e-3 if long_path else 1e-4
+    # every segment is the gradient of its own tokens; together they are the whole rationale
+    for k in range(3):
+        sk, g2, _ = _full_grad_sketch(pol, s["prompt_ids"], s["completion_ids"], T, dim, slice(res["seg"][k], res["seg"][k + 1]))
+        assert float((res["sk_seg"][k] - sk).norm() / sk.norm()) < tol and abs(res["g2_seg"][k] / g2 - 1) < tol
+    assert float((res["sk_seg"].sum(0) - whole["sk_r"]).norm() / whole["sk_r"].norm()) < tol
+    assert float((res["sk_a"] - whole["sk_a"]).norm() / whole["sk_a"].norm()) < tol
+    assert abs(sum(res["lp_seg"]) - whole["lp_r"]) < 1e-3 * max(1.0, abs(whole["lp_r"]))
+    # the hidden states are the trunk's, at "after j reply tokens"
+    with torch.no_grad():
+        ids = torch.tensor([s["prompt_ids"] + s["completion_ids"]], device=pol.device)
+        pol._ckpt_state["tokens"] = ids.shape[1]
+        hs = pol.trunk(input_ids=ids, use_cache=False).last_hidden_state[0].float().cpu()
+    P = len(s["prompt_ids"])
+    want = torch.stack([hs[P - 1 + j] for j in res["hpos"]])
+    assert res["h"].dtype == torch.float16 and res["h"].shape == want.shape
+    assert float((res["h"].float() - want).abs().max()) < 2e-3 * float(want.abs().max()) + 1e-3
+    # forward only: the same log-probs and hidden states, no sketches, no gradients left behind
+    fw = GP.sample_sketches(pol, s, T, dim, END, segments=3, hidden_points=4, grad=False)
+    assert "sk_seg" not in fw and "sk_a" not in fw and torch.equal(fw["h"], res["h"])
+    assert max(abs(x - y) for x, y in zip(fw["lp_seg"], res["lp_seg"])) < 1e-3
+    assert all(p.grad is None or float(p.grad.abs().max()) == 0 for p in pol.params)
+    # without the action part; a rationale shorter than the number of segments leaves all-zero ones
+    na = GP.sample_sketches(pol, s, T, dim, END, segments=3, action=False)
+    assert "sk_a" not in na and float((na["sk_seg"] - res["sk_seg"]).norm() / res["sk_seg"].norm()) < tol
+    short = GP.sample_sketches(pol, {"prompt_ids": [3, 5, 7], "completion_ids": [19, END, 37]}, T, dim, END, segments=4,
+                               hidden_points=3)
+    assert short["seg"] == [0, 0, 1, 1, 2] and short["g2_seg"][0] == 0 and short["g2_seg"][1] > 0
+    assert float(short["sk_seg"][0].abs().max()) == 0 and short["hpos"] == [0, 1, 2]
+
+
 @pytest.mark.skipif(not HAVE_MODEL, reason="needs the tiny Qwen3_5 model of the trainer tests")
 def test_a_freed_graph_is_run_again(tiny_model, tmp_path, problems_file, monkeypatch):  # noqa: F811
     """If the first backward frees the graph, the second part is computed from a fresh forward pass."""
