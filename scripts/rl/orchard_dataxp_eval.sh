@@ -22,7 +22,8 @@ B="${BASE:-/project/community/wxu2}"
 REPO="${REPO:-$HOME/rl/repo}"
 OUT="${OUT:?output dir}"
 LABEL="${LABEL:?label (the served model name for an adapter)}"
-PROBLEMS="${PROBLEMS:?problem files ({variant, spec} per line)}"
+# no braces in the message: a '}' inside it ends the expansion early and the rest is appended to the value
+PROBLEMS="${PROBLEMS:?problem files, one variant + spec per line}"
 NSERVERS=${NSERVERS:-4}
 VENV="${VLLM_VENV:-$B/rl/envs/vllm}"
 SIM_PY="${SIM_PY:-$B/rl/envs/sim/bin/python}"
