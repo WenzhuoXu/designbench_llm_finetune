@@ -119,6 +119,22 @@ def test_resume_matches_an_uninterrupted_run(tiny_model, tmp_path, problems_file
 
 
 @pytest.mark.skipif(not HAVE_MODEL, reason="needs the tiny Qwen3_5 model of the trainer tests")
+def test_the_loss_temperature_reaches_the_log_probabilities(tiny_model, tmp_path, problems_file):  # noqa: F811
+    from test_rl_dataxp_trainer import policy_of
+    from llm_finetune.rl_dataxp import trainer as TR
+    pol = policy_of(make_cfg(tiny_model, tmp_path, problems_file))
+    dist = TR.Dist(1)
+    smp = [{"prompt_ids": [5, 6, 7, 8, 9, 10, 11, 12], "completion_ids": [13, 14, 15, 16]}]
+    at_1 = SR.score_rows(pol, smp, dist, 1.0)["dev_loss"]
+    at_half = SR.score_rows(pol, smp, dist, 0.5)["dev_loss"]
+    with torch.no_grad():
+        lp, _ = pol.logprobs(smp[0]["prompt_ids"], smp[0]["completion_ids"], 0.5)
+    assert at_half == pytest.approx(float(-lp.mean()), rel=1e-5) and at_half != pytest.approx(at_1, rel=1e-3)
+    opt = torch.optim.SGD(pol.params, lr=0.0)
+    assert SR.train_step(pol, smp, dist, opt, 1.0, 0.5)["loss"] == pytest.approx(at_half, rel=1e-4)
+
+
+@pytest.mark.skipif(not HAVE_MODEL, reason="needs the tiny Qwen3_5 model of the trainer tests")
 def test_resume_refuses_other_rows(tiny_model, tmp_path, problems_file, patched):  # noqa: F811
     SR.train(_cfg(tiny_model, tmp_path / "run", problems_file, _rows(tmp_path), epochs=1.0), log=lambda s: None)
     os.remove(tmp_path / "run" / "DONE")

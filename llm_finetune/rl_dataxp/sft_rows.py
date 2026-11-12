@@ -23,9 +23,18 @@ was validated without dropout only; sft.lora_dropout > 0 is accepted but not val
       weight_decay: 0.01
       max_grad_norm: 1.0
       lora_dropout: 0.0
+      temperature: 1.0              # the temperature of the log-probabilities in the loss (see below)
       seed: 42
       save_every: 25                # a full checkpoint every this many steps (and at the end)
       dev_every: 0
+
+sft.temperature: 1.0 is the dx38 recipe. Rows that are the policy's own replies drawn at a
+temperature T < 1 share, under a loss at 1.0, a direction that has nothing to do with which reply
+was kept: making any own reply more likely sharpens the policy (measured on 713 first-move states
+of dx38mtR, replies drawn at 0.8: 27% of a 64-row step, the same for screened and unscreened
+replies; the part only the screening has is under 1% of the step). With the loss at the sampling
+temperature an unscreened own reply has a zero expected gradient (the score-function identity), so
+what the rows share is the screening alone.
 
     python -m llm_finetune.rl_dataxp.sft_rows --config configs/rl/<cfg>.yaml [key=value ...]
 (under torchrun for several GPUs). Resumes from the newest complete checkpoint of run_dir; the
@@ -51,7 +60,7 @@ END = "<|im_end|>"
 SFT_DEFAULTS = {"rows_file": None, "dev_file": None, "epochs": 1.0, "rows_per_step": 64, "lr": 1.0e-4,
                 "warmup_ratio": 0.03, "weight_decay": 0.01, "betas": [0.9, 0.999], "eps": 1.0e-8,
                 "max_grad_norm": 1.0, "lora_dropout": 0.0, "seed": 42, "save_every": 25, "dev_every": 0,
-                "keep_adapter_every": 50}
+                "keep_adapter_every": 50, "temperature": 1.0}
 
 
 def completion_text(message: dict) -> str:
@@ -107,8 +116,9 @@ def set_lora_dropout(model, p: float) -> int:
     return n
 
 
-def train_step(policy, samples: list[dict], dist, opt, max_grad_norm: float) -> dict:
-    """One optimizer step on the mean per-row cross-entropy of `samples` (this rank's share)."""
+def train_step(policy, samples: list[dict], dist, opt, max_grad_norm: float, temperature: float = 1.0) -> dict:
+    """One optimizer step on the mean per-row cross-entropy of `samples` (this rank's share), the
+    log-probabilities taken at `temperature`."""
     import torch
     mine = shard_samples(samples, dist.world, dist.rank)
     stats = torch.zeros(4, dtype=torch.float64, device=policy.device)     # rows, row-mean nll, tokens, token nll
@@ -116,7 +126,7 @@ def train_step(policy, samples: list[dict], dist, opt, max_grad_norm: float) -> 
     if cuda:
         torch.cuda.reset_peak_memory_stats(policy.device)
     for s in mine:
-        lp, _ = policy.logprobs(s["prompt_ids"], s["completion_ids"], 1.0)
+        lp, _ = policy.logprobs(s["prompt_ids"], s["completion_ids"], float(temperature))
         nll = -lp.mean()
         if not bool(torch.isfinite(nll)):
             raise RuntimeError("non-finite loss on a row of %d + %d tokens (%s)" % (
@@ -141,7 +151,7 @@ def train_step(policy, samples: list[dict], dist, opt, max_grad_norm: float) -> 
             "max_row_tokens": max(len(s["prompt_ids"]) + len(s["completion_ids"]) for s in samples)}
 
 
-def score_rows(policy, samples: list[dict], dist) -> dict:
+def score_rows(policy, samples: list[dict], dist, temperature: float = 1.0) -> dict:
     """Mean per-row and per-token negative log-probability, no gradient, dropout off."""
     import torch
     mine = shard_samples(samples, dist.world, dist.rank)
@@ -150,7 +160,7 @@ def score_rows(policy, samples: list[dict], dist) -> dict:
     try:
         with torch.no_grad():
             for s in mine:
-                lp, _ = policy.logprobs(s["prompt_ids"], s["completion_ids"], 1.0)
+                lp, _ = policy.logprobs(s["prompt_ids"], s["completion_ids"], float(temperature))
                 stats[0] += 1
                 stats[1] += -lp.mean().double()
                 stats[2] += lp.numel()
@@ -166,7 +176,7 @@ def sft_fingerprint(cfg: dict, rows_sha1: str) -> str:
     s = cfg["sft"]
     sub = {"rows_sha1": rows_sha1, "model": cfg["model"]["path"], "policy": cfg["policy"],
            **{k: s[k] for k in ("epochs", "rows_per_step", "lr", "warmup_ratio", "weight_decay", "betas", "eps",
-                                "max_grad_norm", "lora_dropout", "seed")}}
+                                "max_grad_norm", "lora_dropout", "seed", "temperature")}}
     return hashlib.sha1(json.dumps(sub, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
@@ -176,7 +186,7 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
 
     s = dict(SFT_DEFAULTS, **(cfg.get("sft") or {}))
     # a command-line override such as sft.lr=5e-5 arrives as a string (YAML reads 5e-5 as one)
-    for k in ("epochs", "lr", "warmup_ratio", "weight_decay", "eps", "max_grad_norm", "lora_dropout"):
+    for k in ("epochs", "lr", "warmup_ratio", "weight_decay", "eps", "max_grad_norm", "lora_dropout", "temperature"):
         s[k] = float(s[k])
     for k in ("rows_per_step", "seed", "save_every", "dev_every", "keep_adapter_every"):
         s[k] = int(s[k])
@@ -249,7 +259,7 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
         dev_samples = [row_sample(r, tok) for r in dev]
         history = {k: m for k, m in TR.read_metrics(run_dir).items() if k < start}
         if dev_samples and start == 0:
-            d0 = score_rows(policy, dev_samples, dist)
+            d0 = score_rows(policy, dev_samples, dist, s["temperature"])
             log("before training: dev loss %.4f (per token %.4f) on %d rows" % (d0["dev_loss"], d0["dev_nll_per_token"], d0["dev_rows"]))
             if dist.rank == 0:
                 retry_when_full(lambda: write_text(os.path.join(run_dir, "dev_start.json"), json.dumps(d0)), "dev_start.json", wait_min, log)
@@ -257,12 +267,12 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
             t0 = time.time()
             batch = [rows[i] for i in order[step * per:(step + 1) * per]]
             samples = [row_sample(r, tok) for r in batch]
-            m = {"step": step, **train_step(policy, samples, dist, opt, s["max_grad_norm"]),
+            m = {"step": step, **train_step(policy, samples, dist, opt, s["max_grad_norm"], s["temperature"]),
                  "lr": sched.get_last_lr()[0], "by_tier": _count(batch, "tier"), "by_domain": _count(batch, "domain")}
             sched.step()
             last = step + 1 == steps
             if dev_samples and (last or (int(s["dev_every"]) and (step + 1) % int(s["dev_every"]) == 0)):
-                m.update(score_rows(policy, dev_samples, dist))
+                m.update(score_rows(policy, dev_samples, dist, s["temperature"]))
             m["t_train"] = round(time.time() - t0, 1)
             m["time"] = time.strftime("%F %T")
             history[step] = m
