@@ -1,0 +1,39 @@
+# Screened supervised round 1 from the dx38mtR adapter (llm_finetune/rl_dataxp/sft_rows.py).
+#
+# Rows: dx38mtR's own replies at designs it reached itself, each checked in the simulator, one row per
+# state whose best reply passes the screen (scripts/rl_screen/), mixed with a replay sample of the
+# rows that trained dx38mtR (scripts/rl_screen/mix_rows.py). The rows file is given on the command
+# line (sft.rows_file), so this file fixes the recipe only.
+#
+# The recipe is dx38mtR's own (its run_fingerprint.json): cross-entropy on the assistant_after_think
+# target, every row weighing the same, 64 rows per optimizer step, lr 1e-4, cosine schedule with a
+# 3% warm-up, weight decay 0.01, gradient clipping at 1.0, one epoch, seed 42, LoRA r64 / alpha 128
+# on the same Qwen3.8-27B snapshot. Two differences: the adapter starts at dx38mtR instead of a fresh
+# LoRA, and LoRA dropout is off (dx38mtR trained with 0.05; see sft_rows.py).
+#
+#   sbatch --export=ALL,RUN_DIR=/project/community/wxu2/rl/runs/<name>,CONFIG=configs/rl/dataxp_sft_scr1.yaml,\
+#          ROWS=<train.jsonl>,DEV=<dev.jsonl> slurm/orchard_sft_rows.sbatch
+seed: 0
+
+model:
+  path: /project/community/wxu2/rl/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  gradient_checkpointing: true
+
+policy:
+  init_adapter: /project/community/wxu2/rl/inputs/dx38mtR_final
+  require_init_adapter: true
+
+sft:
+  epochs: 1.0
+  rows_per_step: 64
+  lr: 1.0e-4
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  lora_dropout: 0.0
+  seed: 42
+  save_every: 10
+  dev_every: 20
+  keep_adapter_every: 40
