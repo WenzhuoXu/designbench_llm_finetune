@@ -22,17 +22,13 @@ import json
 import sys
 
 
-def reasoning_of(answer: str) -> str:
-    """dataxp.ownrows.common.reasoning_of: the reply before its last <action>."""
-    a = answer or ""
-    i = a.rfind("<action>")
-    return (a if i < 0 else a[:i]).strip()
-
-
-def usable(x: dict, reason: str) -> str | None:
-    """None when the reply can be a row target, else why not."""
+def usable(x: dict, reason: str, sha1=None) -> str | None:
+    """None when the reply can be a row target, else why not. sha1: of the reply now in the samples
+    file; a reply that is not the one that was scored (the state was sampled again) is not used."""
     if not x.get("ok") or x.get("pct") is None:
         return "not_applied:" + str(x.get("reason") or "no_pct").split(":")[0]
+    if x.get("reply_sha1") != sha1:
+        return "reply_changed_after_scoring"
     if x.get("noop"):
         return "noop"
     if not reason:
@@ -42,13 +38,15 @@ def usable(x: dict, reason: str) -> str | None:
     return None
 
 
-def pick(scored: list, answers: dict, min_pct: float, max_words: int, require_gain: bool):
-    """(reply record, rationale, None) or (None, None, why the state gives no row)."""
+def pick(scored: list, replies: dict, min_pct: float, max_words: int, require_gain: bool):
+    """(reply record, rationale, None) or (None, None, why the state gives no row). replies:
+    (sid, sample) -> (rationale = the think block, sha1 of the reply)."""
     why = collections.Counter()
     best = None
     for x in sorted(scored, key=lambda r: int(r["sample"])):
-        reason = reasoning_of(answers.get((x["sid"], int(x["sample"])), ""))
-        w = usable(x, reason)
+        reason, sha1 = replies.get((x["sid"], int(x["sample"])), ("", None))
+        reason = reason.strip()
+        w = usable(x, reason, sha1)
         if w is None and require_gain and not x.get("gain"):
             w = "no_gain"
         if w is None and max_words and len(reason.split()) > max_words:
@@ -80,6 +78,7 @@ def make_row(state: dict, x: dict, reason: str, tier: str, teacher: str) -> dict
         "own_pct": x["pct"], "own_phi": x["phi"], "n_candidates": x.get("n_candidates"),
         "sid": state["sid"], "phi_before": state.get("phi_before"), "feasible_after": bool(x.get("feasible_after")),
         "same_as_own": bool(x.get("same_as_own")), "source": state.get("source"), "words": len(reason.split()),
+        "action_tag_in_rationale": "<action>" in reason,
     }
 
 
@@ -103,8 +102,8 @@ def main(argv=None) -> int:
             o = json.loads(line)
         except ValueError:
             continue
-        if o.get("answer") and o.get("finish") != "length":
-            answers[(o["sid"], int(o["sample"]))] = o["answer"]
+        if not o.get("error") and o.get("answer") and o.get("finish") != "length":
+            answers[(o["sid"], int(o["sample"]))] = (o.get("thinking") or "", o.get("sha1"))
     scored = collections.defaultdict(list)
     state_rec = {}
     for line in open(a.scored, encoding="utf-8"):
@@ -154,6 +153,7 @@ def main(argv=None) -> int:
             c["rows: the policy's own move at this state"] += row["same_as_own"]
             c["rows: design feasible after the move"] += row["feasible_after"]
             c["rows: rationale over 320 words"] += row["words"] > 320
+            c["rows: an <action> line drafted inside the rationale"] += row["action_tag_in_rationale"]
             words[s["variant"]].append(row["words"])
             pcts[s["variant"]].append(row["own_pct"])
     keys = []

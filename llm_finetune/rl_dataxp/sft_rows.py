@@ -118,6 +118,9 @@ def train_step(policy, samples: list[dict], dist, opt, max_grad_norm: float) -> 
     for s in mine:
         lp, _ = policy.logprobs(s["prompt_ids"], s["completion_ids"], 1.0)
         nll = -lp.mean()
+        if not bool(torch.isfinite(nll)):
+            raise RuntimeError("non-finite loss on a row of %d + %d tokens (%s)" % (
+                len(s["prompt_ids"]), len(s["completion_ids"]), s.get("domain")))
         (nll / len(samples)).backward()
         with torch.no_grad():
             stats[0] += 1
@@ -172,6 +175,12 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
     from transformers import AutoTokenizer
 
     s = dict(SFT_DEFAULTS, **(cfg.get("sft") or {}))
+    # a command-line override such as sft.lr=5e-5 arrives as a string (YAML reads 5e-5 as one)
+    for k in ("epochs", "lr", "warmup_ratio", "weight_decay", "eps", "max_grad_norm", "lora_dropout"):
+        s[k] = float(s[k])
+    for k in ("rows_per_step", "seed", "save_every", "dev_every", "keep_adapter_every"):
+        s[k] = int(s[k])
+    s["betas"] = [float(b) for b in s["betas"]]
     cfg["sft"] = s
     run_dir = cfg["run_dir"]
     for key, val in (("run_dir", run_dir), ("model.path", cfg["model"]["path"]), ("sft.rows_file", s["rows_file"])):
@@ -196,6 +205,21 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
         per = int(s["rows_per_step"])
         steps = int(math.ceil(len(order) / per))
         tok = AutoTokenizer.from_pretrained(cfg["model"]["path"], trust_remote_code=cfg["model"]["trust_remote_code"])
+        if dist.rank == 0:
+            # every row is tokenised once before the model is loaded: a row that cannot be trained on
+            # stops the run here, not at the step that draws it
+            longest, n_tok = 0, 0
+            for k, r in enumerate(rows + dev):
+                try:
+                    smp = row_sample(r, tok)
+                    if not smp["completion_ids"]:
+                        raise ValueError("empty completion")
+                except Exception as e:                       # noqa: BLE001
+                    raise SystemExit("row %d of %s cannot be trained on: %s" % (
+                        k if k < len(rows) else k - len(rows), s["rows_file"] if k < len(rows) else s["dev_file"], e))
+                longest = max(longest, len(smp["prompt_ids"]) + len(smp["completion_ids"]))
+                n_tok += len(smp["completion_ids"]) if k < len(rows) else 0
+            log("rows checked: longest %d tokens, %d supervised tokens in the training file" % (longest, n_tok))
         random.seed(int(s["seed"]) + dist.rank)
         torch.manual_seed(int(s["seed"]) + dist.rank)      # dropout masks differ between the ranks
         policy = TR.Policy(cfg, dist.device)

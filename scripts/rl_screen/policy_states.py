@@ -106,7 +106,6 @@ def _job(job):
 
 
 def main(argv=None) -> int:
-    import multiprocessing as mp
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--episodes", nargs="+", required=True)
     ap.add_argument("--script", required=True, help="the harness script (dataxp_policy_eval_v3.py)")
@@ -152,20 +151,32 @@ def main(argv=None) -> int:
     seen, n_rows = {}, 0
     tmp = a.out + ".tmp"
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    with mp.get_context("spawn").Pool(a.workers) as pool, open(tmp, "w", encoding="utf-8") as fo:
-        for key, rows, mismatch, n_moves in pool.imap(_job, jobs, chunksize=2):
-            cnt["episodes replayed"] += 1
-            cnt["applied moves"] += n_moves
-            cnt["episodes whose recorded moves did not all replay"] += int(mismatch)
-            for r in rows:
-                cnt["states visited"] += 1
-                if r["sid"] in seen:
-                    seen[r["sid"]] += 1
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from crashsafe import run_jobs
+    waiting, nxt = {}, 0                 # results are written in the order of the jobs, whatever finishes first
+    with open(tmp, "w", encoding="utf-8") as fo:
+        for i, res, err in run_jobs(_job, jobs, a.workers):
+            waiting[i] = (res, err)
+            while nxt in waiting:
+                res, err = waiting.pop(nxt)
+                nxt += 1
+                if err is not None:
+                    cnt["episodes whose replay failed (%s)" % err[:60]] += 1
+                    print("!!! replay of %s failed: %s" % (jobs[nxt - 1][2]["key"], err), flush=True)
                     continue
-                seen[r["sid"]] = 1
-                fo.write(json.dumps(r) + "\n")
-                n_rows += 1
-                cnt["states, %s" % r["variant"]] += 1
+                key, rows, mismatch, n_moves = res
+                cnt["episodes replayed"] += 1
+                cnt["applied moves"] += n_moves
+                cnt["episodes whose recorded moves did not all replay"] += int(mismatch)
+                for r in rows:
+                    cnt["states visited"] += 1
+                    if r["sid"] in seen:
+                        seen[r["sid"]] += 1
+                        continue
+                    seen[r["sid"]] = 1
+                    fo.write(json.dumps(r) + "\n")
+                    n_rows += 1
+                    cnt["states, %s" % r["variant"]] += 1
     os.replace(tmp, a.out)
     cnt["distinct states written"] = n_rows
     for k in sorted(cnt):

@@ -1,7 +1,8 @@
 """Step 3 of a screened supervised round: every sampled reply checked in the simulator.
 
-As dataxp.ownrows.score scores the replies behind the dx38 rows, with its own helpers: the reply's
-last <action> line is parsed and applied on a clone of the replayed state (a move the state refuses
+As dataxp.ownrows.score scores the replies behind the dx38 rows, with its own helpers: the last
+<action> line of the reply's visible answer (the text after the think block, where the harness
+reads the move) is parsed and applied on a clone of the replayed state (a move the state refuses
 is 'illegal'), the design after it is scored with the same PhiEvaluator and per-move seeds, and
 pct = the share of the state's enumerated legal moves whose potential is <= the reply's, in
 percent. There is no teacher move at a policy state; instead each reply also carries
@@ -32,8 +33,8 @@ def score_state(job):
     import numpy as np
     from dataxp.domain import Move, stable_seed
     from dataxp.domains import get_domain
-    from dataxp.ownrows.common import (evaluator, legal_rng, move_seed, parse_reply, percentile, reasoning_of,
-                                       rebuild_state, try_apply)
+    from dataxp.ownrows.common import (evaluator, legal_rng, move_seed, parse_reply, percentile, rebuild_state,
+                                       try_apply)
     t0 = time.time()
     sid, pid = row["sid"], row["problem_id"]
     out = []
@@ -57,10 +58,13 @@ def score_state(job):
         return [{"sid": sid, "variant": row["variant"], "state": True, "error": "%s: %s" % (type(e).__name__, str(e)[:300]),
                  "t": round(time.time() - t0, 2)}]
     for k, o in samples:
-        ans = o.get("answer") or ""
+        # the move is read from the visible answer only (the text after the think block), as the
+        # harness reads it: an <action> line drafted inside the rationale is not a move
+        ans, think = o.get("answer") or "", o.get("thinking") or ""
         rec = {"sid": sid, "variant": row["variant"], "sample": k, "ok": False, "parsed": False, "legal": False,
-               "reason": None, "n_candidates": int(cand.size), "finish": o.get("finish"),
-               "words": len(reasoning_of(ans).split()), "think_leak": "<think>" in ans or "</think>" in ans}
+               "reason": None, "n_candidates": int(cand.size), "finish": o.get("finish"), "reply_sha1": o.get("sha1"),
+               "words": len(think.split()), "think_leak": "<think>" in think or "</think>" in think,
+               "action_tag_in_rationale": "<action>" in think}
         if o.get("finish") == "length" or not ans:
             rec["reason"] = "truncated" if o.get("finish") == "length" else "empty"
             out.append(rec)
@@ -97,7 +101,6 @@ def _init(code: str):
 
 
 def main(argv=None) -> int:
-    from concurrent.futures import ProcessPoolExecutor
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--code", required=True, help="directory that holds the dataxp package")
     ap.add_argument("--states", required=True)
@@ -138,21 +141,33 @@ def main(argv=None) -> int:
     print("states with replies %d, already scored %d, to score %d" % (len(per), len(done), len(jobs)), flush=True)
     t0 = time.time()
     secs = collections.defaultdict(list)
-    n = 0
-    with open(a.out, "a", encoding="utf-8") as fo, ProcessPoolExecutor(a.workers, initializer=_init, initargs=(a.code,)) as ex:
-        for recs in ex.map(score_state, jobs, chunksize=1):
+    n = n_fail = 0
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from crashsafe import run_jobs
+    with open(a.out, "a", encoding="utf-8") as fo:
+        if os.path.getsize(a.out) > 0:
+            with open(a.out, "rb") as f:                     # close off a last line cut by a killed run
+                f.seek(-1, os.SEEK_END)
+                if f.read(1) != b"\n":
+                    fo.write("\n")
+        for i, recs, err in run_jobs(score_state, jobs, a.workers, initializer=_init, initargs=(a.code,)):
+            if err is not None:                              # a state whose scoring kills its process is final:
+                row = jobs[i][0]                             # the next run does not try it again
+                recs = [{"sid": row["sid"], "variant": row["variant"], "state": True, "error": err}]
+                print("!!! %s: %s" % (row["sid"], err), flush=True)
             for r in recs:
                 fo.write(json.dumps(r) + "\n")
                 if r.get("state"):
+                    n_fail += bool(r.get("error"))
                     secs[r["variant"]].append(r.get("t") or 0.0)
             fo.flush()
             n += 1
             if n % 200 == 0:
-                print("%d/%d states, %.0f s" % (n, len(jobs), time.time() - t0), flush=True)
+                print("%d/%d states, %d failed, %.0f s" % (n, len(jobs), n_fail, time.time() - t0), flush=True)
     for v in sorted(secs):
         s = sorted(secs[v])
         print("%-10s states %5d, seconds per state: median %.1f, mean %.1f, max %.1f" % (v, len(s), s[len(s) // 2], sum(s) / len(s), s[-1]))
-    print("SCORE_STATES_DONE %d states in %.0f s" % (n, time.time() - t0), flush=True)
+    print("SCORE_STATES_DONE %d states (%d failed) in %.0f s" % (n, n_fail, time.time() - t0), flush=True)
     return 0
 
 

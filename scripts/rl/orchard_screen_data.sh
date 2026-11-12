@@ -24,7 +24,8 @@
 # EXCLUDE (default: the two evaluation problem files) is checked against every episode's problem.
 # Knobs as orchard_dataxp_eval.sh: BASE, REPO, VLLM_VENV, SIM_PY, MODEL_PATH, CACHE_DIR, MAX_MODEL_LEN,
 # GPU_UTIL, MAX_SEQS, MAX_LORA_RANK, NSERVERS (4), HARNESS; WORKERS (160, collection episodes in
-# flight), SAMPLE_WORKERS (96, states in flight), CPU_WORKERS (the job's CPUs minus 8). A smoke run:
+# flight), SAMPLE_WORKERS (40, states in flight, up to K - 1 requests each), CPU_WORKERS (the job's
+# CPUs minus 8). A smoke run:
 # STATES_LIMIT (episodes per rollout file), SAMPLE_LIMIT (states sampled), a short POOL.
 set -uo pipefail
 B="${BASE:-/project/community/wxu2}"
@@ -182,17 +183,18 @@ fi
 if ! stage_done samples; then
   wait_servers
   "$SIM_PY" "$S/sample_states.py" --states "$OUT/states.jsonl" --out "$OUT/samples.jsonl" --servers "${URLS[@]}" \
-      --model "$LABEL" --k "$K" --temperature "${TEMPERATURE:-0.8}" --workers "${SAMPLE_WORKERS:-96}" --limit "${SAMPLE_LIMIT:-0}" --first $FIRST \
+      --model "$LABEL" --k "$K" --temperature "${TEMPERATURE:-0.8}" --workers "${SAMPLE_WORKERS:-40}" --limit "${SAMPLE_LIMIT:-0}" --first $FIRST \
       2>&1 | tee -a "$OUT/logs/samples.log"
   rc=${PIPESTATUS[0]}
-  if [ "$rc" = 3 ]; then          # some states failed: one more pass over what is missing
+  if [ "$rc" = 3 ]; then          # some replies failed: one more pass over what is missing
+    wait_servers                  # aborts the job if a server is gone (the stage is not marked done)
     "$SIM_PY" "$S/sample_states.py" --states "$OUT/states.jsonl" --out "$OUT/samples.jsonl" --servers "${URLS[@]}" \
-        --model "$LABEL" --k "$K" --temperature "${TEMPERATURE:-0.8}" --workers "${SAMPLE_WORKERS:-96}" --limit "${SAMPLE_LIMIT:-0}" --first $FIRST \
+        --model "$LABEL" --k "$K" --temperature "${TEMPERATURE:-0.8}" --workers "${SAMPLE_WORKERS:-40}" --limit "${SAMPLE_LIMIT:-0}" --first $FIRST \
         2>&1 | tee -a "$OUT/logs/samples.log"
     rc=${PIPESTATUS[0]}
   fi
   [ "$rc" = 0 ] || [ "$rc" = 3 ] || { echo "ABORT: sampling failed rc=$rc"; exit 5; }
-  [ "$rc" = 3 ] && echo "!!! some states still have no replies after two passes (see samples.log)"
+  [ "$rc" = 3 ] && echo "!!! some replies are still missing after two passes (see samples.log); their states keep the replies they have"
   mark samples
 fi
 cleanup                              # the GPUs are not needed from here on
@@ -200,7 +202,7 @@ cleanup                              # the GPUs are not needed from here on
 # ---- every reply in the simulator
 if ! stage_done scored; then
   sim "$S/score_states.py" --code "$H/dataxp_code_v3" --states "$OUT/states.jsonl" --samples "$OUT/samples.jsonl" \
-      --out "$OUT/scored.jsonl" --workers "$CPU_WORKERS" 2>&1 | grep -v -i "warn\|numba\|^[[:space:]]*$" | tee -a "$OUT/logs/scored.log"
+      --out "$OUT/scored.jsonl" --workers "$CPU_WORKERS" 2>&1 | grep -v -i "warn\|numba\|^[[:space:]]*$" | tee "$OUT/logs/scored.log"
   grep -q SCORE_STATES_DONE "$OUT/logs/scored.log" || { echo "ABORT: scoring failed"; exit 6; }
   mark scored
 fi

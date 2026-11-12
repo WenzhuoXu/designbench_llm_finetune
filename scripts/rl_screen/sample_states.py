@@ -1,22 +1,27 @@
 """Step 2 of a screened supervised round: k replies of the served policy at every state.
 
-One chat-completion request per state with n = k, the state's served prompt (system, user) and
-thinking on, sampled as the RL rollouts sampled (temperature 0.8, top_p 1, top_k 0 by default) with
-no completion cap. Output: one line per (state, sample) in the format dataxp.ownrows.score reads:
-`answer` is the rationale (the think block) followed by the visible answer, so the reply's last
-<action> line and the text before it are read as for the dx38 rows. A reply whose think block was
-not closed has finish "length" and no answer.
+One chat-completion request per reply, with the state's served prompt (system, user) and thinking
+on, sampled as the RL rollouts sampled (temperature 0.8, top_p 1, top_k 0 by default) with no
+completion cap. A state's first reply is asked for alone and the other k - 1 once it has come back,
+all from the same server, so the prompt (about ten times the tokens of a reply) is computed once
+and then served from the server's prefix cache. A request is given up after --timeout seconds (the
+harness client's hour) and asked once more with another seed; a reply that fails twice is recorded
+as an error and the state keeps its other replies.
 
-Resumable: a state with k lines in --out is skipped. States are taken in the order of --first
-(families listed there go first), then file order.
+Output: one line per (state, sample): `thinking` (the think block) and `answer` (the visible text
+after it, where the harness reads the move), `sha1` of both. A reply whose think block was not
+closed has finish "length" and no answer.
+
+Resumable: replies already in --out are not asked for again. States are taken in the order of
+--first (families listed there go first), then file order.
 
     python sample_states.py --states states.jsonl --out samples.jsonl --servers URL [URL ...] \\
-        --model dx38mtR [--k 8] [--temperature 0.8] [--workers 96] [--first photonics grid2op engibench]
+        --model dx38mtR [--k 8] [--temperature 0.8] [--workers 40] [--first photonics grid2op engibench]
 """
 import argparse
-import collections
 import hashlib
 import json
+import os
 import sys
 import threading
 import time
@@ -37,49 +42,78 @@ def split_reply(msg: dict, thinking: bool = True) -> tuple[str, str, bool]:
     return reasoning.replace("<think>", "").strip(), text.strip(), closed
 
 
-def records_of(sid: str, out: dict, k: int) -> list[dict]:
+def reply_sha1(thinking: str, answer: str) -> str:
+    return hashlib.sha1((thinking + "\x00" + answer).encode()).hexdigest()[:16]
+
+
+def record_of(sid: str, sample: int, out: dict) -> dict:
+    ch = (out.get("choices") or [{}])[0]
+    reasoning, text, closed = split_reply(ch.get("message") or {})
+    finish = ch.get("finish_reason")
+    ok = closed and finish != "length"
     usage = out.get("usage") or {}
-    recs = []
-    for ch in sorted(out.get("choices") or [], key=lambda c: c.get("index", 0)):
-        reasoning, text, closed = split_reply(ch.get("message") or {})
-        finish = ch.get("finish_reason")
-        ok = closed and finish != "length"
-        recs.append({"sid": sid, "sample": int(ch.get("index", len(recs))),
-                     "answer": (reasoning + "\n\n" + text) if ok else "",
-                     "finish": finish if closed else "length", "mode": "own_think", "prompt": "served",
-                     "tokens": usage.get("completion_tokens") if not recs else None,
-                     "prompt_tokens": usage.get("prompt_tokens") if not recs else None})
-    if len(recs) != k:
-        raise ValueError("%d choices for n=%d" % (len(recs), k))
-    return recs
+    return {"sid": sid, "sample": int(sample), "thinking": reasoning if ok else "", "answer": text if ok else "",
+            "finish": finish if closed else "length", "mode": "own_think", "prompt": "served",
+            "tokens": usage.get("completion_tokens"), "prompt_tokens": usage.get("prompt_tokens"),
+            "cached_tokens": (usage.get("prompt_tokens_details") or {}).get("cached_tokens"),
+            "sha1": reply_sha1(reasoning, text) if ok else None}
 
 
-def request_body(state: dict, a) -> dict:
-    seed = int(hashlib.sha1(("%s|%d" % (state["sid"], a.seed)).encode()).hexdigest()[:8], 16) % (2 ** 31)
+def seed_of(sid: str, sample: int, attempt: int, seed: int) -> int:
+    return int(hashlib.sha1(("%s|%d|%d|%d" % (sid, sample, attempt, seed)).encode()).hexdigest()[:8], 16) % (2 ** 31)
+
+
+def request_body(state: dict, sample: int, attempt: int, a) -> dict:
     return {"model": a.model,
             "messages": [{"role": "system", "content": state["system"]},
                          {"role": "user", "content": state["observation"] + state["instruction"]}],
             "temperature": a.temperature, "top_p": a.top_p, "top_k": a.top_k, "max_tokens": None,
-            "n": a.k, "seed": seed, "chat_template_kwargs": {"enable_thinking": True}}
+            "seed": seed_of(state["sid"], sample, attempt, a.seed), "chat_template_kwargs": {"enable_thinking": True}}
 
 
-def call(url: str, body: dict, timeout: float, attempts: int = 3) -> dict:
-    data = json.dumps(body).encode()
+def post(url: str, body: dict, timeout: float) -> dict:
+    req = urllib.request.Request(url.rstrip("/") + "/chat/completions", data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
+
+
+def draw(state: dict, sample: int, j: int, a, post_fn=post) -> dict:
+    """One reply: the record, or an error record after --attempts tries (another seed each time; a
+    try after the first goes to the next server, in case the first one is gone)."""
     err = None
-    for attempt in range(attempts):
-        req = urllib.request.Request(url.rstrip("/") + "/chat/completions", data=data,
-                                     headers={"Content-Type": "application/json"})
+    for attempt in range(a.attempts):
+        url = a.servers[(j + attempt) % len(a.servers)]
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                return json.load(r)
+            return record_of(state["sid"], sample, post_fn(url, request_body(state, sample, attempt, a), a.timeout))
         except Exception as e:                               # noqa: BLE001
             err = "%s: %s" % (type(e).__name__, str(e)[:300])
-            time.sleep(5 * (attempt + 1))
-    return {"error": err}
+            time.sleep(min(5.0, a.retry_wait) * (attempt + 1))
+    return {"sid": state["sid"], "sample": int(sample), "error": err}
 
 
-def done_sids(path: str, k: int) -> set:
-    n = collections.Counter()
+def draw_state(state: dict, missing: list[int], j: int, a, post_fn=post) -> list[dict]:
+    """The missing replies of one state: the first alone (it fills the prefix cache), then the rest
+    at once."""
+    out = [draw(state, missing[0], j, a, post_fn)]
+    rest = missing[1:]
+    if rest:
+        box = [None] * len(rest)
+
+        def run(i, k):
+            box[i] = draw(state, k, j, a, post_fn)
+        threads = [threading.Thread(target=run, args=(i, k)) for i, k in enumerate(rest)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        out.extend(box)
+    return out
+
+
+def done_replies(path: str) -> set:
+    """(sid, sample) of the replies already in the file (an error record does not count)."""
+    done = set()
     try:
         for line in open(path, encoding="utf-8"):
             try:
@@ -87,10 +121,23 @@ def done_sids(path: str, k: int) -> set:
             except ValueError:
                 continue                                      # the cut last line of a killed run
             if not o.get("error"):
-                n[o["sid"]] += 1
+                done.add((o["sid"], int(o["sample"])))
     except FileNotFoundError:
         pass
-    return {s for s, c in n.items() if c >= k}
+    return done
+
+
+def open_append(path: str):
+    """The file for appending; a last line cut by a killed run is closed off first, so the next
+    record does not continue it."""
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        with open(path, "rb") as f:
+            f.seek(-1, os.SEEK_END)
+            cut = f.read(1) != b"\n"
+        if cut:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write("\n")
+    return open(path, "a", encoding="utf-8")
 
 
 def main(argv=None) -> int:
@@ -104,53 +151,49 @@ def main(argv=None) -> int:
     ap.add_argument("--top-p", type=float, default=1.0)
     ap.add_argument("--top-k", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--workers", type=int, default=96, help="states in flight (each asks for k replies)")
+    ap.add_argument("--workers", type=int, default=40, help="states in flight (each has up to k - 1 requests at once)")
     ap.add_argument("--first", nargs="*", default=[], help="families sampled first")
-    ap.add_argument("--timeout", type=float, default=7200.0)
+    ap.add_argument("--timeout", type=float, default=3600.0)
+    ap.add_argument("--attempts", type=int, default=2)
+    ap.add_argument("--retry-wait", type=float, default=5.0)
     ap.add_argument("--limit", type=int, default=0)
     a = ap.parse_args(argv)
 
     states = [json.loads(line) for line in open(a.states, encoding="utf-8") if line.strip()]
     rank = {v: i for i, v in enumerate(a.first)}
     states.sort(key=lambda s: rank.get(s["variant"], len(rank)))     # stable: file order inside a family
-    done = done_sids(a.out, a.k)
-    todo = [s for s in states if s["sid"] not in done]
+    done = done_replies(a.out)
+    todo = []
+    for s in states:
+        missing = [k for k in range(a.k) if (s["sid"], k) not in done]
+        if missing:
+            todo.append((s, missing))
     if a.limit:
         todo = todo[:a.limit]
-    print("states %d, already sampled %d, to do %d; k %d, T %.2f, top_p %.2f, top_k %d, model %s, %d servers" % (
+    print("states %d, replies already there %d, states to do %d; k %d, T %.2f, top_p %.2f, top_k %d, model %s, %d servers" % (
         len(states), len(done), len(todo), a.k, a.temperature, a.top_p, a.top_k, a.model, len(a.servers)), flush=True)
-    lock = threading.Lock()
     t0 = time.time()
-    n_ok = n_err = n_tok = 0
-
-    def one(j, s):
-        out = call(a.servers[j % len(a.servers)], request_body(s, a), a.timeout)
-        if "error" in out and "choices" not in out:
-            return s, None, str(out["error"])
-        try:
-            return s, records_of(s["sid"], out, a.k), None
-        except Exception as e:                               # noqa: BLE001
-            return s, None, "%s: %s" % (type(e).__name__, str(e)[:200])
-
-    with open(a.out, "a", encoding="utf-8") as fo, ThreadPoolExecutor(a.workers) as ex:
-        futs = [ex.submit(one, j, s) for j, s in enumerate(todo)]
+    n_state = n_ok = n_err = n_tok = n_prompt = n_cached = 0
+    with open_append(a.out) as fo, ThreadPoolExecutor(a.workers) as ex:
+        futs = [ex.submit(draw_state, s, missing, j, a) for j, (s, missing) in enumerate(todo)]
         for fu in as_completed(futs):
-            s, recs, err = fu.result()
-            with lock:
-                if recs is None:
+            for r in fu.result():                             # written by this thread only
+                fo.write(json.dumps(r) + "\n")
+                if r.get("error"):
                     n_err += 1
-                    fo.write(json.dumps({"sid": s["sid"], "sample": -1, "error": err}) + "\n")
                 else:
                     n_ok += 1
-                    n_tok += recs[0].get("tokens") or 0
-                    for r in recs:
-                        fo.write(json.dumps(r) + "\n")
-                fo.flush()
-                if (n_ok + n_err) % 100 == 0:
-                    dt = time.time() - t0
-                    print("%d/%d states, %d errors, %.2fM completion tokens, %.0f s, %.0f tokens/s" % (
-                        n_ok + n_err, len(todo), n_err, n_tok / 1e6, dt, n_tok / max(dt, 1)), flush=True)
-    print("SAMPLE_STATES_DONE ok %d errors %d tokens %.2fM in %.0f s" % (n_ok, n_err, n_tok / 1e6, time.time() - t0), flush=True)
+                    n_tok += r.get("tokens") or 0
+                    n_prompt += r.get("prompt_tokens") or 0
+                    n_cached += r.get("cached_tokens") or 0
+            fo.flush()
+            n_state += 1
+            if n_state % 100 == 0:
+                dt = time.time() - t0
+                print("%d/%d states, %d replies, %d errors, %.2fM completion tokens (%.0f/s), prompt %.1fM of which cached %.1fM, %.0f s" % (
+                    n_state, len(todo), n_ok, n_err, n_tok / 1e6, n_tok / max(dt, 1), n_prompt / 1e6, n_cached / 1e6, dt), flush=True)
+    print("SAMPLE_STATES_DONE states %d replies %d errors %d completion tokens %.2fM prompt tokens %.1fM cached %.1fM in %.0f s" % (
+        n_state, n_ok, n_err, n_tok / 1e6, n_prompt / 1e6, n_cached / 1e6, time.time() - t0), flush=True)
     return 3 if n_err else 0
 
 

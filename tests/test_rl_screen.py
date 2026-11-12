@@ -64,28 +64,71 @@ def test_split_reply_reads_both_server_forms():
     assert SS.split_reply({"content": "still thinking"})[2] is False               # the think block never closed
 
 
-def test_records_of_one_request():
-    out = {"usage": {"completion_tokens": 30, "prompt_tokens": 100},
-           "choices": [{"index": 1, "finish_reason": "stop", "message": {"content": "<action>B</action>", "reasoning_content": "r1"}},
-                       {"index": 0, "finish_reason": "length", "message": {"content": "", "reasoning_content": "cut"}},
-                       {"index": 2, "finish_reason": "stop", "message": {"content": "no closing tag"}}]}
-    recs = SS.records_of("s", out, 3)
-    assert [r["sample"] for r in recs] == [0, 1, 2]
-    assert recs[0]["answer"] == "" and recs[0]["finish"] == "length" and recs[0]["tokens"] == 30
-    assert recs[1]["answer"] == "r1\n\n<action>B</action>" and recs[1]["tokens"] is None
-    assert recs[2]["answer"] == "" and recs[2]["finish"] == "length"               # unclosed think block
-    assert BR.reasoning_of(recs[1]["answer"]) == "r1"
-    with pytest.raises(ValueError):
-        SS.records_of("s", out, 8)
+def _reply(content, reasoning=None, finish="stop", cached=None):
+    msg = {"content": content}
+    if reasoning is not None:
+        msg["reasoning_content"] = reasoning
+    usage = {"completion_tokens": 30, "prompt_tokens": 100}
+    if cached is not None:
+        usage["prompt_tokens_details"] = {"cached_tokens": cached}
+    return {"usage": usage, "choices": [{"index": 0, "finish_reason": finish, "message": msg}]}
+
+
+def test_record_of_one_reply():
+    r = SS.record_of("s", 3, _reply("\n\n<action>B</action>", " r1 <action>draft</action>\n", cached=96))
+    assert (r["sid"], r["sample"], r["thinking"], r["answer"]) == ("s", 3, "r1 <action>draft</action>", "<action>B</action>")
+    assert r["tokens"] == 30 and r["cached_tokens"] == 96 and r["sha1"] == SS.reply_sha1(r["thinking"], r["answer"])
+    cut = SS.record_of("s", 0, _reply("", "cut", finish="length"))
+    assert cut["answer"] == "" and cut["thinking"] == "" and cut["finish"] == "length" and cut["sha1"] is None
+    assert SS.record_of("s", 0, _reply("no closing tag"))["finish"] == "length"     # the think block never closed
+
+
+class _Args:
+    servers, model, temperature, top_p, top_k, seed, timeout, attempts, retry_wait, k = ["u0", "u1"], "m", 0.8, 1.0, 0, 0, 1.0, 2, 0.0, 4
+
+
+def test_a_state_asks_its_first_reply_alone_and_retries_with_another_seed():
+    state = {"sid": "s", "system": "S", "observation": "U", "instruction": ""}
+    calls, lock_order = [], []
+
+    def post(url, body, timeout):
+        calls.append((url, body["seed"]))
+        if len(calls) == 1:
+            lock_order.append("first")
+        if body["seed"] == SS.seed_of("s", 2, 0, 0):                # sample 2 fails on its first try
+            raise OSError("boom")
+        return _reply("<action>A</action>", "why")
+
+    recs = SS.draw_state(state, [0, 1, 2, 3], 0, _Args, post)
+    assert [r["sample"] for r in recs] == [0, 1, 2, 3] and not any(r.get("error") for r in recs)
+    assert calls[0] == ("u0", SS.seed_of("s", 0, 0, 0)) and lock_order == ["first"]
+    assert ("u1", SS.seed_of("s", 2, 1, 0)) in calls                # the retry: next server, another seed
+    assert len({s for _, s in calls}) == 5                          # every request has its own seed
+
+    def dead(url, body, timeout):
+        raise OSError("gone")
+    assert SS.draw(state, 1, 0, _Args, dead) == {"sid": "s", "sample": 1, "error": "OSError: gone"}
+
+
+def test_resume_reads_replies_and_closes_a_cut_line(tmp_path):
+    p = tmp_path / "samples.jsonl"
+    p.write_text(json.dumps({"sid": "a", "sample": 0, "answer": "x"}) + "\n" + json.dumps({"sid": "a", "sample": 1, "error": "e"}) + "\n"
+                 + '{"sid": "b", "sample": 0, "ans')            # a killed run's last line
+    assert SS.done_replies(str(p)) == {("a", 0)}
+    with SS.open_append(str(p)) as fo:
+        fo.write(json.dumps({"sid": "b", "sample": 0, "answer": "y"}) + "\n")
+    assert SS.done_replies(str(p)) == {("a", 0), ("b", 0)}
+    assert SS.done_replies(str(tmp_path / "none.jsonl")) == set()
 
 
 def _scored(sample, pct, gain=True, ok=True, noop=False, reason=None):
     return {"sid": "s", "sample": sample, "ok": ok, "pct": pct if ok else None, "gain": gain, "noop": noop,
-            "reason": reason, "text": "M(%d)" % sample, "action": {"verb": "M"}, "phi": float(pct or 0)}
+            "reason": reason, "text": "M(%d)" % sample, "action": {"verb": "M"}, "phi": float(pct or 0),
+            "reply_sha1": "h%d" % sample}
 
 
 def test_pick_is_the_best_eligible_reply():
-    ans = {("s", k): "why %d\n\n<action>M(%d)</action>" % (k, k) for k in range(5)}
+    ans = {("s", k): ("why %d" % k, "h%d" % k) for k in range(5)}
     sc = [_scored(0, 95, gain=False), _scored(1, 80), _scored(2, 80), _scored(3, 0, ok=False, reason="illegal:x"), _scored(4, 99, noop=True)]
     x, reason, why = BR.pick(sc, ans, 0.0, 0, True)
     assert x["sample"] == 1 and reason == "why 1" and why is None                  # ties: lowest sample index
@@ -95,8 +138,13 @@ def test_pick_is_the_best_eligible_reply():
     assert BR.pick([_scored(0, 0, ok=False, reason="illegal:x")], ans, 0.0, 0, True)[2] == "no_eligible_reply (mostly not_applied:illegal)"
     assert BR.pick([], ans, 0.0, 0, True)[2] == "no_eligible_reply (mostly no_reply)"
     leak = dict(ans)
-    leak[("s", 1)] = "a <think> tag\n\n<action>M(1)</action>"
+    leak[("s", 1)] = ("a <think> tag", "h1")
     assert BR.pick(sc, leak, 0.0, 0, True)[0]["sample"] == 2
+    # the state was sampled again after it was scored: the reply now in the file is not the scored one
+    again = dict(ans)
+    again[("s", 1)] = ("another rationale", "other")
+    assert BR.pick(sc, again, 0.0, 0, True)[0]["sample"] == 2
+    assert BR.pick([_scored(1, 80)], again, 0.0, 0, True)[2] == "no_eligible_reply (mostly reply_changed_after_scoring)"
 
 
 def test_make_row_is_a_dx38_row():
@@ -127,3 +175,37 @@ def test_mix_keeps_problems_whole_and_counts_everything(tmp_path):
     assert man["train rows"] == len(train) and man["dev rows"] == len(dev)
     first = open(tmp_path / "train.jsonl").read()
     assert MX.main(args) == 0 and open(tmp_path / "train.jsonl").read() == first   # deterministic
+
+
+def test_mix_drops_repeats_and_replay_rows_of_dev_problems(tmp_path):
+    new = [{"domain": "f", "instance": "p%02d" % (i // 2), "messages": [], "tier": "new", "sid": "s%d" % i} for i in range(40)]
+    rep = [{"domain": "f", "instance": "p%02d" % i, "messages": [], "tier": "old"} for i in range(20)]
+    for name, rows in (("a.jsonl", new), ("b.jsonl", new[:10]), ("rep.jsonl", rep)):
+        (tmp_path / name).write_text("".join(json.dumps(r) + "\n" for r in rows))
+    assert MX.main(["--new", str(tmp_path / "a.jsonl"), str(tmp_path / "b.jsonl"), "--replay", str(tmp_path / "rep.jsonl"),
+                    "--out-train", str(tmp_path / "train.jsonl"), "--out-dev", str(tmp_path / "dev.jsonl"),
+                    "--replay-ratio", "10", "--dev-frac", "0.25", "--dev-max", "0"]) == 0
+    train = [json.loads(line) for line in open(tmp_path / "train.jsonl")]
+    dev = [json.loads(line) for line in open(tmp_path / "dev.jsonl")]
+    assert len([r for r in train if r["tier"] == "new"]) + len(dev) == 40           # the 10 repeated rows count once
+    dev_p = {r["instance"] for r in dev}
+    assert len(dev_p) == 5 and not dev_p & {r["instance"] for r in train}           # replay rows of dev problems too
+    assert sum(r["tier"] == "old" for r in train) == 15
+    man = json.load(open(str(tmp_path / "train.jsonl") + ".manifest.json"))
+    assert man["new rows given twice (kept once)"] == 10 and man["replay file rows on dev problems (never drawn)"] == 5
+
+
+def _square(x):
+    if x == 3:
+        os._exit(1)                                                     # a simulator that takes its process down
+    if x == 5:
+        raise ValueError("bad job")
+    return x * x
+
+
+def test_a_dying_worker_fails_its_own_job_only():
+    CS = load("crashsafe")
+    got = {i: (res, err) for i, res, err in CS.run_jobs(_square, list(range(8)), 3)}
+    assert sorted(got) == list(range(8))
+    assert got[3] == (None, CS.DIED) and got[5][0] is None and "bad job" in got[5][1]
+    assert all(got[i] == (i * i, None) for i in (0, 1, 2, 4, 6, 7))

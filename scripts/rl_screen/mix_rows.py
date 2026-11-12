@@ -60,9 +60,20 @@ def main(argv=None) -> int:
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args(argv)
 
-    new = [r for p in a.new for r in read(p)]
+    new, seen, n_dup = [], set(), 0
+    for p in a.new:
+        for r in read(p):
+            key = r.get("sid") or json.dumps(r, sort_keys=True)
+            if key in seen:                  # the same state in two files: once
+                n_dup += 1
+                continue
+            seen.add(key)
+            new.append(r)
     train_new, dev = split_dev(new, a.dev_frac, a.dev_max, a.seed)
-    replay_all = read(a.replay)
+    # a problem with rows in dev gives the training file nothing, replay rows included
+    dev_problems = {(r["domain"], r["instance"]) for r in new} - {(r["domain"], r["instance"]) for r in train_new}
+    replay_file = read(a.replay)
+    replay_all = [r for r in replay_file if (r["domain"], r["instance"]) not in dev_problems]
     n_rep = min(len(replay_all), int(round(len(train_new) * a.replay_ratio)))
     idx = list(range(len(replay_all)))
     random.Random("%d/replay" % a.seed).shuffle(idx)
@@ -78,7 +89,9 @@ def main(argv=None) -> int:
     count = lambda rows: collections.Counter(r["domain"] for r in rows)          # noqa: E731
     man = {"new rows": len(new), "new rows in train": len(train_new), "dev rows": len(dev),
            "new rows in neither (dev problems beyond --dev-max)": len(new) - len(train_new) - len(dev),
-           "replay rows": len(replay), "replay file rows": len(replay_all), "train rows": len(train),
+           "new rows given twice (kept once)": n_dup,
+           "replay rows": len(replay), "replay file rows": len(replay_file),
+           "replay file rows on dev problems (never drawn)": len(replay_file) - len(replay_all), "train rows": len(train),
            "replay_ratio": a.replay_ratio, "dev_frac": a.dev_frac, "seed": a.seed,
            "per family": {f: {"new in train": count(train_new)[f], "dev": count(dev)[f], "replay": count(replay)[f],
                               "train": count(train)[f]} for f in fams}}
@@ -88,7 +101,8 @@ def main(argv=None) -> int:
         p = man["per family"][f]
         print("%-12s %14d %8d %8d %8d" % (f, p["new in train"], p["dev"], p["replay"], p["train"]))
     print("%-12s %14d %8d %8d %8d" % ("all", len(train_new), len(dev), len(replay), len(train)))
-    print("new rows held out of both files: %d" % man["new rows in neither (dev problems beyond --dev-max)"])
+    print("new rows held out of both files: %d; given twice: %d; replay rows on dev problems left out: %d" % (
+        man["new rows in neither (dev problems beyond --dev-max)"], n_dup, len(replay_file) - len(replay_all)))
     print("MIX_ROWS_DONE %s" % a.out_train)
     return 0
 
