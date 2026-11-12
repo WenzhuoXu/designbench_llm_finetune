@@ -14,6 +14,9 @@
 # think block (dataxp_grpo_p2_datav4_dx38mtR.yaml); default thinking off, as P2. Knobs as orchard_dataxp_grpo.sh: BASE, REPO, VLLM_VENV, SIM_PY, MODEL_PATH, CACHE_DIR,
 # HF_HOME, MAX_MODEL_LEN (the model's own max_position_embeddings), GPU_UTIL (0.95), MAX_SEQS (64),
 # MAX_LORA_RANK (64), WORKERS (32), SERVER_WAIT_S (3600), HARNESS (/home/wxu2/rl/harness).
+# HARNESS_SCRIPT: the harness script under $HARNESS/scripts (default dataxp_policy_eval_v3.py);
+# HARNESS_ARGS: extra harness flags. The refusal-note arm of an A/B is
+#   HARNESS_SCRIPT=dataxp_policy_eval_v3n.py HARNESS_ARGS=--reject-note
 set -uo pipefail
 B="${BASE:-/project/community/wxu2}"
 REPO="${REPO:-$HOME/rl/repo}"
@@ -25,8 +28,9 @@ VENV="${VLLM_VENV:-$B/rl/envs/vllm}"
 SIM_PY="${SIM_PY:-$B/rl/envs/sim/bin/python}"
 MODEL_PATH="${MODEL_PATH:-$B/rl/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0}"
 H="${HARNESS:-$HOME/rl/harness}"
+HS="${HARNESS_SCRIPT:-dataxp_policy_eval_v3.py}"
 C="${CACHE_DIR:-$B/rl/cache}"
-for f in "$VENV/bin/vllm" "$SIM_PY" "$MODEL_PATH/config.json" "$H/scripts/dataxp_policy_eval_v3.py" \
+for f in "$VENV/bin/vllm" "$SIM_PY" "$MODEL_PATH/config.json" "$H/scripts/$HS" \
          "$H/configs/task_instruction_V2.txt" $PROBLEMS ${ADAPTER:+"$ADAPTER/adapter_config.json"}; do
   [ -e "$f" ] || { echo "ABORT: missing $f"; exit 2; }
 done
@@ -44,7 +48,7 @@ export DATAXP_MOLOPT_ORACLE_DIR="${DATAXP_MOLOPT_ORACLE_DIR:-$H/molopt_oracle}"
 mkdir -p "$OUT/logs" "$TMPDIR" "$C/xdg"
 cd "$REPO"
 echo "=== $(date '+%F %T %Z') host=$(hostname) job=${SLURM_JOB_ID:-none} restarts=${SLURM_RESTART_COUNT:-0}"
-echo "=== repo=$REPO ($(cat "$REPO/GIT_COMMIT" 2>/dev/null || git -C "$REPO" rev-parse --short HEAD 2>/dev/null)) label=$LABEL adapter=${ADAPTER:-none} think=${THINK:-0} out=$OUT"
+echo "=== repo=$REPO ($(cat "$REPO/GIT_COMMIT" 2>/dev/null || git -C "$REPO" rev-parse --short HEAD 2>/dev/null)) label=$LABEL adapter=${ADAPTER:-none} think=${THINK:-0} out=$OUT harness=$HS ${HARNESS_ARGS:-}"
 
 if [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then IFS=, read -r -a DEVS <<< "$CUDA_VISIBLE_DEVICES"
 else NG=$(nvidia-smi -L | wc -l); DEVS=(); for i in $(seq 0 $((NG-1))); do DEVS+=("$i"); done; fi
@@ -93,10 +97,10 @@ done
 echo "=== $NSERVERS vLLM server(s) ready after $(( $(date +%s) - T0 )) s; evaluating $SERVED"
 
 PYTHONPATH="$REPO" "$SIM_PY" -m llm_finetune.rl_dataxp.rollout eval \
-  --script "$H/scripts/dataxp_policy_eval_v3.py" --problems $PROBLEMS ${VARIANTS:+--variants $VARIANTS} \
+  --script "$H/scripts/$HS" --problems $PROBLEMS ${VARIANTS:+--variants $VARIANTS} \
   --servers "${URLS[@]}" --model "$SERVED" --label "$LABEL" --runs "${RUNS:-2}" --turns "${TURNS:-20}" \
   --workers "${WORKERS:-32}" --out "$OUT/$LABEL.episodes.jsonl" -- \
-  --code "$H/dataxp_code_v3" "${NOTHINK[@]}" --native-prompt served --instruction-file "$H/configs/task_instruction_V2.txt" \
+  --code "$H/dataxp_code_v3" "${NOTHINK[@]}" --native-prompt served --instruction-file "$H/configs/task_instruction_V2.txt" ${HARNESS_ARGS:-} \
   2>&1 | tee -a "$OUT/logs/eval.log"
 rc=${PIPESTATUS[0]}
 ELAPSED=$(( $(date +%s) - T0 ))
