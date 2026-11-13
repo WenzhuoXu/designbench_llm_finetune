@@ -5,8 +5,11 @@ content = <action>the applied move, formatted by the domain</action>.
 
 The screen, per state, over the replies that parsed, applied, are not a no-op and carry a rationale
 without a think tag:
-    eligible   the reply raises the potential (--no-require-gain drops this), and its rationale has
-               at most --max-words words (0 = no cap, the default; the dx38 rows were cut at 320)
+    eligible   the reply raises the potential (--no-require-gain drops this), its rationale has
+               at most --max-words words (0 = no cap, the default; the dx38 rows were cut at 320),
+               and, with --require-consistent, the last move its rationale writes out is its own
+               move (a rationale that settles on FILL_RECT(1, 2, 3, 4) and then emits another move
+               is not a target; a rationale in prose is not judged)
     pick       the eligible reply with the highest percentile among the state's legal moves
                (ties: lowest sample index), as build_tiers picks
     keep       the pick is at or above --min-pct (90, as the dx38 rows)
@@ -14,11 +17,13 @@ The report prints, per family, what each condition costs, and how many rows othe
 screen would keep, so no condition is applied unseen.
 
     python build_rows.py --states states.jsonl --samples samples.jsonl --scored scored.jsonl \\
-        --out rows.jsonl [--min-pct 90] [--max-words 0] [--no-require-gain] [--tier scr1] [--teacher NAME]
+        --out rows.jsonl [--min-pct 90] [--max-words 0] [--no-require-gain] [--require-consistent]
+        [--tier scr1] [--teacher NAME]
 """
 import argparse
 import collections
 import json
+import re
 import sys
 
 
@@ -38,9 +43,34 @@ def usable(x: dict, reason: str, sha1=None) -> str | None:
     return None
 
 
-def pick(scored: list, replies: dict, min_pct: float, max_words: int, require_gain: bool):
+MOVE = re.compile(r"\b([A-Z][A-Z_]{2,})\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
+
+
+def norm_move(text: str) -> str:
+    return re.sub(r"[\s\"']+", "", text or "").upper()
+
+
+def ends_on_another_move(reason: str, x: dict, shown: str = "") -> bool:
+    """True when the last move the rationale writes out (VERB(arguments)) is not the reply's move.
+    Not counted as written moves: a move the prompt itself lists (`shown` = the prompt, through
+    norm_move: the history, a signature), and an abbreviated one (VERB(1, ...)). A rationale in
+    prose, with no move written out, is not judged (False)."""
+    own = {norm_move(x.get("text")), norm_move(x.get("pick_text"))} - {""}
+    last = None
+    for verb, args in MOVE.findall(reason):
+        m = norm_move("%s(%s)" % (verb, args))
+        if "..." in m or "…" in m:
+            continue
+        if m in own or m not in shown:
+            last = m
+    return last is not None and last not in own
+
+
+def pick(scored: list, replies: dict, min_pct: float, max_words: int, require_gain: bool,
+         consistent: bool = False, shown: str = ""):
     """(reply record, rationale, None) or (None, None, why the state gives no row). replies:
-    (sid, sample) -> (rationale = the think block, sha1 of the reply)."""
+    (sid, sample) -> (rationale = the think block, sha1 of the reply). consistent: a reply whose
+    rationale ends on another move than its own (ends_on_another_move) is not eligible."""
     why = collections.Counter()
     best = None
     for x in sorted(scored, key=lambda r: int(r["sample"])):
@@ -51,6 +81,8 @@ def pick(scored: list, replies: dict, min_pct: float, max_words: int, require_ga
             w = "no_gain"
         if w is None and max_words and len(reason.split()) > max_words:
             w = "too_long"
+        if w is None and consistent and ends_on_another_move(reason, x, shown):
+            w = "rationale_ends_on_another_move"
         if w is not None:
             why[w] += 1
             continue
@@ -91,6 +123,8 @@ def main(argv=None) -> int:
     ap.add_argument("--min-pct", type=float, default=90.0)
     ap.add_argument("--max-words", type=int, default=0)
     ap.add_argument("--no-require-gain", action="store_true")
+    ap.add_argument("--require-consistent", action="store_true",
+                    help="a reply whose rationale ends on another move than its own is not eligible")
     ap.add_argument("--tier", default="scr1")
     ap.add_argument("--teacher", default="dx38mtR-own-think-phi-screened")
     a = ap.parse_args(argv)
@@ -119,11 +153,13 @@ def main(argv=None) -> int:
     fams = sorted({s["variant"] for s in states})
     per = {f: collections.Counter() for f in fams}
     alt = {f: collections.Counter() for f in fams}
-    settings = (("pct>=%g, gain, no word cap" % a.min_pct, a.min_pct, 0, True),
-                ("pct>=%g, gain, <=320 words" % a.min_pct, a.min_pct, 320, True),
-                ("pct>=%g only" % a.min_pct, a.min_pct, 0, False),
-                ("gain only (best of k)", 0.0, 0, True),
-                ("pct>=50, gain", 50.0, 0, True))
+    settings = (("pct>=%g, gain, no word cap" % a.min_pct, a.min_pct, 0, True, False),
+                ("pct>=%g, gain, <=320 words" % a.min_pct, a.min_pct, 320, True, False),
+                ("pct>=%g, gain, <=1000 words" % a.min_pct, a.min_pct, 1000, True, False),
+                ("pct>=%g, gain, rationale ends on its own move" % a.min_pct, a.min_pct, 0, True, True),
+                ("pct>=%g only" % a.min_pct, a.min_pct, 0, False, False),
+                ("gain only (best of k)", 0.0, 0, True, False),
+                ("pct>=50, gain", 50.0, 0, True, False))
     words, pcts = collections.defaultdict(list), collections.defaultdict(list)
     n_rows = 0
     with open(a.out, "w", encoding="utf-8") as fo:
@@ -140,13 +176,15 @@ def main(argv=None) -> int:
             c["replies applied with gain"] += sum(1 for x in sc if x.get("ok") and x.get("gain"))
             c["states with an applied reply"] += any(x.get("ok") for x in sc)
             c["states with a gaining reply"] += any(x.get("ok") and x.get("gain") for x in sc)
-            for name, mp, mw, rg in settings:
-                alt[s["variant"]][name] += pick(sc, answers, mp, mw, rg)[0] is not None
-            x, reason, why = pick(sc, answers, a.min_pct, a.max_words, not a.no_require_gain)
+            shown = norm_move(s["system"] + s["observation"] + s["instruction"])
+            for name, mp, mw, rg, cons in settings:
+                alt[s["variant"]][name] += pick(sc, answers, mp, mw, rg, cons, shown)[0] is not None
+            x, reason, why = pick(sc, answers, a.min_pct, a.max_words, not a.no_require_gain, a.require_consistent, shown)
             if x is None:
                 c["dropped: " + why] += 1
                 continue
             row = make_row(s, x, reason, a.tier, a.teacher)
+            c["rows: the rationale ends on another move"] += ends_on_another_move(reason, x, shown)
             fo.write(json.dumps(row) + "\n")
             n_rows += 1
             c["rows"] += 1
@@ -161,7 +199,8 @@ def main(argv=None) -> int:
         for k in per[f]:
             if k not in keys:
                 keys.append(k)
-    print("screen: min pct %g, max words %s, gain required %s" % (a.min_pct, a.max_words or "none", not a.no_require_gain))
+    print("screen: min pct %g, max words %s, gain required %s, rationale must end on its own move %s" % (
+        a.min_pct, a.max_words or "none", not a.no_require_gain, a.require_consistent))
     print("%-52s %s %9s" % ("", " ".join("%9s" % f[:9] for f in fams), "all"))
     for k in keys:
         print("%-52s %s %9d" % (k, " ".join("%9d" % per[f][k] for f in fams), sum(per[f][k] for f in fams)))

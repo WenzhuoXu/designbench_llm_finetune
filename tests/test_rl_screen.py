@@ -147,6 +147,28 @@ def test_pick_is_the_best_eligible_reply():
     assert BR.pick([_scored(1, 80)], again, 0.0, 0, True)[2] == "no_eligible_reply (mostly reply_changed_after_scoring)"
 
 
+def test_a_rationale_that_ends_on_another_move():
+    x = {"text": "FILL_RECT(1, 2, 3, 4)", "pick_text": "FILL_RECT(1,2,3,4)"}
+    end = BR.ends_on_another_move
+    assert not end("Thicken the left strut by one cell.", x)                               # prose: not judged
+    assert not end("ERODE(0, 1) hurt. So FILL_RECT(1, 2, 3, 4) it is.", x)
+    assert not end('I will fill_rect it: FILL_RECT( 1,2 ,3, 4 )', x)                       # spacing does not matter
+    assert end("FILL_RECT(1, 2, 3, 4) is safe, but ERODE(0, 1) gains more.", x)
+    assert end("Best: FILL_RECT(1, 2, 3, 9).", x)                                          # same verb, other arguments
+    shown = BR.norm_move("history: ERODE(0, 1)  signature: FILL_RECT(x0, y0, x1, y1)")
+    assert not end("FILL_RECT(1, 2, 3, 4), undoing the earlier ERODE(0, 1).", x, shown)    # a move the prompt lists
+    assert not end("FILL_RECT(1, 2, 3, 4), i.e. FILL_RECT(x0, y0, x1, y1).", x, shown)
+    assert not end("FILL_RECT(1, 2, 3, 4) rather than SPLIT_SUB(1, ...).", x)              # abbreviated
+    clamped = {"text": "SCALE(2, 0.5)", "pick_text": "SCALE(2, 0.1)"}                      # the move as written counts too
+    assert not end("So SCALE(2, 0.1).", clamped) and not end("So SCALE(2, 0.5).", clamped)
+    # in pick: the reply is passed over, and the next best one is taken
+    ans = {("s", 1): ("So MOVE(7).", "h1"), ("s", 2): ("So MOVE(2).", "h2")}
+    sc = [dict(_scored(1, 90), text="MOVE(1)"), dict(_scored(2, 80), text="MOVE(2)")]
+    assert BR.pick(sc, ans, 0.0, 0, True)[0]["sample"] == 1
+    assert BR.pick(sc, ans, 0.0, 0, True, True)[0]["sample"] == 2
+    assert BR.pick(sc[:1], ans, 0.0, 0, True, True)[2] == "no_eligible_reply (mostly rationale_ends_on_another_move)"
+
+
 def test_make_row_is_a_dx38_row():
     state = {"variant": "fam", "problem_id": "p", "turn": 2, "n_prior_changes": 2, "system": "S", "observation": "U",
              "instruction": "", "sid": "fam|p|2-ab", "phi_before": -3.0, "source": "k"}
