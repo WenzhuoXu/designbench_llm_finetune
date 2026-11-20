@@ -22,6 +22,12 @@ Resumable: replies already in --out are not asked for again. States are taken in
 --extra-instruction-file: a collection-only instruction put after the served prompt (a
 forecast-checked round asks for FORECAST lines this way, see forecasts.py). The rows are built from
 the state's served prompt, so the instruction is never part of a training prompt.
+
+--cue FORECAST: (cued_reply). The tuned policy compares candidates when asked but rarely writes the
+lines in the form the check can read (4 to 11% of replies, whatever the wording). With the cue, its
+rationale is sampled as usual, then the label is put on a new line and the policy continues from
+there; a second and third label follow while it has written fewer than --cue-min-lines lines. The
+label is the only text in a reply that the policy did not sample.
 """
 import argparse
 import hashlib
@@ -32,6 +38,9 @@ import threading
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import forecasts  # noqa: E402
 
 
 def split_reply(msg: dict, thinking: bool = True) -> tuple[str, str, bool]:
@@ -79,20 +88,82 @@ def request_body(state: dict, sample: int, attempt: int, a) -> dict:
             "seed": seed_of(state["sid"], sample, attempt, a.seed), "chat_template_kwargs": {"enable_thinking": True}}
 
 
-def post(url: str, body: dict, timeout: float) -> dict:
-    req = urllib.request.Request(url.rstrip("/") + "/chat/completions", data=json.dumps(body).encode(),
+def post_to(url: str, path: str, body: dict, timeout: float) -> dict:
+    req = urllib.request.Request(url.rstrip("/") + path, data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
 
 
-def draw(state: dict, sample: int, j: int, a, post_fn=post) -> dict:
+def post(url: str, body: dict, timeout: float) -> dict:
+    return post_to(url, "/chat/completions", body, timeout)
+
+
+THINK_END = "</think>"
+
+
+def cued_reply(state: dict, sample: int, attempt: int, a, url: str, post_to_fn=post_to) -> dict:
+    """One reply sampled with the cue (--cue): the policy writes its rationale as usual and is
+    stopped where it would close the think block; while the rationale has fewer than
+    --cue-min-lines forecast lines, the same generation is continued from it plus the cue
+    (a.cues: two newlines and the cue the first time, one newline and the cue after), at most
+    --cue-max times; then the think block is closed and the policy gives its action. Everything
+    but the cue itself is the policy's own sample at the same temperature. The prompt is the chat
+    request's, rendered by the server, so the tokens are the ones a chat request would have had."""
+    seed = seed_of(state["sid"], sample, attempt, a.seed)
+    body = request_body(state, sample, attempt, a)
+    gen = post_to_fn(url, "/chat/completions/render", {"model": a.model, "messages": body["messages"],
+                                                       "chat_template_kwargs": body["chat_template_kwargs"]}, a.timeout)["token_ids"]
+    samp = {"model": a.model, "temperature": a.temperature, "top_p": a.top_p, "top_k": a.top_k, "add_special_tokens": False,
+            "return_token_ids": True, "skip_special_tokens": False}
+    rec = {"sid": state["sid"], "sample": int(sample), "thinking": "", "answer": "", "finish": "length", "mode": "own_think_cued",
+           "prompt": getattr(a, "prompt_tag", None) or "served", "tokens": 0, "prompt_tokens": len(gen), "cached_tokens": None,
+           "sha1": None, "cues": 0}
+    if getattr(a, "prompt_sha1", None):
+        rec["prompt_sha1"] = a.prompt_sha1
+    think = ""
+    for step in range(a.cue_max + 1):                        # the rationale, then the cued continuations
+        out = post_to_fn(url, "/completions", dict(samp, prompt=gen, seed=(seed + step) % (2 ** 31), stop_token_ids=[a.end_id],
+                                                   max_tokens=a.ctx - len(gen) - 8), a.timeout)
+        ch = (out.get("choices") or [{}])[0]
+        usage = out.get("usage") or {}
+        rec["tokens"] += usage.get("completion_tokens") or 0
+        if step == 0:
+            rec["cached_tokens"] = (usage.get("prompt_tokens_details") or {}).get("cached_tokens")
+        if ch.get("finish_reason") == "length":
+            return rec
+        if ch.get("token_ids") is None:
+            raise RuntimeError("the server returned no token ids for a completion")
+        gen = gen + [t for t in ch["token_ids"] if t != a.end_id]
+        think += (ch.get("text") or "").replace(THINK_END, "")
+        lines, unread = forecasts.read(think)
+        if len(lines) + unread >= a.cue_min_lines or step == a.cue_max:
+            break
+        text, ids = a.cues[0] if rec["cues"] == 0 else a.cues[1]
+        think += text
+        gen = gen + ids
+        rec["cues"] += 1
+    out = post_to_fn(url, "/completions", dict(samp, prompt=gen + [a.end_id], seed=(seed + 97) % (2 ** 31),
+                                               max_tokens=a.ctx - len(gen) - 9), a.timeout)
+    ch = (out.get("choices") or [{}])[0]
+    rec["tokens"] += (out.get("usage") or {}).get("completion_tokens") or 0
+    if ch.get("finish_reason") == "length":
+        return rec
+    answer = (ch.get("text") or "").replace("<|im_end|>", "").replace("<|endoftext|>", "").strip()
+    thinking = think.strip()
+    rec.update(thinking=thinking, answer=answer, finish=ch.get("finish_reason"), sha1=reply_sha1(thinking, answer))
+    return rec
+
+
+def draw(state: dict, sample: int, j: int, a, post_fn=post, post_to_fn=post_to) -> dict:
     """One reply: the record, or an error record after --attempts tries (another seed each time; a
     try after the first goes to the next server, in case the first one is gone)."""
     err = None
     for attempt in range(a.attempts):
         url = a.servers[(j + attempt) % len(a.servers)]
         try:
+            if getattr(a, "cue", None):
+                return cued_reply(state, sample, attempt, a, url, post_to_fn)
             return record_of(state["sid"], sample, post_fn(url, request_body(state, sample, attempt, a), a.timeout),
                              getattr(a, "prompt_tag", None) or "served", getattr(a, "prompt_sha1", None))
         except Exception as e:                               # noqa: BLE001
@@ -101,16 +172,16 @@ def draw(state: dict, sample: int, j: int, a, post_fn=post) -> dict:
     return {"sid": state["sid"], "sample": int(sample), "error": err}
 
 
-def draw_state(state: dict, missing: list[int], j: int, a, post_fn=post) -> list[dict]:
+def draw_state(state: dict, missing: list[int], j: int, a, post_fn=post, post_to_fn=post_to) -> list[dict]:
     """The missing replies of one state: the first alone (it fills the prefix cache), then the rest
     at once."""
-    out = [draw(state, missing[0], j, a, post_fn)]
+    out = [draw(state, missing[0], j, a, post_fn, post_to_fn)]
     rest = missing[1:]
     if rest:
         box = [None] * len(rest)
 
         def run(i, k):
-            box[i] = draw(state, k, j, a, post_fn)
+            box[i] = draw(state, k, j, a, post_fn, post_to_fn)
         threads = [threading.Thread(target=run, args=(i, k)) for i, k in enumerate(rest)]
         for t in threads:
             t.start()
@@ -185,6 +256,11 @@ def main(argv=None) -> int:
     ap.add_argument("--extra-instruction-file", default=None,
                     help="text put after the served prompt of every request (collection only: the rows keep the served prompt)")
     ap.add_argument("--prompt-tag", default=None, help="recorded as `prompt` in every reply (default: served, or served+extra)")
+    ap.add_argument("--cue", default=None,
+                    help="cued sampling (cued_reply): this text, e.g. FORECAST:, is put on a new line after the policy's own "
+                         "rationale while the rationale has fewer than --cue-min-lines forecast lines")
+    ap.add_argument("--cue-min-lines", type=int, default=2)
+    ap.add_argument("--cue-max", type=int, default=3, help="cues per reply at most")
     a = ap.parse_args(argv)
     a.extra, a.prompt_sha1 = "", None
     if a.extra_instruction_file:
@@ -197,6 +273,26 @@ def main(argv=None) -> int:
         a.prompt_sha1 = hashlib.sha1(a.extra.encode()).hexdigest()[:12]
         print("extra instruction (%d characters, sha1 %s), replies tagged %s" % (
             len(a.extra), hashlib.sha1(a.extra.encode()).hexdigest()[:12], a.prompt_tag), flush=True)
+
+    if a.cue:
+        a.prompt_tag = (a.prompt_tag or "served") + "+cue"
+        a.prompt_sha1 = hashlib.sha1(("%s\x00cue:%s:%d:%d" % (a.extra, a.cue, a.cue_min_lines, a.cue_max)).encode()).hexdigest()[:12]
+        root = a.servers[0].rstrip("/")
+        root = root[:-3] if root.endswith("/v1") else root
+
+        def tok(text):
+            return post_to(root, "/tokenize", {"model": a.model, "prompt": text, "add_special_tokens": False}, 120.0)["tokens"]
+        end = tok(THINK_END)
+        if len(end) != 1:
+            print("ABORT: %s is %d tokens for this model, not one" % (THINK_END, len(end)))
+            return 2
+        a.end_id = end[0]
+        a.cues = [("\n\n" + a.cue, tok("\n\n" + a.cue)), ("\n" + a.cue, tok("\n" + a.cue))]
+        with urllib.request.urlopen(a.servers[0].rstrip("/") + "/models", timeout=120.0) as r:
+            a.ctx = int(json.load(r)["data"][0]["max_model_len"])
+        print("cued sampling: cue %r (token ids %s, then %s), at least %d forecast lines, at most %d cues; %s is token %d; context %d; "
+              "replies tagged %s (%s)" % (a.cue, a.cues[0][1], a.cues[1][1], a.cue_min_lines, a.cue_max, THINK_END, a.end_id, a.ctx,
+                                          a.prompt_tag, a.prompt_sha1), flush=True)
 
     states = [json.loads(line) for line in open(a.states, encoding="utf-8") if line.strip()]
     rank = {v: i for i, v in enumerate(a.first)}

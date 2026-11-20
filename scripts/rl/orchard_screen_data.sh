@@ -37,6 +37,8 @@
 #   ROWS=forecast                the rows stage writes rows_fc.jsonl: a reply is kept only when the
 #                                simulator bears out every FORECAST line of its rationale
 #                                (MAX_WORDS, default 1000, as the owner chose for the screened round)
+#   SAMPLE_CUE=FORECAST:         cued sampling (sample_states.py --cue): the label is put after the policy's own
+#                                rationale and it continues from there; replies and rows are tagged PROMPT_TAG+cue
 #   GATE_STATES=<file> GATE_MIN_ROWS=<n>   a subset of the states (lines of STATES_FILE) sampled, scored
 #                                and turned into rows first; the job stops (exit 9) before the rest is
 #                                sampled when they give fewer than n rows. Their replies are kept.
@@ -85,6 +87,13 @@ case "$ROWS" in screen|forecast) ;; *) echo "ABORT: ROWS=$ROWS (screen | forecas
 [ "$ROWS" = forecast ] && [ -z "$SAMPLE_INSTRUCTION" ] && { echo "ABORT: ROWS=forecast needs SAMPLE_INSTRUCTION"; exit 2; }
 SAMPLE_EXTRA=()
 [ -n "$SAMPLE_INSTRUCTION" ] && SAMPLE_EXTRA=(--extra-instruction-file "$SAMPLE_INSTRUCTION" --prompt-tag "${PROMPT_TAG:-served+extra}")
+SAMPLE_CUE="${SAMPLE_CUE:-}"
+ROW_TAG="${PROMPT_TAG:-served+extra}"
+if [ -n "$SAMPLE_CUE" ]; then
+  [ -n "$SAMPLE_INSTRUCTION" ] || { echo "ABORT: SAMPLE_CUE needs SAMPLE_INSTRUCTION"; exit 2; }
+  SAMPLE_EXTRA+=(--cue "$SAMPLE_CUE")
+  ROW_TAG="$ROW_TAG+cue"                 # sample_states.py tags cued replies this way
+fi
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-$("$SIM_PY" -c 'import json, sys
 c = json.load(open(sys.argv[1])); t = c.get("text_config", c)
 print(t.get("max_position_embeddings") or c.get("max_position_embeddings"))' "$MODEL_PATH/config.json")}"
@@ -98,7 +107,7 @@ mkdir -p "$OUT/logs" "$OUT/collect" "$TMPDIR" "$C/xdg"
 cd "$REPO"
 echo "=== $(date '+%F %T %Z') host=$(hostname) job=${SLURM_JOB_ID:-none} restarts=${SLURM_RESTART_COUNT:-0}"
 echo "=== repo=$REPO label=$LABEL adapter=$ADAPTER rollouts=$ROLLOUTS out=$OUT k=$K collect='$COLLECT_VARIANTS' first='$FIRST' cpu_workers=$CPU_WORKERS"
-echo "=== states_file=${STATES_FILE:-none} sample_instruction=${SAMPLE_INSTRUCTION:-none} prompt_tag=${PROMPT_TAG:-none} rows=$ROWS sample_workers=${SAMPLE_WORKERS:-40}"
+echo "=== states_file=${STATES_FILE:-none} sample_instruction=${SAMPLE_INSTRUCTION:-none} prompt_tag=${PROMPT_TAG:-none} rows=$ROWS sample_workers=${SAMPLE_WORKERS:-40} cue=${SAMPLE_CUE:-none} gate=${GATE_STATES:-none}"
 
 # one thread per simulator, as the rollouts ran
 sim() { OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH="$REPO" "$SIM_PY" "$@"; }
@@ -232,7 +241,7 @@ if [ -n "$GATE_STATES" ] && ! stage_done gate && ! stage_done samples; then
   grep -q SCORE_STATES_DONE "$OUT/logs/gate.log" || { echo "ABORT: gate scoring failed"; exit 6; }
   "$SIM_PY" "$S/build_rows.py" --states "$GATE_STATES" --samples "$OUT/samples.jsonl" --scored "$OUT/gate_scored.jsonl" \
       --out "$OUT/gate_rows.jsonl" --min-pct 0 --max-words "${MAX_WORDS:-1000}" --require-forecasts \
-      --sample-prompt "${PROMPT_TAG:-served+extra}" --tier "${TIER:-scr2}_fc" --teacher "$LABEL-own-think-forecast-checked" \
+      --sample-prompt "$ROW_TAG" --tier "${TIER:-scr2}_fc" --teacher "$LABEL-own-think-forecast-checked" \
       > "$OUT/gate_rows.report.txt" || { echo "ABORT: gate rows failed"; exit 8; }
   cat "$OUT/gate_rows.report.txt"
   GATE_N=$(grep -c . "$OUT/gate_rows.jsonl"); GATE_S=$(grep -c . "$GATE_STATES")
@@ -273,7 +282,7 @@ fi
 if [ "$ROWS" = forecast ]; then
   "$SIM_PY" "$S/build_rows.py" --states "$OUT/states.jsonl" --samples "$OUT/samples.jsonl" --scored "$OUT/scored.jsonl" \
       --out "$OUT/rows_fc.jsonl" --min-pct 0 --max-words "${MAX_WORDS:-1000}" --require-forecasts \
-      --sample-prompt "${PROMPT_TAG:-served+extra}" --tier "${TIER:-scr2}_fc" --teacher "$LABEL-own-think-forecast-checked" \
+      --sample-prompt "$ROW_TAG" --tier "${TIER:-scr2}_fc" --teacher "$LABEL-own-think-forecast-checked" \
       > "$OUT/rows_fc.report.txt" || { echo "ABORT: rows failed"; exit 8; }
   cat "$OUT/rows_fc.report.txt"
   mark rows

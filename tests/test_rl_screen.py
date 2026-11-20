@@ -385,3 +385,75 @@ def test_sampling_does_not_continue_a_file_sampled_under_another_prompt(tmp_path
     assert SS.main(base) == 0                                                      # the same prompt: nothing left to ask for
     rec = SS.record_of("s", 1, _reply("<action>A</action>", "why"), "served+forecast_v1", "abc")
     assert rec["prompt_sha1"] == "abc" and "prompt_sha1" not in SS.record_of("s", 1, _reply("<action>A</action>", "why"))
+
+
+class _CueArgs(_Args):
+    extra, prompt_tag, prompt_sha1 = "", "served+forecast_v1+cue", "abc"
+    cue, cue_min_lines, cue_max, end_id, ctx = "FORECAST:", 2, 3, 99, 1000
+    cues = [("\n\nFORECAST:", [20, 21]), ("\nFORECAST:", [22, 21])]
+
+
+def _server(script):
+    """A stand-in for the three routes cued sampling uses; script: the completions to return, in order."""
+    calls = []
+
+    def post_to(url, path, body, timeout):
+        calls.append((path, body))
+        if path == "/chat/completions/render":
+            return {"token_ids": [1, 2, 3]}
+        text, ids, finish = script[sum(1 for p, _ in calls if p == "/completions") - 1]
+        return {"choices": [{"text": text, "token_ids": ids, "finish_reason": finish}], "usage": {"completion_tokens": len(ids), "prompt_tokens": len(body["prompt"])}}
+    return post_to, calls
+
+
+def test_cued_sampling_continues_the_policys_own_rationale():
+    state = {"sid": "s", "system": "S", "observation": "U", "instruction": ""}
+    post_to, calls = _server([("The strut is thin.</think>", [10, 11, 99], "stop"),       # the rationale: no forecast line
+                              (" A(1) -> better\n", [30, 31], "stop"),                     # after the first cue: one line
+                              (" B(2) -> refused", [40], "stop"),                          # after the second cue: two lines
+                              ("\n\n<action>A(1)</action><|im_end|>", [50, 51], "stop")])  # the think block closed: the action
+    rec = SS.cued_reply(state, 0, 0, _CueArgs, "u0", post_to)
+    assert rec["thinking"] == "The strut is thin.\n\nFORECAST: A(1) -> better\n\nFORECAST: B(2) -> refused"
+    assert rec["answer"] == "<action>A(1)</action>" and rec["cues"] == 2 and rec["finish"] == "stop"
+    assert FC.read(rec["thinking"]) == ([("A(1)", "better"), ("B(2)", "refused")], 0)
+    assert rec["tokens"] == 8 and rec["prompt_tokens"] == 3 and rec["sha1"] == SS.reply_sha1(rec["thinking"], rec["answer"])
+    assert (rec["prompt"], rec["prompt_sha1"], rec["mode"]) == ("served+forecast_v1+cue", "abc", "own_think_cued")
+    comp = [b for p, b in calls if p == "/completions"]
+    assert comp[0]["prompt"] == [1, 2, 3] and comp[0]["stop_token_ids"] == [99] and comp[0]["max_tokens"] == 1000 - 3 - 8
+    assert comp[1]["prompt"] == [1, 2, 3, 10, 11, 20, 21]                 # the closing tag is not kept; the first cue follows
+    assert comp[2]["prompt"] == [1, 2, 3, 10, 11, 20, 21, 30, 31, 22, 21]
+    assert comp[3]["prompt"] == [1, 2, 3, 10, 11, 20, 21, 30, 31, 22, 21, 40, 99] and "stop_token_ids" not in comp[3]
+    assert len({b["seed"] for b in comp}) == 4 and calls[0][1]["messages"][1]["content"] == "U"
+
+    # a rationale that already has its lines gets no cue
+    own = "Thin strut.\nFORECAST: A(1) -> better\nFORECAST: B(2) -> worse\n"
+    post_to, calls = _server([(own, [10, 11, 12], "stop"), ("<action>A(1)</action>", [50], "stop")])
+    rec = SS.cued_reply(state, 1, 0, _CueArgs, "u0", post_to)
+    assert rec["cues"] == 0 and rec["thinking"] == own.strip() and len(calls) == 3
+    assert [b for p, b in calls if p == "/completions"][1]["prompt"] == [1, 2, 3, 10, 11, 12, 99]
+
+    # an unread forecast line counts towards the lines: the reply is not cued again for it
+    post_to, calls = _server([("Thin.\nFORECAST: A(1) -> better\nFORECAST: B(2) -> maybe", [10], "stop"), ("<action>A(1)</action>", [50], "stop")])
+    assert SS.cued_reply(state, 2, 0, _CueArgs, "u0", post_to)["cues"] == 0
+
+    # cued lines the check cannot read count too (the reply is not a row target, so no further cue)
+    post_to, calls = _server([("Thin.", [10], "stop"), (" not a line", [30], "stop"), (" still none", [31], "stop"), ("<action>A(1)</action>", [50], "stop")])
+    rec = SS.cued_reply(state, 3, 0, _CueArgs, "u0", post_to)
+    assert rec["cues"] == 2 and FC.read(rec["thinking"]) == ([], 2)
+
+    # never more than --cue-max cues; a reply cut at the length limit has no answer
+    class One(_CueArgs):
+        cue_max = 1
+    post_to, calls = _server([("Thin.", [10], "stop"), (" A(1) -> better", [30], "stop"), ("<action>A(1)</action>", [50], "stop")])
+    rec = SS.cued_reply(state, 3, 0, One, "u0", post_to)
+    assert rec["cues"] == 1 and len([1 for p, _ in calls if p == "/completions"]) == 3 and len(FC.read(rec["thinking"])[0]) == 1
+    post_to, calls = _server([("Thin.", [10], "length")])
+    rec = SS.cued_reply(state, 4, 0, _CueArgs, "u0", post_to)
+    assert rec["finish"] == "length" and rec["thinking"] == "" and rec["answer"] == "" and rec["sha1"] is None
+    # through draw: the cued path is taken, and a failing server gives an error record
+    post_to, calls = _server([(own, [10], "stop"), ("<action>A(1)</action>", [50], "stop")])
+    assert SS.draw(state, 5, 0, _CueArgs, None, post_to)["cues"] == 0
+
+    def dead(url, path, body, timeout):
+        raise OSError("gone")
+    assert SS.draw(state, 6, 0, _CueArgs, None, dead) == {"sid": "s", "sample": 6, "error": "OSError: gone"}
