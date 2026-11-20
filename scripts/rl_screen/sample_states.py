@@ -102,7 +102,14 @@ def post(url: str, body: dict, timeout: float) -> dict:
 THINK_END = "</think>"
 
 
-def cued_reply(state: dict, sample: int, attempt: int, a, url: str, post_to_fn=post_to) -> dict:
+def render_prompt(state: dict, a, url: str, post_to_fn=post_to) -> list:
+    """The token ids of the state's chat request (with the generation prompt), as the server renders it."""
+    body = request_body(state, 0, 0, a)
+    return post_to_fn(url, "/chat/completions/render", {"model": a.model, "messages": body["messages"],
+                                                       "chat_template_kwargs": body["chat_template_kwargs"]}, a.timeout)["token_ids"]
+
+
+def cued_reply(state: dict, sample: int, attempt: int, a, url: str, post_to_fn=post_to, prompt_ids=None) -> dict:
     """One reply sampled with the cue (--cue): the policy writes its rationale as usual and is
     stopped where it would close the think block; while the rationale has fewer than
     --cue-min-lines forecast lines, the same generation is continued from it plus the cue
@@ -111,9 +118,8 @@ def cued_reply(state: dict, sample: int, attempt: int, a, url: str, post_to_fn=p
     but the cue itself is the policy's own sample at the same temperature. The prompt is the chat
     request's, rendered by the server, so the tokens are the ones a chat request would have had."""
     seed = seed_of(state["sid"], sample, attempt, a.seed)
-    body = request_body(state, sample, attempt, a)
-    gen = post_to_fn(url, "/chat/completions/render", {"model": a.model, "messages": body["messages"],
-                                                       "chat_template_kwargs": body["chat_template_kwargs"]}, a.timeout)["token_ids"]
+    # prompt_ids: the state's prompt already rendered (draw_state renders it once for the k replies)
+    gen = list(prompt_ids) if prompt_ids is not None else render_prompt(state, a, url, post_to_fn)
     samp = {"model": a.model, "temperature": a.temperature, "top_p": a.top_p, "top_k": a.top_k, "add_special_tokens": False,
             "return_token_ids": True, "skip_special_tokens": False}
     rec = {"sid": state["sid"], "sample": int(sample), "thinking": "", "answer": "", "finish": "length", "mode": "own_think_cued",
@@ -155,7 +161,7 @@ def cued_reply(state: dict, sample: int, attempt: int, a, url: str, post_to_fn=p
     return rec
 
 
-def draw(state: dict, sample: int, j: int, a, post_fn=post, post_to_fn=post_to) -> dict:
+def draw(state: dict, sample: int, j: int, a, post_fn=post, post_to_fn=post_to, prompt_ids=None) -> dict:
     """One reply: the record, or an error record after --attempts tries (another seed each time; a
     try after the first goes to the next server, in case the first one is gone)."""
     err = None
@@ -163,7 +169,7 @@ def draw(state: dict, sample: int, j: int, a, post_fn=post, post_to_fn=post_to) 
         url = a.servers[(j + attempt) % len(a.servers)]
         try:
             if getattr(a, "cue", None):
-                return cued_reply(state, sample, attempt, a, url, post_to_fn)
+                return cued_reply(state, sample, attempt, a, url, post_to_fn, prompt_ids)
             return record_of(state["sid"], sample, post_fn(url, request_body(state, sample, attempt, a), a.timeout),
                              getattr(a, "prompt_tag", None) or "served", getattr(a, "prompt_sha1", None))
         except Exception as e:                               # noqa: BLE001
@@ -174,14 +180,21 @@ def draw(state: dict, sample: int, j: int, a, post_fn=post, post_to_fn=post_to) 
 
 def draw_state(state: dict, missing: list[int], j: int, a, post_fn=post, post_to_fn=post_to) -> list[dict]:
     """The missing replies of one state: the first alone (it fills the prefix cache), then the rest
-    at once."""
-    out = [draw(state, missing[0], j, a, post_fn, post_to_fn)]
+    at once. Cued sampling renders the state's prompt once for all of them (if that fails, every
+    reply renders it again in its own tries)."""
+    ids = None
+    if getattr(a, "cue", None):
+        try:
+            ids = render_prompt(state, a, a.servers[j % len(a.servers)], post_to_fn)
+        except Exception:                                    # noqa: BLE001
+            ids = None
+    out = [draw(state, missing[0], j, a, post_fn, post_to_fn, ids)]
     rest = missing[1:]
     if rest:
         box = [None] * len(rest)
 
         def run(i, k):
-            box[i] = draw(state, k, j, a, post_fn, post_to_fn)
+            box[i] = draw(state, k, j, a, post_fn, post_to_fn, ids)
         threads = [threading.Thread(target=run, args=(i, k)) for i, k in enumerate(rest)]
         for t in threads:
             t.start()

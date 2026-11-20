@@ -457,3 +457,12 @@ def test_cued_sampling_continues_the_policys_own_rationale():
     def dead(url, path, body, timeout):
         raise OSError("gone")
     assert SS.draw(state, 6, 0, _CueArgs, None, dead) == {"sid": "s", "sample": 6, "error": "OSError: gone"}
+
+    # a state's prompt is rendered once for all its replies
+    class Two(_CueArgs):
+        cue_min_lines = 0
+    post_to, calls = _server([("Thin.", [10], "stop"), ("<action>A(1)</action>", [50], "stop")] * 3)
+    recs = SS.draw_state(state, [0, 1, 2], 0, Two, None, post_to)
+    assert [r["sample"] for r in recs] == [0, 1, 2] and all(r["answer"] == "<action>A(1)</action>" for r in recs)
+    assert sum(1 for p, _ in calls if p == "/chat/completions/render") == 1
+    assert all(b["prompt"][:3] == [1, 2, 3] for p, b in calls if p == "/completions")
