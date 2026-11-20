@@ -18,13 +18,27 @@ screen would keep, so no condition is applied unseen.
 
     python build_rows.py --states states.jsonl --samples samples.jsonl --scored scored.jsonl \\
         --out rows.jsonl [--min-pct 90] [--max-words 0] [--no-require-gain] [--require-consistent]
-        [--tier scr1] [--teacher NAME]
+        [--require-forecasts --sample-prompt served+forecast_v1] [--tier scr1] [--teacher NAME]
+
+--require-forecasts (a forecast-checked round, forecasts.py): the replies were sampled with a
+collection-only instruction to compare two or three candidate moves in the rationale, one
+"FORECAST: MOVE -> refused | worse | better" line each. A reply is eligible only when it has two
+or three such lines, every candidate is a move of the domain and changes the design, its own move
+is one of them, the simulator returned what every line says, and no rejected candidate does better
+than its own move. Among a state's eligible replies, one that rejects a candidate it rightly
+forecast as refused or worse goes first. The row keeps the state's served prompt: the instruction
+is not in it. The report adds what each of these conditions costs and every forecast against the
+simulator.
 """
 import argparse
 import collections
 import json
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import forecasts  # noqa: E402
 
 
 def usable(x: dict, reason: str, sha1=None) -> str | None:
@@ -67,37 +81,93 @@ def ends_on_another_move(reason: str, x: dict, shown: str = "") -> bool:
 
 
 def pick(scored: list, replies: dict, min_pct: float, max_words: int, require_gain: bool,
-         consistent: bool = False, shown: str = ""):
+         consistent: bool = False, shown: str = "", forecast: bool = False, sample_prompt=None):
     """(reply record, rationale, None) or (None, None, why the state gives no row). replies:
     (sid, sample) -> (rationale = the think block, sha1 of the reply). consistent: a reply whose
-    rationale ends on another move than its own (ends_on_another_move) is not eligible."""
+    rationale ends on another move than its own (ends_on_another_move) is not eligible. forecast:
+    a reply is eligible only when the simulator bears out every FORECAST line of its rationale
+    (forecasts.fault); among the eligible, one that rejects a candidate it rightly forecast as
+    refused or worse goes before one whose candidates are all better; --min-pct is then a
+    condition on every reply, not on the winner. sample_prompt: a reply recorded as sampled under
+    another prompt is not used."""
     why = collections.Counter()
     best = None
     for x in sorted(scored, key=lambda r: int(r["sample"])):
-        reason, sha1 = replies.get((x["sid"], int(x["sample"])), ("", None))
-        reason = reason.strip()
+        got = replies.get((x["sid"], int(x["sample"])), ("", None))
+        reason, sha1, tag = got[0].strip(), got[1], (got[2] if len(got) > 2 else None)
         w = usable(x, reason, sha1)
+        if w is None and sample_prompt and tag and tag != sample_prompt:
+            w = "sampled_under_another_prompt"
         if w is None and require_gain and not x.get("gain"):
             w = "no_gain"
         if w is None and max_words and len(reason.split()) > max_words:
             w = "too_long"
         if w is None and consistent and ends_on_another_move(reason, x, shown):
             w = "rationale_ends_on_another_move"
+        if w is None and forecast:
+            f = reply_fault(x, reason)
+            if f is not None:
+                w = "forecasts: " + f
+            elif float(x["pct"]) < min_pct:
+                w = "below_min_pct"
         if w is not None:
             why[w] += 1
             continue
-        cand = (float(x["pct"]), -int(x["sample"]), x, reason)
-        if best is None or cand[:2] > best[:2]:
+        cand = (int(forecast and forecasts.has_negative(x.get("forecasts"))), float(x["pct"]), -int(x["sample"]), x, reason)
+        if best is None or cand[:3] > best[:3]:
             best = cand
     if best is None:
         top = why.most_common(1)[0][0] if why else "no_reply"
         return None, None, "no_eligible_reply (mostly %s)" % top
-    if best[0] < min_pct:
+    if best[1] < min_pct:
         return None, None, "below_min_pct"
-    return best[2], best[3], None
+    return best[3], best[4], None
 
 
-def make_row(state: dict, x: dict, reason: str, tier: str, teacher: str) -> dict:
+def reply_fault(x: dict, reason: str):
+    """None when the forecasts of a scored reply make it a row target (forecasts.fault), else why
+    not. The rationale is read again: lines that read differently now than when the reply was
+    scored are not trusted. A move the domain changed on apply (a clamped value) is not a target
+    either: the row's action would not be the candidate the rationale chose."""
+    fc = x.get("forecasts") or []
+    if x.get("forecast_error"):
+        return "the forecast check raised an error"
+    lines, unread = forecasts.read(reason)
+    if len(lines) <= forecasts.MAX_SCORED and [(c.get("move"), c.get("said")) for c in fc] != lines:
+        return "its lines read differently now than when scored"
+    f = forecasts.fault(fc, unread)
+    if f is None and x.get("text") != x.get("pick_text"):
+        f = "the move made was changed on apply"
+    return f
+
+
+def forecast_funnel(sc: list, replies: dict, c: collections.Counter, table: collections.Counter) -> None:
+    """What the forecast screen costs, reply by reply (c), and every parsed forecast against the
+    simulator (table: (said, truth) -> lines)."""
+    for x in sc:
+        fc = x.get("forecasts") or []
+        for f in fc:
+            if f.get("parsed"):
+                table[(f["said"], f["truth"])] += 1
+        if not (fc or x.get("forecast_unread") or x.get("forecast_error")):
+            c["fc reply: no forecast line"] += 1
+            continue
+        c["fc replies with a forecast line"] += 1
+        fault = reply_fault(x, replies.get((x["sid"], int(x["sample"])), ("", None))[0].strip())
+        if fault is None and not (x.get("ok") and x.get("gain")):
+            fault = "the reply's own move is not applied with a gain"
+        c["fc reply: " + (fault or "every forecast right, chosen move best (eligible)")] += 1
+
+
+def make_row(state: dict, x: dict, reason: str, tier: str, teacher: str, sample_prompt: str = "served") -> dict:
+    extra = {}
+    if x.get("forecasts"):
+        extra = {"forecasts": [[f["move"], f["said"]] for f in x["forecasts"]],
+                 "has_negative_forecast": forecasts.has_negative(x["forecasts"])}
+    return dict(make_row_base(state, x, reason, tier, teacher, sample_prompt), **extra)
+
+
+def make_row_base(state: dict, x: dict, reason: str, tier: str, teacher: str, sample_prompt: str = "served") -> dict:
     return {
         "domain": state["variant"], "instance": state["problem_id"], "turn": int(state["turn"]), "turns": 1,
         "binding_constraint": state.get("binding_constraint"), "n_prior_changes": int(state["n_prior_changes"]),
@@ -106,7 +176,7 @@ def make_row(state: dict, x: dict, reason: str, tier: str, teacher: str) -> dict
                      {"role": "assistant", "reasoning_content": reason, "content": "<action>%s</action>" % x["text"]}],
         "instruction_sha1": state.get("instruction_sha1"), "spelling": state.get("spelling"),
         "action": x["action"], "clamped": bool(x.get("clamped")), "tier": tier, "teacher": teacher,
-        "rationale_sample": int(x["sample"]), "sample_mode": "own_think", "sample_prompt": "served",
+        "rationale_sample": int(x["sample"]), "sample_mode": "own_think", "sample_prompt": sample_prompt,
         "own_pct": x["pct"], "own_phi": x["phi"], "n_candidates": x.get("n_candidates"),
         "sid": state["sid"], "phi_before": state.get("phi_before"), "feasible_after": bool(x.get("feasible_after")),
         "same_as_own": bool(x.get("same_as_own")), "source": state.get("source"), "words": len(reason.split()),
@@ -125,6 +195,9 @@ def main(argv=None) -> int:
     ap.add_argument("--no-require-gain", action="store_true")
     ap.add_argument("--require-consistent", action="store_true",
                     help="a reply whose rationale ends on another move than its own is not eligible")
+    ap.add_argument("--require-forecasts", action="store_true",
+                    help="a reply is eligible only when the simulator bears out every FORECAST line of its rationale (forecasts.py)")
+    ap.add_argument("--sample-prompt", default="served", help="recorded in every row: the prompt the replies were sampled under")
     ap.add_argument("--tier", default="scr1")
     ap.add_argument("--teacher", default="dx38mtR-own-think-phi-screened")
     a = ap.parse_args(argv)
@@ -137,7 +210,7 @@ def main(argv=None) -> int:
         except ValueError:
             continue
         if not o.get("error") and o.get("answer") and o.get("finish") != "length":
-            answers[(o["sid"], int(o["sample"]))] = (o.get("thinking") or "", o.get("sha1"))
+            answers[(o["sid"], int(o["sample"]))] = (o.get("thinking") or "", o.get("sha1"), o.get("prompt"))
     scored = collections.defaultdict(list)
     state_rec = {}
     for line in open(a.scored, encoding="utf-8"):
@@ -153,14 +226,20 @@ def main(argv=None) -> int:
     fams = sorted({s["variant"] for s in states})
     per = {f: collections.Counter() for f in fams}
     alt = {f: collections.Counter() for f in fams}
-    settings = (("pct>=%g, gain, no word cap" % a.min_pct, a.min_pct, 0, True, False),
-                ("pct>=%g, gain, <=320 words" % a.min_pct, a.min_pct, 320, True, False),
-                ("pct>=%g, gain, <=1000 words" % a.min_pct, a.min_pct, 1000, True, False),
-                ("pct>=%g, gain, rationale ends on its own move" % a.min_pct, a.min_pct, 0, True, True),
-                ("pct>=%g only" % a.min_pct, a.min_pct, 0, False, False),
-                ("gain only (best of k)", 0.0, 0, True, False),
-                ("pct>=50, gain", 50.0, 0, True, False))
+    settings = [("pct>=%g, gain, no word cap" % a.min_pct, a.min_pct, 0, True, False, False),
+                ("pct>=%g, gain, <=320 words" % a.min_pct, a.min_pct, 320, True, False, False),
+                ("pct>=%g, gain, <=1000 words" % a.min_pct, a.min_pct, 1000, True, False, False),
+                ("pct>=%g, gain, rationale ends on its own move" % a.min_pct, a.min_pct, 0, True, True, False),
+                ("pct>=%g only" % a.min_pct, a.min_pct, 0, False, False, False),
+                ("gain only (best of k)", 0.0, 0, True, False, False),
+                ("pct>=50, gain", 50.0, 0, True, False, False)]
+    if a.require_forecasts:
+        settings += [("forecasts right, gain, no word cap", 0.0, 0, True, False, True),
+                     ("forecasts right, gain, <=1000 words", 0.0, 1000, True, False, True),
+                     ("forecasts right, gain, <=320 words", 0.0, 320, True, False, True),
+                     ("forecasts right, gain, pct>=90", 90.0, 0, True, False, True)]
     words, pcts = collections.defaultdict(list), collections.defaultdict(list)
+    fc_table = {f: collections.Counter() for f in fams}
     n_rows = 0
     with open(a.out, "w", encoding="utf-8") as fo:
         for s in states:
@@ -177,14 +256,20 @@ def main(argv=None) -> int:
             c["states with an applied reply"] += any(x.get("ok") for x in sc)
             c["states with a gaining reply"] += any(x.get("ok") and x.get("gain") for x in sc)
             shown = norm_move(s["system"] + s["observation"] + s["instruction"])
-            for name, mp, mw, rg, cons in settings:
-                alt[s["variant"]][name] += pick(sc, answers, mp, mw, rg, cons, shown)[0] is not None
-            x, reason, why = pick(sc, answers, a.min_pct, a.max_words, not a.no_require_gain, a.require_consistent, shown)
+            if a.require_forecasts:
+                forecast_funnel(sc, answers, c, fc_table[s["variant"]])
+            for name, mp, mw, rg, cons, fc in settings:
+                alt[s["variant"]][name] += pick(sc, answers, mp, mw, rg, cons, shown, fc, a.sample_prompt)[0] is not None
+            x, reason, why = pick(sc, answers, a.min_pct, a.max_words, not a.no_require_gain, a.require_consistent, shown,
+                                  a.require_forecasts, a.sample_prompt)
             if x is None:
                 c["dropped: " + why] += 1
                 continue
-            row = make_row(s, x, reason, a.tier, a.teacher)
+            row = make_row(s, x, reason, a.tier, a.teacher, a.sample_prompt)
             c["rows: the rationale ends on another move"] += ends_on_another_move(reason, x, shown)
+            if a.require_forecasts:
+                c["rows: a rejected candidate rightly forecast as refused or worse"] += bool(row.get("has_negative_forecast"))
+                c["rows: forecast lines"] += len(row.get("forecasts") or [])
             fo.write(json.dumps(row) + "\n")
             n_rows += 1
             c["rows"] += 1
@@ -199,8 +284,8 @@ def main(argv=None) -> int:
         for k in per[f]:
             if k not in keys:
                 keys.append(k)
-    print("screen: min pct %g, max words %s, gain required %s, rationale must end on its own move %s" % (
-        a.min_pct, a.max_words or "none", not a.no_require_gain, a.require_consistent))
+    print("screen: min pct %g, max words %s, gain required %s, rationale must end on its own move %s, forecasts must be right %s" % (
+        a.min_pct, a.max_words or "none", not a.no_require_gain, a.require_consistent, a.require_forecasts))
     print("%-52s %s %9s" % ("", " ".join("%9s" % f[:9] for f in fams), "all"))
     for k in keys:
         print("%-52s %s %9d" % (k, " ".join("%9d" % per[f][k] for f in fams), sum(per[f][k] for f in fams)))
@@ -209,6 +294,18 @@ def main(argv=None) -> int:
     print("\nrows other screens would keep:")
     for name, *_ in settings:
         print("%-52s %s %9d" % (name, " ".join("%9d" % alt[f][name] for f in fams), sum(alt[f][name] for f in fams)))
+    if a.require_forecasts:
+        print("\nforecast lines against the simulator (every candidate that is a move; said -> returned):")
+        for said in forecasts.VERDICTS:
+            for truth in forecasts.VERDICTS:
+                print("%-52s %s %9d" % ("said %s, simulator %s" % (said, truth),
+                                        " ".join("%9d" % fc_table[f][(said, truth)] for f in fams),
+                                        sum(fc_table[f][(said, truth)] for f in fams)))
+        right = {f: sum(n for (s_, t_), n in fc_table[f].items() if s_ == t_) for f in fams}
+        total = {f: sum(fc_table[f].values()) for f in fams}
+        print("%-52s %s %9.3f" % ("share of forecasts right",
+                                  " ".join("%9.3f" % (right[f] / total[f] if total[f] else 0.0) for f in fams),
+                                  sum(right.values()) / max(1, sum(total.values()))))
     print("BUILD_ROWS_DONE %d rows -> %s" % (n_rows, a.out))
     return 0
 

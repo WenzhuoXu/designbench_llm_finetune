@@ -12,6 +12,10 @@ percent. There is no teacher move at a policy state; instead each reply also car
 One line per reply, and one line per state ("state": true) with the legal set's size, the state's
 potential and the seconds spent.
 
+A rationale with FORECAST lines (forecasts.py; a forecast-checked round asks for them at collection)
+also gets `forecasts`: every candidate it names, parsed and applied alone on a clone of the state,
+with what the reply said (refused | worse | better) and what the simulator returned (`truth`).
+
     <sim python> score_states.py --code <dataxp code dir> --states states.jsonl --samples samples.jsonl \\
         --out scored.jsonl [--workers 32]
 Resumable: states already in --out are skipped.
@@ -35,6 +39,7 @@ def score_state(job):
     from dataxp.domains import get_domain
     from dataxp.ownrows.common import (evaluator, legal_rng, move_seed, parse_reply, percentile, rebuild_state,
                                        try_apply)
+    from forecasts import MAX_SCORED, read as read_forecasts, truth_of
     t0 = time.time()
     sid, pid = row["sid"], row["problem_id"]
     out = []
@@ -57,6 +62,23 @@ def score_state(job):
     except Exception as e:                                   # noqa: BLE001
         return [{"sid": sid, "variant": row["variant"], "state": True, "error": "%s: %s" % (type(e).__name__, str(e)[:300]),
                  "t": round(time.time() - t0, 2)}]
+    seen = {}                                               # a candidate as the domain formats it -> what the simulator returned
+
+    def candidate(text: str) -> dict:
+        """One FORECAST candidate applied alone on a clone of the state (forecasts.py)."""
+        mv = d.parse_move(text)
+        if mv is None:
+            return {"parsed": False}
+        key = d.format_move(mv)
+        if key not in seen:
+            child, applied, info = try_apply(d, st, mv)
+            if child is None:
+                seen[key] = {"truth": "refused", "phi": None, "noop": False, "err": info["err"]}
+            else:
+                phi = float(ev.score(child, seed0=move_seed(pid, d, applied)).mean)
+                seen[key] = {"truth": truth_of(True, phi, phi0), "phi": phi, "noop": bool(info["noop"])}
+        return dict(seen[key], parsed=True, text=key)
+
     for k, o in samples:
         # the move is read from the visible answer only (the text after the think block), as the
         # harness reads it: an <action> line drafted inside the rationale is not a move
@@ -65,6 +87,13 @@ def score_state(job):
                "reason": None, "n_candidates": int(cand.size), "finish": o.get("finish"), "reply_sha1": o.get("sha1"),
                "words": len(think.split()), "think_leak": "<think>" in think or "</think>" in think,
                "action_tag_in_rationale": "<action>" in think}
+        lines, unread = read_forecasts(think)
+        if lines or unread:                                  # every candidate the rationale forecasts, whatever the reply's own move does
+            rec["n_forecast_lines"], rec["forecast_unread"] = len(lines), unread
+            try:
+                rec["forecasts"] = [dict(candidate(text), move=text, said=said) for text, said in lines[:MAX_SCORED]]
+            except Exception as e:                           # noqa: BLE001
+                rec["forecasts"], rec["forecast_error"] = [], "%s: %s" % (type(e).__name__, str(e)[:200])
         if o.get("finish") == "length" or not ans:
             rec["reason"] = "truncated" if o.get("finish") == "length" else "empty"
             out.append(rec)
@@ -76,6 +105,8 @@ def score_state(job):
             continue
         rec["parsed"] = True
         rec["pick_text"] = d.format_move(mv)
+        for c in rec.get("forecasts") or []:                 # the candidate the reply went on to make
+            c["is_pick"] = bool(c.get("parsed") and c["text"] == rec["pick_text"])
         child, applied, info = try_apply(d, st, mv)
         if child is None:
             rec["reason"] = info["err"]
@@ -98,6 +129,7 @@ def score_state(job):
 
 def _init(code: str):
     sys.path.insert(0, code)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))      # forecasts.py, in the worker processes too
 
 
 def main(argv=None) -> int:
@@ -141,7 +173,7 @@ def main(argv=None) -> int:
     print("states with replies %d, already scored %d, to score %d" % (len(per), len(done), len(jobs)), flush=True)
     t0 = time.time()
     secs = collections.defaultdict(list)
-    n = n_fail = 0
+    n = n_fail = n_fc_err = 0
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from crashsafe import run_jobs
     with open(a.out, "a", encoding="utf-8") as fo:
@@ -157,6 +189,7 @@ def main(argv=None) -> int:
                 print("!!! %s: %s" % (row["sid"], err), flush=True)
             for r in recs:
                 fo.write(json.dumps(r) + "\n")
+                n_fc_err += bool(r.get("forecast_error"))
                 if r.get("state"):
                     n_fail += bool(r.get("error"))
                     secs[r["variant"]].append(r.get("t") or 0.0)
@@ -167,6 +200,8 @@ def main(argv=None) -> int:
     for v in sorted(secs):
         s = sorted(secs[v])
         print("%-10s states %5d, seconds per state: median %.1f, mean %.1f, max %.1f" % (v, len(s), s[len(s) // 2], sum(s) / len(s), s[-1]))
+    if n_fc_err:
+        print("!!! %d replies whose forecast check raised an error (forecast_error in their records)" % n_fc_err, flush=True)
     print("SCORE_STATES_DONE %d states (%d failed) in %.0f s" % (n, n_fail, time.time() - t0), flush=True)
     return 0
 

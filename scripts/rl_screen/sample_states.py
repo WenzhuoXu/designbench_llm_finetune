@@ -17,6 +17,11 @@ Resumable: replies already in --out are not asked for again. States are taken in
 
     python sample_states.py --states states.jsonl --out samples.jsonl --servers URL [URL ...] \\
         --model dx38mtR [--k 8] [--temperature 0.8] [--workers 40] [--first photonics grid2op engibench]
+        [--extra-instruction-file forecast_instruction.txt --prompt-tag served+forecast_v1]
+
+--extra-instruction-file: a collection-only instruction put after the served prompt (a
+forecast-checked round asks for FORECAST lines this way, see forecasts.py). The rows are built from
+the state's served prompt, so the instruction is never part of a training prompt.
 """
 import argparse
 import hashlib
@@ -46,17 +51,18 @@ def reply_sha1(thinking: str, answer: str) -> str:
     return hashlib.sha1((thinking + "\x00" + answer).encode()).hexdigest()[:16]
 
 
-def record_of(sid: str, sample: int, out: dict) -> dict:
+def record_of(sid: str, sample: int, out: dict, prompt: str = "served", prompt_sha1=None) -> dict:
     ch = (out.get("choices") or [{}])[0]
     reasoning, text, closed = split_reply(ch.get("message") or {})
     finish = ch.get("finish_reason")
     ok = closed and finish != "length"
     usage = out.get("usage") or {}
     return {"sid": sid, "sample": int(sample), "thinking": reasoning if ok else "", "answer": text if ok else "",
-            "finish": finish if closed else "length", "mode": "own_think", "prompt": "served",
+            "finish": finish if closed else "length", "mode": "own_think", "prompt": prompt,
             "tokens": usage.get("completion_tokens"), "prompt_tokens": usage.get("prompt_tokens"),
             "cached_tokens": (usage.get("prompt_tokens_details") or {}).get("cached_tokens"),
-            "sha1": reply_sha1(reasoning, text) if ok else None}
+            "sha1": reply_sha1(reasoning, text) if ok else None,
+            **({"prompt_sha1": prompt_sha1} if prompt_sha1 else {})}
 
 
 def seed_of(sid: str, sample: int, attempt: int, seed: int) -> int:
@@ -64,9 +70,11 @@ def seed_of(sid: str, sample: int, attempt: int, seed: int) -> int:
 
 
 def request_body(state: dict, sample: int, attempt: int, a) -> dict:
+    # a.extra: a collection-only instruction after the served prompt (--extra-instruction-file);
+    # the training rows are built from the state's own prompt, without it
     return {"model": a.model,
             "messages": [{"role": "system", "content": state["system"]},
-                         {"role": "user", "content": state["observation"] + state["instruction"]}],
+                         {"role": "user", "content": state["observation"] + state["instruction"] + (getattr(a, "extra", "") or "")}],
             "temperature": a.temperature, "top_p": a.top_p, "top_k": a.top_k, "max_tokens": None,
             "seed": seed_of(state["sid"], sample, attempt, a.seed), "chat_template_kwargs": {"enable_thinking": True}}
 
@@ -85,7 +93,8 @@ def draw(state: dict, sample: int, j: int, a, post_fn=post) -> dict:
     for attempt in range(a.attempts):
         url = a.servers[(j + attempt) % len(a.servers)]
         try:
-            return record_of(state["sid"], sample, post_fn(url, request_body(state, sample, attempt, a), a.timeout))
+            return record_of(state["sid"], sample, post_fn(url, request_body(state, sample, attempt, a), a.timeout),
+                             getattr(a, "prompt_tag", None) or "served", getattr(a, "prompt_sha1", None))
         except Exception as e:                               # noqa: BLE001
             err = "%s: %s" % (type(e).__name__, str(e)[:300])
             time.sleep(min(5.0, a.retry_wait) * (attempt + 1))
@@ -127,6 +136,22 @@ def done_replies(path: str) -> set:
     return done
 
 
+def prompts_in(path: str) -> set:
+    """(prompt tag, sha1 of the extra instruction) of the replies already in the file."""
+    seen = set()
+    try:
+        for line in open(path, encoding="utf-8"):
+            try:
+                o = json.loads(line)
+            except ValueError:
+                continue
+            if not o.get("error"):
+                seen.add((o.get("prompt") or "served", o.get("prompt_sha1")))
+    except FileNotFoundError:
+        pass
+    return seen
+
+
 def open_append(path: str):
     """The file for appending; a last line cut by a killed run is closed off first, so the next
     record does not continue it."""
@@ -157,11 +182,30 @@ def main(argv=None) -> int:
     ap.add_argument("--attempts", type=int, default=2)
     ap.add_argument("--retry-wait", type=float, default=5.0)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--extra-instruction-file", default=None,
+                    help="text put after the served prompt of every request (collection only: the rows keep the served prompt)")
+    ap.add_argument("--prompt-tag", default=None, help="recorded as `prompt` in every reply (default: served, or served+extra)")
     a = ap.parse_args(argv)
+    a.extra, a.prompt_sha1 = "", None
+    if a.extra_instruction_file:
+        with open(a.extra_instruction_file, encoding="utf-8", newline="") as f:
+            a.extra = f.read().replace("\r\n", "\n")
+        if not a.extra.strip():
+            print("ABORT: %s is empty" % a.extra_instruction_file)
+            return 2
+        a.prompt_tag = a.prompt_tag or "served+extra"
+        a.prompt_sha1 = hashlib.sha1(a.extra.encode()).hexdigest()[:12]
+        print("extra instruction (%d characters, sha1 %s), replies tagged %s" % (
+            len(a.extra), hashlib.sha1(a.extra.encode()).hexdigest()[:12], a.prompt_tag), flush=True)
 
     states = [json.loads(line) for line in open(a.states, encoding="utf-8") if line.strip()]
     rank = {v: i for i, v in enumerate(a.first)}
     states.sort(key=lambda s: rank.get(s["variant"], len(rank)))     # stable: file order inside a family
+    other = prompts_in(a.out) - {(a.prompt_tag or "served", a.prompt_sha1)}
+    if other:                                                # replies sampled under another prompt must not be continued
+        print("ABORT: %s holds replies sampled under %s; this run samples under %s" % (
+            a.out, sorted(other, key=str), (a.prompt_tag or "served", a.prompt_sha1)))
+        return 2
     done = done_replies(a.out)
     todo = []
     for s in states:

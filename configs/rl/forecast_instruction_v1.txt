@@ -1,0 +1,10 @@
+
+
+BEFORE YOU DECIDE
+In your reasoning, compare two or three candidate changes: the one you will make and at least one alternative that you decide against. For each candidate write one line, exactly in this form:
+FORECAST: VERB(arg, ...) -> better
+The word after the arrow is your forecast of what the simulator returns for that change alone, applied to the current design. It is one of:
+refused - the simulator rejects the change and the design stays as it is
+better - the change is applied and the design is closer than it is now to meeting every constraint at low objective cost (feasibility first, then the objective)
+worse - the change is applied and the design is not closer
+Write each candidate exactly as an action is written, with every argument. Then make the candidate you forecast to do best, in the one final action line as described above.

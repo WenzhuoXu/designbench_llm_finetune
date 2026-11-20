@@ -27,14 +27,31 @@
 # flight), SAMPLE_WORKERS (40, states in flight, up to K - 1 requests each), CPU_WORKERS (the job's
 # CPUs minus 8). A smoke run:
 # STATES_LIMIT (episodes per rollout file), SAMPLE_LIMIT (states sampled), a short POOL.
+#
+# A forecast-checked round (scripts/rl_screen/forecasts.py) reuses the states of an earlier round:
+#   STATES_FILE=<states.jsonl>   the states to sample; the states_run / collect / states stages are
+#                                skipped and ROLLOUTS, POOL are not needed
+#   SAMPLE_INSTRUCTION=<file>    a collection-only instruction put after the served prompt of every
+#                                sampling request (configs/rl/forecast_instruction_v1.txt); the rows
+#                                keep the served prompt. PROMPT_TAG names it in the replies and rows.
+#   ROWS=forecast                the rows stage writes rows_fc.jsonl: a reply is kept only when the
+#                                simulator bears out every FORECAST line of its rationale
+#                                (MAX_WORDS, default 1000, as the owner chose for the screened round)
 set -uo pipefail
 B="${BASE:-/project/community/wxu2}"
 REPO="${REPO:-$HOME/rl/repo}"
 OUT="${OUT:?output dir}"
 LABEL="${LABEL:?the served name of the adapter}"
 ADAPTER="${ADAPTER:?adapter dir}"
-ROLLOUTS="${ROLLOUTS:?rollouts dir of the run whose states are used}"
-POOL="${POOL:?training problem pool, one variant + spec per line}"
+STATES_FILE="${STATES_FILE:-}"
+if [ -n "$STATES_FILE" ]; then ROLLOUTS="${ROLLOUTS:-}"; POOL="${POOL:-}"
+else
+  ROLLOUTS="${ROLLOUTS:?rollouts dir of the run whose states are used}"
+  POOL="${POOL:?training problem pool, one variant + spec per line}"
+fi
+SAMPLE_INSTRUCTION="${SAMPLE_INSTRUCTION:-}"
+PROMPT_TAG="${PROMPT_TAG:-}"
+ROWS="${ROWS:-screen}"
 NSERVERS=${NSERVERS:-4}
 VENV="${VLLM_VENV:-$B/rl/envs/vllm}"
 SIM_PY="${SIM_PY:-$B/rl/envs/sim/bin/python}"
@@ -43,15 +60,22 @@ H="${HARNESS:-$HOME/rl/harness}"
 C="${CACHE_DIR:-$B/rl/cache}"
 EXCLUDE="${EXCLUDE:-$HOME/rl/eval/problems_v3_native.jsonl $H/problems_v2.jsonl}"
 COLLECT_VARIANTS="${COLLECT_VARIANTS-photonics grid2op engibench}"
+[ -n "$STATES_FILE" ] && COLLECT_VARIANTS=""
 FIRST="${FIRST-photonics grid2op engibench}"
 K=${K:-8}
 CPU_WORKERS=${CPU_WORKERS:-$(( ${SLURM_CPUS_PER_TASK:-32} > 16 ? ${SLURM_CPUS_PER_TASK:-32} - 8 : 8 ))}
 S="$REPO/scripts/rl_screen"
 for f in "$VENV/bin/vllm" "$SIM_PY" "$MODEL_PATH/config.json" "$H/scripts/dataxp_policy_eval_v3.py" \
-         "$H/scripts/dataxp_policy_eval_v3n.py" "$H/configs/task_instruction_V2.txt" "$POOL" $EXCLUDE \
-         "$ADAPTER/adapter_config.json" "$ROLLOUTS" "$S/policy_states.py"; do
+         "$H/scripts/dataxp_policy_eval_v3n.py" "$H/configs/task_instruction_V2.txt" $EXCLUDE \
+         "$ADAPTER/adapter_config.json" "$S/policy_states.py" "$S/forecasts.py" \
+         ${STATES_FILE:+"$STATES_FILE"} ${SAMPLE_INSTRUCTION:+"$SAMPLE_INSTRUCTION"} \
+         $([ -z "$STATES_FILE" ] && echo "$POOL" "$ROLLOUTS"); do
   [ -e "$f" ] || { echo "ABORT: missing $f"; exit 2; }
 done
+case "$ROWS" in screen|forecast) ;; *) echo "ABORT: ROWS=$ROWS (screen | forecast)"; exit 2;; esac
+[ "$ROWS" = forecast ] && [ -z "$SAMPLE_INSTRUCTION" ] && { echo "ABORT: ROWS=forecast needs SAMPLE_INSTRUCTION"; exit 2; }
+SAMPLE_EXTRA=()
+[ -n "$SAMPLE_INSTRUCTION" ] && SAMPLE_EXTRA=(--extra-instruction-file "$SAMPLE_INSTRUCTION" --prompt-tag "${PROMPT_TAG:-served+extra}")
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-$("$SIM_PY" -c 'import json, sys
 c = json.load(open(sys.argv[1])); t = c.get("text_config", c)
 print(t.get("max_position_embeddings") or c.get("max_position_embeddings"))' "$MODEL_PATH/config.json")}"
@@ -65,6 +89,7 @@ mkdir -p "$OUT/logs" "$OUT/collect" "$TMPDIR" "$C/xdg"
 cd "$REPO"
 echo "=== $(date '+%F %T %Z') host=$(hostname) job=${SLURM_JOB_ID:-none} restarts=${SLURM_RESTART_COUNT:-0}"
 echo "=== repo=$REPO label=$LABEL adapter=$ADAPTER rollouts=$ROLLOUTS out=$OUT k=$K collect='$COLLECT_VARIANTS' first='$FIRST' cpu_workers=$CPU_WORKERS"
+echo "=== states_file=${STATES_FILE:-none} sample_instruction=${SAMPLE_INSTRUCTION:-none} prompt_tag=${PROMPT_TAG:-none} rows=$ROWS sample_workers=${SAMPLE_WORKERS:-40}"
 
 # one thread per simulator, as the rollouts ran
 sim() { OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH="$REPO" "$SIM_PY" "$@"; }
@@ -116,6 +141,11 @@ wait_servers() {
   echo "=== $NSERVERS vLLM server(s) ready after $(( $(date +%s) - T0 )) s"
 }
 
+if [ -n "$STATES_FILE" ] && ! stage_done states; then
+  cp "$STATES_FILE" "$OUT/states.jsonl.tmp" && mv "$OUT/states.jsonl.tmp" "$OUT/states.jsonl" || { echo "ABORT: cannot copy $STATES_FILE"; exit 3; }
+  echo "=== states: $(wc -l < "$OUT/states.jsonl") lines from $STATES_FILE"
+  mark states_run; mark states
+fi
 NEED_GPU=0
 { [ -n "$COLLECT_VARIANTS" ] && ! stage_done collect; } && NEED_GPU=1
 stage_done samples || NEED_GPU=1
@@ -183,13 +213,13 @@ fi
 if ! stage_done samples; then
   wait_servers
   "$SIM_PY" "$S/sample_states.py" --states "$OUT/states.jsonl" --out "$OUT/samples.jsonl" --servers "${URLS[@]}" \
-      --model "$LABEL" --k "$K" --temperature "${TEMPERATURE:-0.8}" --workers "${SAMPLE_WORKERS:-40}" --limit "${SAMPLE_LIMIT:-0}" --first $FIRST \
+      --model "$LABEL" --k "$K" --temperature "${TEMPERATURE:-0.8}" --workers "${SAMPLE_WORKERS:-40}" --limit "${SAMPLE_LIMIT:-0}" ${SAMPLE_EXTRA[@]+"${SAMPLE_EXTRA[@]}"} --first $FIRST \
       2>&1 | tee -a "$OUT/logs/samples.log"
   rc=${PIPESTATUS[0]}
   if [ "$rc" = 3 ]; then          # some replies failed: one more pass over what is missing
     wait_servers                  # aborts the job if a server is gone (the stage is not marked done)
     "$SIM_PY" "$S/sample_states.py" --states "$OUT/states.jsonl" --out "$OUT/samples.jsonl" --servers "${URLS[@]}" \
-        --model "$LABEL" --k "$K" --temperature "${TEMPERATURE:-0.8}" --workers "${SAMPLE_WORKERS:-40}" --limit "${SAMPLE_LIMIT:-0}" --first $FIRST \
+        --model "$LABEL" --k "$K" --temperature "${TEMPERATURE:-0.8}" --workers "${SAMPLE_WORKERS:-40}" --limit "${SAMPLE_LIMIT:-0}" ${SAMPLE_EXTRA[@]+"${SAMPLE_EXTRA[@]}"} --first $FIRST \
         2>&1 | tee -a "$OUT/logs/samples.log"
     rc=${PIPESTATUS[0]}
   fi
@@ -205,6 +235,18 @@ if ! stage_done scored; then
       --out "$OUT/scored.jsonl" --workers "$CPU_WORKERS" 2>&1 | grep -v -i "warn\|numba\|^[[:space:]]*$" | tee "$OUT/logs/scored.log"
   grep -q SCORE_STATES_DONE "$OUT/logs/scored.log" || { echo "ABORT: scoring failed"; exit 6; }
   mark scored
+fi
+
+# ---- rows of a forecast-checked round
+if [ "$ROWS" = forecast ]; then
+  "$SIM_PY" "$S/build_rows.py" --states "$OUT/states.jsonl" --samples "$OUT/samples.jsonl" --scored "$OUT/scored.jsonl" \
+      --out "$OUT/rows_fc.jsonl" --min-pct 0 --max-words "${MAX_WORDS:-1000}" --require-forecasts \
+      --sample-prompt "${PROMPT_TAG:-served+extra}" --tier "${TIER:-scr2}_fc" --teacher "$LABEL-own-think-forecast-checked" \
+      > "$OUT/rows_fc.report.txt" || { echo "ABORT: rows failed"; exit 8; }
+  cat "$OUT/rows_fc.report.txt"
+  mark rows
+  echo "DX_SCREEN_DATA_DONE $(date '+%F %T %Z')"
+  exit 0
 fi
 
 # ---- rows under the two screens

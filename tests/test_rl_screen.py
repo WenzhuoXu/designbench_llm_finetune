@@ -231,3 +231,157 @@ def test_a_dying_worker_fails_its_own_job_only():
     assert sorted(got) == list(range(8))
     assert got[3] == (None, CS.DIED) and got[5][0] is None and "bad job" in got[5][1]
     assert all(got[i] == (i * i, None) for i in (0, 1, 2, 4, 6, 7))
+
+
+# ---- a forecast-checked round (forecasts.py)
+FC = load("forecasts")
+
+
+def test_forecast_lines_are_read_in_the_forms_a_reply_writes_them():
+    think = ("The left strut is thin.\n"
+             "FORECAST: FILL_RECT(1, 2, 3, 4) -> better\n"
+             "- **FORECAST:** `ERODE(0, 1)` -> **worse** (it thins the strut further)\n"
+             "2. Forecast: SPLIT_SUB(54) => Refused.\n"
+             "FORECAST: SHIFT_FEATURE(3, 1, 0) \u2192 better\n"
+             "The forecast: prose with -> better is not a line.\n"
+             "FORECAST: MOVE(1) -> unsure\n"
+             "So FILL_RECT(1, 2, 3, 4).")
+    lines, unread = FC.read(think)
+    assert lines == [("FILL_RECT(1, 2, 3, 4)", "better"), ("ERODE(0, 1)", "worse"),
+                     ("SPLIT_SUB(54)", "refused"), ("SHIFT_FEATURE(3, 1, 0)", "better")]
+    assert unread == 2                     # the prose line with an arrow, and the line with an unknown word
+    assert FC.forecast_lines("") == [] and FC.read(None) == ([], 0)
+    # a forecast line the check cannot read is counted, never skipped
+    for bad in ("FORECAST: A(1) -> worse or better, hard to say", "FORECAST: A(1) -> better; FORECAST: B(2) -> better",
+                "FORECAST: A(1) -> (better)", "FORECAST: instead of A(1) I could B(2) -> worse", "FORECAST: A(1) -> not better",
+                "FORECAST: A(1)", "I forecast that B(2) -> better", "FORECAST (alternative): A(1) -> worse",
+                "FORECAST: A(1) -> better -> worse", "FORECAST: A(1 -> better"):
+        assert FC.read(bad) == ([], 1), bad
+    assert FC.read("The forecast horizon is three steps.") == ([], 0)              # prose with no arrow and no verdict word
+    assert FC.read("FORECAST 2: CONNECT(a->b, 3) -> worse (load 1.4 -> 1.1)") == ([("CONNECT(a->b, 3)", "worse")], 0)
+    assert FC.read("FORECAST: A(B(2), 3) => refused") == ([("A(B(2), 3)", "refused")], 0)
+    assert FC.truth_of(False, None, -3.0) == "refused"
+    assert FC.truth_of(True, -2.0, -3.0) == "better" and FC.truth_of(True, -3.0, -3.0) == "worse"
+
+
+def _fc(text, said, truth, phi=None, pick=False, parsed=True, noop=False):
+    return {"move": text, "text": text, "said": said, "truth": truth, "phi": phi, "is_pick": pick, "parsed": parsed, "noop": noop}
+
+
+def _lines(fc):
+    return "\n".join("FORECAST: %s -> %s" % (c["move"], c["said"]) for c in fc)
+
+
+def test_a_reply_is_a_target_only_when_every_forecast_is_borne_out():
+    good = [_fc("A(1)", "better", "better", -1.0, pick=True), _fc("B(2)", "refused", "refused"), _fc("C(3)", "worse", "worse", -5.0)]
+    assert FC.fault(good) is None and FC.has_negative(good)
+    all_better = [_fc("A(1)", "better", "better", -1.0, pick=True), _fc("C(3)", "better", "better", -2.0)]
+    assert FC.fault(all_better) is None and not FC.has_negative(all_better)
+    assert FC.fault(good[:1]) == "fewer than 2 forecast lines" and FC.fault(None) == "fewer than 2 forecast lines"
+    assert FC.fault(good + [_fc("D(4)", "worse", "worse", -9.0)]) == "more than 3 forecast lines"
+    assert FC.fault([good[0], _fc("?", "worse", None, parsed=False)]) == "a candidate is not a move"
+    assert FC.fault([good[0], dict(good[0], is_pick=False)]) == "a candidate is written twice"
+    assert FC.fault([good[0], _fc("N(0)", "worse", "worse", -3.0, noop=True)]) == "a candidate changes nothing"
+    assert FC.fault([dict(good[0], is_pick=False), good[1]]) == "the chosen move is not a candidate"
+    assert FC.fault([good[0], _fc("B(2)", "worse", "refused")]) == "a forecast is wrong"
+    assert FC.fault([_fc("A(1)", "worse", "worse", -4.0, pick=True), good[1]]) == "the chosen move is not better"
+    assert FC.fault([good[0], _fc("C(3)", "better", "better", -0.5)]) == "a rejected candidate does better"
+    # a wrong forecast about a rejected candidate does not count as a negative example
+    assert not FC.has_negative([good[0], _fc("B(2)", "worse", "refused")])
+    assert FC.fault(good, unread=1) == "a forecast line cannot be read"
+
+
+def test_pick_under_the_forecast_screen():
+    right = [_fc("M(1)", "better", "better", 90.0, pick=True), _fc("X(9)", "better", "better", 10.0)]
+    with_no = [_fc("M(2)", "better", "better", 70.0, pick=True), _fc("X(8)", "refused", "refused")]
+    wrong = [_fc("M(3)", "better", "better", 99.0, pick=True), _fc("X(7)", "worse", "better", 50.0)]
+    ans = {("s", 0): ("why 0", "h0"), ("s", 1): (_lines(right), "h1"), ("s", 2): (_lines(with_no), "h2"), ("s", 3): (_lines(wrong), "h3")}
+    sc = [dict(_scored(0, 99), pick_text="M(0)"), dict(_scored(1, 90), forecasts=right, pick_text="M(1)"),
+          dict(_scored(2, 70), forecasts=with_no, pick_text="M(2)"), dict(_scored(3, 99), forecasts=wrong, pick_text="M(3)")]
+    assert BR.pick(sc, ans, 0.0, 0, True)[0]["sample"] == 0                                # the old screen: highest percentile
+    x, reason, why = BR.pick(sc, ans, 0.0, 0, True, forecast=True)
+    assert x["sample"] == 2 and why is None            # a rightly rejected candidate goes before a higher percentile
+    assert BR.pick(sc[:2], ans, 0.0, 0, True, forecast=True)[0]["sample"] == 1
+    assert BR.pick([sc[0]], ans, 0.0, 0, True, forecast=True)[2] == "no_eligible_reply (mostly forecasts: fewer than 2 forecast lines)"
+    assert BR.pick([sc[3]], ans, 0.0, 0, True, forecast=True)[2] == "no_eligible_reply (mostly forecasts: a forecast is wrong)"
+    row = BR.make_row({"variant": "fam", "problem_id": "p", "turn": 0, "n_prior_changes": 0, "system": "S", "observation": "U",
+                       "instruction": "", "sid": "s"}, sc[2], "why 2", "scr2_fc", "t", "served+forecast_v1")
+    assert row["forecasts"] == [["M(2)", "better"], ["X(8)", "refused"]] and row["has_negative_forecast"] is True
+    assert row["sample_prompt"] == "served+forecast_v1" and row["messages"][1]["content"] == "U"
+    assert "forecasts" not in BR.make_row({"variant": "fam", "problem_id": "p", "turn": 0, "n_prior_changes": 0, "system": "S",
+                                           "observation": "U", "instruction": "", "sid": "s"}, sc[0], "why 0", "t", "t")
+
+
+def test_the_extra_instruction_is_in_the_request_and_not_in_the_row():
+    state = {"sid": "s", "system": "S", "observation": "U", "instruction": "I"}
+
+    class A(_Args):
+        extra, prompt_tag = "\n\nBEFORE YOU DECIDE", "served+forecast_v1"
+    assert SS.request_body(state, 0, 0, A)["messages"][1]["content"] == "UI\n\nBEFORE YOU DECIDE"
+    assert SS.request_body(state, 0, 0, _Args)["messages"][1]["content"] == "UI"
+    rec = SS.draw(state, 0, 0, A, lambda url, body, timeout: _reply("<action>A</action>", "why"))
+    assert rec["prompt"] == "served+forecast_v1"
+    assert SS.draw(state, 0, 0, _Args, lambda url, body, timeout: _reply("<action>A</action>", "why"))["prompt"] == "served"
+
+
+def test_build_rows_with_forecasts_end_to_end(tmp_path, capsys):
+    state = {"variant": "fam", "problem_id": "p", "turn": 0, "n_prior_changes": 0, "system": "S", "observation": "U",
+             "instruction": "", "sid": "s"}
+    think = "FORECAST: M(1) -> better\nFORECAST: X(8) -> refused\nSo M(1)."
+    samples = [{"sid": "s", "sample": 0, "thinking": "no lines", "answer": "<action>M(0)</action>", "sha1": "h0"},
+               {"sid": "s", "sample": 1, "thinking": think, "answer": "<action>M(1)</action>", "sha1": "h1"}]
+    scored = [dict(_scored(0, 99)),
+              dict(_scored(1, 60), pick_text="M(1)",
+                   forecasts=[_fc("M(1)", "better", "better", 60.0, pick=True), _fc("X(8)", "refused", "refused")]),
+              {"sid": "s", "variant": "fam", "state": True, "n_candidates": 3, "phi_before": 0.0}]
+    files = {}
+    for name, recs in (("states", [state]), ("samples", samples), ("scored", scored)):
+        files[name] = str(tmp_path / (name + ".jsonl"))
+        with open(files[name], "w", encoding="utf-8") as f:
+            f.write("".join(json.dumps(r) + "\n" for r in recs))
+    out = str(tmp_path / "rows.jsonl")
+    base = ["--states", files["states"], "--samples", files["samples"], "--scored", files["scored"], "--out", out, "--min-pct", "0"]
+    assert BR.main(base) == 0
+    assert json.loads(open(out).read())["rationale_sample"] == 0                           # without the forecast screen
+    assert BR.main(base + ["--require-forecasts", "--sample-prompt", "served+forecast_v1"]) == 0
+    row = json.loads(open(out).read())
+    assert row["rationale_sample"] == 1 and row["messages"][2]["reasoning_content"] == think
+    assert row["messages"][1]["content"] == "U" and row["has_negative_forecast"] is True
+    rep = capsys.readouterr().out
+    assert "said refused, simulator refused" in rep and "share of forecasts right" in rep
+    assert "fc reply: no forecast line" in rep and "forecasts right, gain, no word cap" in rep
+
+
+def test_the_forecast_screen_reads_the_rationale_again():
+    right = [_fc("M(1)", "better", "better", 90.0, pick=True), _fc("X(9)", "refused", "refused")]
+    x = dict(_scored(1, 90), forecasts=right, pick_text="M(1)")
+    assert BR.reply_fault(x, _lines(right)) is None
+    assert BR.reply_fault(x, _lines(right) + "\nFORECAST: Y(2) -> (worse)") == "a forecast line cannot be read"
+    assert BR.reply_fault(x, _lines(right[:1])) == "its lines read differently now than when scored"
+    assert BR.reply_fault(dict(x, forecast_error="OverflowError: x"), _lines(right)) == "the forecast check raised an error"
+    assert BR.reply_fault(dict(x, text="M(0.5)"), _lines(right)) == "the move made was changed on apply"
+    # in pick: --min-pct is a condition on every reply under the forecast screen, not on the winner
+    with_no = dict(_scored(1, 50), forecasts=right, pick_text="M(1)")
+    plain = [_fc("M(2)", "better", "better", 95.0, pick=True), _fc("X(8)", "better", "better", 1.0)]
+    all_better = dict(_scored(2, 95), forecasts=plain, pick_text="M(2)")
+    ans = {("s", 1): (_lines(right), "h1", "served+forecast_v1"), ("s", 2): (_lines(plain), "h2", "served+forecast_v1")}
+    assert BR.pick([with_no, all_better], ans, 0.0, 0, True, forecast=True)[0]["sample"] == 1
+    assert BR.pick([with_no, all_better], ans, 90.0, 0, True, forecast=True)[0]["sample"] == 2
+    # a reply recorded as sampled under another prompt is not used
+    assert BR.pick([with_no, all_better], ans, 0.0, 0, True, forecast=True, sample_prompt="served+forecast_v1")[0]["sample"] == 1
+    assert BR.pick([with_no], ans, 0.0, 0, True, forecast=True, sample_prompt="served")[2] == "no_eligible_reply (mostly sampled_under_another_prompt)"
+
+
+def test_sampling_does_not_continue_a_file_sampled_under_another_prompt(tmp_path):
+    states = tmp_path / "states.jsonl"
+    states.write_text(json.dumps({"sid": "s", "variant": "fam", "system": "S", "observation": "U", "instruction": ""}) + "\n")
+    out = tmp_path / "samples.jsonl"
+    out.write_text(json.dumps({"sid": "s", "sample": 0, "answer": "x", "prompt": "served"}) + "\n")
+    extra = tmp_path / "extra.txt"
+    extra.write_text("\n\nBEFORE YOU DECIDE\n")
+    base = ["--states", str(states), "--out", str(out), "--servers", "http://127.0.0.1:9", "--model", "m", "--k", "1"]
+    assert SS.main(base + ["--extra-instruction-file", str(extra), "--prompt-tag", "served+forecast_v1"]) == 2
+    assert SS.prompts_in(str(out)) == {("served", None)}
+    assert SS.main(base) == 0                                                      # the same prompt: nothing left to ask for
+    rec = SS.record_of("s", 1, _reply("<action>A</action>", "why"), "served+forecast_v1", "abc")
+    assert rec["prompt_sha1"] == "abc" and "prompt_sha1" not in SS.record_of("s", 1, _reply("<action>A</action>", "why"))
