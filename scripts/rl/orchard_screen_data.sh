@@ -37,6 +37,9 @@
 #   ROWS=forecast                the rows stage writes rows_fc.jsonl: a reply is kept only when the
 #                                simulator bears out every FORECAST line of its rationale
 #                                (MAX_WORDS, default 1000, as the owner chose for the screened round)
+#   GATE_STATES=<file> GATE_MIN_ROWS=<n>   a subset of the states (lines of STATES_FILE) sampled, scored
+#                                and turned into rows first; the job stops (exit 9) before the rest is
+#                                sampled when they give fewer than n rows. Their replies are kept.
 set -uo pipefail
 B="${BASE:-/project/community/wxu2}"
 REPO="${REPO:-$HOME/rl/repo}"
@@ -72,6 +75,12 @@ for f in "$VENV/bin/vllm" "$SIM_PY" "$MODEL_PATH/config.json" "$H/scripts/dataxp
          $([ -z "$STATES_FILE" ] && echo "$POOL" "$ROLLOUTS"); do
   [ -e "$f" ] || { echo "ABORT: missing $f"; exit 2; }
 done
+GATE_STATES="${GATE_STATES:-}"
+if [ -n "$GATE_STATES" ]; then
+  [ -e "$GATE_STATES" ] || { echo "ABORT: missing $GATE_STATES"; exit 2; }
+  [ "$ROWS" = forecast ] || { echo "ABORT: GATE_STATES needs ROWS=forecast"; exit 2; }
+  GATE_MIN_ROWS="${GATE_MIN_ROWS:?the fewest rows the gate states must give}"
+fi
 case "$ROWS" in screen|forecast) ;; *) echo "ABORT: ROWS=$ROWS (screen | forecast)"; exit 2;; esac
 [ "$ROWS" = forecast ] && [ -z "$SAMPLE_INSTRUCTION" ] && { echo "ABORT: ROWS=forecast needs SAMPLE_INSTRUCTION"; exit 2; }
 SAMPLE_EXTRA=()
@@ -207,6 +216,29 @@ os.replace(out + ".tmp", out)
 print("=== states: %d distinct; %s" % (len(seen), dict(sorted(n.items()))))
 EOF
   mark states
+fi
+
+# ---- gate (forecast round): the states of GATE_STATES first; the rest is sampled only if they give enough rows
+if [ -n "$GATE_STATES" ] && ! stage_done gate && ! stage_done samples; then
+  wait_servers
+  "$SIM_PY" "$S/sample_states.py" --states "$GATE_STATES" --out "$OUT/samples.jsonl" --servers "${URLS[@]}" \
+      --model "$LABEL" --k "$K" --temperature "${TEMPERATURE:-0.8}" --workers "${SAMPLE_WORKERS:-40}" ${SAMPLE_EXTRA[@]+"${SAMPLE_EXTRA[@]}"} \
+      2>&1 | tee -a "$OUT/logs/gate.log"
+  rc=${PIPESTATUS[0]}
+  [ "$rc" = 0 ] || [ "$rc" = 3 ] || { echo "ABORT: gate sampling failed rc=$rc"; exit 5; }
+  rm -f "$OUT/gate_scored.jsonl"
+  sim "$S/score_states.py" --code "$H/dataxp_code_v3" --states "$GATE_STATES" --samples "$OUT/samples.jsonl" \
+      --out "$OUT/gate_scored.jsonl" --workers "$CPU_WORKERS" 2>&1 | grep -v -i "warn\|numba\|^[[:space:]]*$" | tee -a "$OUT/logs/gate.log"
+  grep -q SCORE_STATES_DONE "$OUT/logs/gate.log" || { echo "ABORT: gate scoring failed"; exit 6; }
+  "$SIM_PY" "$S/build_rows.py" --states "$GATE_STATES" --samples "$OUT/samples.jsonl" --scored "$OUT/gate_scored.jsonl" \
+      --out "$OUT/gate_rows.jsonl" --min-pct 0 --max-words "${MAX_WORDS:-1000}" --require-forecasts \
+      --sample-prompt "${PROMPT_TAG:-served+extra}" --tier "${TIER:-scr2}_fc" --teacher "$LABEL-own-think-forecast-checked" \
+      > "$OUT/gate_rows.report.txt" || { echo "ABORT: gate rows failed"; exit 8; }
+  cat "$OUT/gate_rows.report.txt"
+  GATE_N=$(grep -c . "$OUT/gate_rows.jsonl"); GATE_S=$(grep -c . "$GATE_STATES")
+  echo "=== gate: $GATE_N rows from $GATE_S states (needs at least $GATE_MIN_ROWS)"
+  [ "$GATE_N" -ge "$GATE_MIN_ROWS" ] || { echo "ABORT: gate failed, the rest is not sampled"; exit 9; }
+  mark gate
 fi
 
 # ---- K replies per state
