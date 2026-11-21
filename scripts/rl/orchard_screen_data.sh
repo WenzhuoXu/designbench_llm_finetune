@@ -39,6 +39,10 @@
 #                                (MAX_WORDS, default 1000, as the owner chose for the screened round)
 #   SAMPLE_CUE=FORECAST:         cued sampling (sample_states.py --cue): the label is put after the policy's own
 #                                rationale and it continues from there; replies and rows are tagged PROMPT_TAG+cue
+#   SAMPLE_KV_BUDGET=<tokens>    with SAMPLE_CUE: states in flight per server limited by the KV-cache tokens they need
+#                                (sample_states.py --kv-budget; 270000 on an H100 for prompts of 4-6k tokens,
+#                                210000 for grid2op's 12-18k; SAMPLE_REPLY_TOKENS, default 1700, per reply)
+#   STOP_AFTER=samples           end after the sampling stage (a job that samples a share of the states)
 #   GATE_STATES=<file> GATE_MIN_ROWS=<n>   a subset of the states (lines of STATES_FILE) sampled, scored
 #                                and turned into rows first; the job stops (exit 9) before the rest is
 #                                sampled when they give fewer than n rows. Their replies are kept.
@@ -93,6 +97,8 @@ if [ -n "$SAMPLE_CUE" ]; then
   [ -n "$SAMPLE_INSTRUCTION" ] || { echo "ABORT: SAMPLE_CUE needs SAMPLE_INSTRUCTION"; exit 2; }
   SAMPLE_EXTRA+=(--cue "$SAMPLE_CUE")
   ROW_TAG="$ROW_TAG+cue"                 # sample_states.py tags cued replies this way
+  # states in flight limited by the KV-cache tokens they need instead of by SAMPLE_WORKERS alone
+  [ -n "${SAMPLE_KV_BUDGET:-}" ] && SAMPLE_EXTRA+=(--kv-budget "$SAMPLE_KV_BUDGET" --reply-tokens "${SAMPLE_REPLY_TOKENS:-1700}")
 fi
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-$("$SIM_PY" -c 'import json, sys
 c = json.load(open(sys.argv[1])); t = c.get("text_config", c)
@@ -107,7 +113,7 @@ mkdir -p "$OUT/logs" "$OUT/collect" "$TMPDIR" "$C/xdg"
 cd "$REPO"
 echo "=== $(date '+%F %T %Z') host=$(hostname) job=${SLURM_JOB_ID:-none} restarts=${SLURM_RESTART_COUNT:-0}"
 echo "=== repo=$REPO label=$LABEL adapter=$ADAPTER rollouts=$ROLLOUTS out=$OUT k=$K collect='$COLLECT_VARIANTS' first='$FIRST' cpu_workers=$CPU_WORKERS"
-echo "=== states_file=${STATES_FILE:-none} sample_instruction=${SAMPLE_INSTRUCTION:-none} prompt_tag=${PROMPT_TAG:-none} rows=$ROWS sample_workers=${SAMPLE_WORKERS:-40} cue=${SAMPLE_CUE:-none} gate=${GATE_STATES:-none}"
+echo "=== states_file=${STATES_FILE:-none} sample_instruction=${SAMPLE_INSTRUCTION:-none} prompt_tag=${PROMPT_TAG:-none} rows=$ROWS sample_workers=${SAMPLE_WORKERS:-40} cue=${SAMPLE_CUE:-none} kv_budget=${SAMPLE_KV_BUDGET:-none} stop_after=${STOP_AFTER:-none} gate=${GATE_STATES:-none}"
 
 # one thread per simulator, as the rollouts ran
 sim() { OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH="$REPO" "$SIM_PY" "$@"; }
@@ -269,6 +275,10 @@ if ! stage_done samples; then
   mark samples
 fi
 cleanup                              # the GPUs are not needed from here on
+if [ "${STOP_AFTER:-}" = samples ]; then      # a job that only samples a share of the states (merged elsewhere)
+  echo "DX_SCREEN_DATA_STOP after samples $(date '+%F %T %Z')"
+  exit 0
+fi
 
 # ---- every reply in the simulator
 if ! stage_done scored; then
