@@ -34,6 +34,11 @@ need instead of by their number. Measured on four H100s (349,781 cache tokens ea
 server filled the cache (98%), prefixes were computed again (32% reuse) and the four made 1,345
 completion tokens a second; 14 per server kept it at 47-77% and made 2,308. It changes when a
 reply is asked for, not what is asked (the seed of a reply depends on its state and number only).
+What a state in flight holds was then measured as about 1.8 prompts plus 700 tokens per reply
+(--prompt-weight 1.8 --reply-tokens 700): with prompts of 12-21k tokens (grid2op) the first count,
+one prompt plus 1,700 per reply, let the cache fill to 70-89% and requests were preempted. A
+generated token also costs more the longer the prompt (each one attends to all of it): the same
+servers make about 600 tokens a second each at 6k-token prompts and 300-500 at 13-21k.
 """
 import argparse
 import hashlib
@@ -216,7 +221,7 @@ def draw_state(state: dict, missing: list[int], j: int, a, post_fn=post, post_to
     """The missing replies of one state: the first alone (it fills the prefix cache), then the rest
     at once. Cued sampling renders the state's prompt once for all of them (if that fails, every
     reply renders it again in its own tries). With --kv-budget the state first waits for room on its
-    server: its prompt once (the replies share it) plus --reply-tokens for each reply."""
+    server: --prompt-weight times its prompt plus --reply-tokens for each reply."""
     ids = None
     if getattr(a, "cue", None):
         try:
@@ -225,7 +230,7 @@ def draw_state(state: dict, missing: list[int], j: int, a, post_fn=post, post_to
             ids = None
     budget = getattr(a, "budgets", None)
     budget = budget[j % len(a.servers)] if budget and ids is not None else None
-    cost = budget.acquire(len(ids) + len(missing) * a.reply_tokens) if budget else 0
+    cost = budget.acquire(int(getattr(a, "prompt_weight", 1.0) * len(ids)) + len(missing) * a.reply_tokens) if budget else 0
     try:
         out = [draw(state, missing[0], j, a, post_fn, post_to_fn, ids)]
         rest = missing[1:]
@@ -319,11 +324,14 @@ def main(argv=None) -> int:
     ap.add_argument("--kv-budget", type=int, default=0,
                     help="with --cue: KV-cache tokens the states in flight on one server may need (0: only --workers limits them)")
     ap.add_argument("--reply-tokens", type=int, default=1700, help="tokens counted for one reply under --kv-budget")
+    ap.add_argument("--prompt-weight", type=float, default=1.0,
+                    help="under --kv-budget a state counts this many times its prompt (measured on the servers: about 1.8 "
+                         "prompts and 700 tokens per reply are held per state in flight, for prompts of 5k to 21k tokens)")
     a = ap.parse_args(argv)
     a.budgets = [Budget(a.kv_budget) for _ in a.servers] if a.kv_budget > 0 else None
     if a.budgets:
-        print("states in flight limited to %d KV-cache tokens per server (prompt once + %d per reply), at most %d states in all" % (
-            a.kv_budget, a.reply_tokens, a.workers), flush=True)
+        print("states in flight limited to %d KV-cache tokens per server (%.2f x prompt + %d per reply), at most %d states in all" % (
+            a.kv_budget, a.prompt_weight, a.reply_tokens, a.workers), flush=True)
     a.extra, a.prompt_sha1 = "", None
     if a.extra_instruction_file:
         with open(a.extra_instruction_file, encoding="utf-8", newline="") as f:

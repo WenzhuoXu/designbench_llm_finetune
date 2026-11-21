@@ -513,6 +513,13 @@ def test_kv_budget_limits_the_states_in_flight_on_a_server():
     assert set(seen) == {(0, 3 + 3 * 7)}                                   # 3 prompt tokens + 3 replies of 7
     assert (Two.budgets[0].used, Two.budgets[1].used) == (0, 0)
 
+    class Heavy(Two):                                                      # --prompt-weight: the prompt counted twice
+        prompt_weight = 2.0
+    seen.clear()
+    inner, calls = _server([("Thin.", [10], "stop"), ("<action>A(1)</action>", [50], "stop")] * 3)
+    SS.draw_state(state, [0, 1, 2], 1, Heavy, None, post_to)
+    assert set(seen) == {(0, 2 * 3 + 3 * 7)}
+
     # an error in a reply still gives the budget back; without a rendered prompt nothing is taken
     def dead(url, path, body, timeout):
         raise OSError("gone")
