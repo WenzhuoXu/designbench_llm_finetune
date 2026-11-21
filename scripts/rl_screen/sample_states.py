@@ -28,6 +28,12 @@ lines in the form the check can read (4 to 11% of replies, whatever the wording)
 rationale is sampled as usual, then the label is put on a new line and the policy continues from
 there; a second and third label follow while it has written fewer than --cue-min-lines lines. The
 label is the only text in a reply that the policy did not sample.
+
+--kv-budget TOKENS (with --cue): the states in flight on a server are limited by the KV cache they
+need instead of by their number. Measured on four H100s (349,781 cache tokens each): 28 states per
+server filled the cache (98%), prefixes were computed again (32% reuse) and the four made 1,345
+completion tokens a second; 14 per server kept it at 47-77% and made 2,308. It changes when a
+reply is asked for, not what is asked (the seed of a reply depends on its state and number only).
 """
 import argparse
 import hashlib
@@ -41,6 +47,34 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forecasts  # noqa: E402
+
+
+class Budget:
+    """The KV-cache tokens the states in flight on one server may need (--kv-budget). A state waits
+    until its cost fits, in arrival order, so a long prompt is not overtaken for ever; a state that
+    costs more than the whole budget runs alone. Without it the number of states in flight is fixed
+    (--workers), and prompts of very different lengths either leave the server idle or fill its
+    cache, after which the prefix of every request is computed again instead of reused."""
+
+    def __init__(self, total: int):
+        self.total, self.used, self.queue, self.cv = int(total), 0, [], threading.Condition()
+
+    def acquire(self, cost: int) -> int:
+        cost = max(1, min(int(cost), self.total))
+        me = object()
+        with self.cv:
+            self.queue.append(me)
+            while self.queue[0] is not me or self.used + cost > self.total:
+                self.cv.wait()
+            self.queue.pop(0)
+            self.used += cost
+            self.cv.notify_all()
+        return cost
+
+    def release(self, cost: int) -> None:
+        with self.cv:
+            self.used -= cost
+            self.cv.notify_all()
 
 
 def split_reply(msg: dict, thinking: bool = True) -> tuple[str, str, bool]:
@@ -181,27 +215,35 @@ def draw(state: dict, sample: int, j: int, a, post_fn=post, post_to_fn=post_to, 
 def draw_state(state: dict, missing: list[int], j: int, a, post_fn=post, post_to_fn=post_to) -> list[dict]:
     """The missing replies of one state: the first alone (it fills the prefix cache), then the rest
     at once. Cued sampling renders the state's prompt once for all of them (if that fails, every
-    reply renders it again in its own tries)."""
+    reply renders it again in its own tries). With --kv-budget the state first waits for room on its
+    server: its prompt once (the replies share it) plus --reply-tokens for each reply."""
     ids = None
     if getattr(a, "cue", None):
         try:
             ids = render_prompt(state, a, a.servers[j % len(a.servers)], post_to_fn)
         except Exception:                                    # noqa: BLE001
             ids = None
-    out = [draw(state, missing[0], j, a, post_fn, post_to_fn, ids)]
-    rest = missing[1:]
-    if rest:
-        box = [None] * len(rest)
+    budget = getattr(a, "budgets", None)
+    budget = budget[j % len(a.servers)] if budget and ids is not None else None
+    cost = budget.acquire(len(ids) + len(missing) * a.reply_tokens) if budget else 0
+    try:
+        out = [draw(state, missing[0], j, a, post_fn, post_to_fn, ids)]
+        rest = missing[1:]
+        if rest:
+            box = [None] * len(rest)
 
-        def run(i, k):
-            box[i] = draw(state, k, j, a, post_fn, post_to_fn, ids)
-        threads = [threading.Thread(target=run, args=(i, k)) for i, k in enumerate(rest)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        out.extend(box)
-    return out
+            def run(i, k):
+                box[i] = draw(state, k, j, a, post_fn, post_to_fn, ids)
+            threads = [threading.Thread(target=run, args=(i, k)) for i, k in enumerate(rest)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            out.extend(box)
+        return out
+    finally:
+        if budget:
+            budget.release(cost)
 
 
 def done_replies(path: str) -> set:
@@ -274,7 +316,14 @@ def main(argv=None) -> int:
                          "rationale while the rationale has fewer than --cue-min-lines forecast lines")
     ap.add_argument("--cue-min-lines", type=int, default=2)
     ap.add_argument("--cue-max", type=int, default=3, help="cues per reply at most")
+    ap.add_argument("--kv-budget", type=int, default=0,
+                    help="with --cue: KV-cache tokens the states in flight on one server may need (0: only --workers limits them)")
+    ap.add_argument("--reply-tokens", type=int, default=1700, help="tokens counted for one reply under --kv-budget")
     a = ap.parse_args(argv)
+    a.budgets = [Budget(a.kv_budget) for _ in a.servers] if a.kv_budget > 0 else None
+    if a.budgets:
+        print("states in flight limited to %d KV-cache tokens per server (prompt once + %d per reply), at most %d states in all" % (
+            a.kv_budget, a.reply_tokens, a.workers), flush=True)
     a.extra, a.prompt_sha1 = "", None
     if a.extra_instruction_file:
         with open(a.extra_instruction_file, encoding="utf-8", newline="") as f:

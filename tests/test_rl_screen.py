@@ -466,3 +466,55 @@ def test_cued_sampling_continues_the_policys_own_rationale():
     assert [r["sample"] for r in recs] == [0, 1, 2] and all(r["answer"] == "<action>A(1)</action>" for r in recs)
     assert sum(1 for p, _ in calls if p == "/chat/completions/render") == 1
     assert all(b["prompt"][:3] == [1, 2, 3] for p, b in calls if p == "/completions")
+
+
+def test_kv_budget_limits_the_states_in_flight_on_a_server():
+    import threading
+    import time
+    b = SS.Budget(100)
+    assert b.acquire(60) == 60 and b.used == 60
+    got = []
+
+    def later(name, cost):
+        got.append((name, b.acquire(cost)))
+    big = threading.Thread(target=later, args=("big", 500))      # more than the whole budget: counted as all of it
+    big.start()
+    time.sleep(0.1)
+    small = threading.Thread(target=later, args=("small", 10))   # would fit now, but arrived after the big one
+    small.start()
+    time.sleep(0.1)
+    assert got == [] and b.used == 60
+    b.release(60)
+    big.join(5)
+    time.sleep(0.1)
+    assert got == [("big", 100)] and b.used == 100               # the big one alone, the small one still waits
+    b.release(100)
+    small.join(5)
+    assert got == [("big", 100), ("small", 10)] and b.used == 10
+    b.release(10)
+    assert b.used == 0 and b.queue == []
+
+    # draw_state takes the prompt once plus --reply-tokens per missing reply, on its own server, and gives it back
+    class Two(_CueArgs):
+        cue_min_lines = 0
+        servers = ["u0", "u1"]
+        reply_tokens = 7
+        budgets = [SS.Budget(1000), SS.Budget(1000)]
+    seen = []
+    state = {"sid": "s", "system": "S", "observation": "U", "instruction": ""}
+    inner, calls = _server([("Thin.", [10], "stop"), ("<action>A(1)</action>", [50], "stop")] * 3)
+
+    def post_to(url, path, body, timeout):
+        if path == "/completions":
+            seen.append((Two.budgets[0].used, Two.budgets[1].used))
+        return inner(url, path, body, timeout)
+    recs = SS.draw_state(state, [0, 1, 2], 1, Two, None, post_to)          # j = 1: the second server
+    assert [r["sample"] for r in recs] == [0, 1, 2] and not any(r.get("error") for r in recs)
+    assert set(seen) == {(0, 3 + 3 * 7)}                                   # 3 prompt tokens + 3 replies of 7
+    assert (Two.budgets[0].used, Two.budgets[1].used) == (0, 0)
+
+    # an error in a reply still gives the budget back; without a rendered prompt nothing is taken
+    def dead(url, path, body, timeout):
+        raise OSError("gone")
+    recs = SS.draw_state(state, [0], 1, Two, None, dead)
+    assert recs[0]["error"] and (Two.budgets[0].used, Two.budgets[1].used) == (0, 0)
