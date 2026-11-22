@@ -525,3 +525,125 @@ def test_kv_budget_limits_the_states_in_flight_on_a_server():
         raise OSError("gone")
     recs = SS.draw_state(state, [0], 1, Two, None, dead)
     assert recs[0]["error"] and (Two.budgets[0].used, Two.budgets[1].used) == (0, 0)
+
+
+# ---------------------------------------------------------------- open rules (open_rules.py, open_states.py, open_replay.py)
+OR = load("open_rules")
+
+
+def test_open_rule_texts_are_the_harness_texts():
+    src = open(os.path.join(os.path.dirname(HERE), "rl", "harness_v3r", "dataxp_policy_eval_v3r.py"), encoding="utf-8").read()
+    ns = {}
+    for name in ("PHOTONICS_RULE_OLD", "PHOTONICS_RULE_NEW", "GRID2OP_RULE"):
+        start = src.index(name + " = ")
+        end = src.index("\n\n", start)
+        exec(src[start:end], ns)                                                  # noqa: S102
+        assert ns[name] == getattr(OR, name), name
+
+
+class _Dom:
+    """Stand-in domain: a state is {"x": int, "cell": {...}}; a move {"d": int} adds d; d == 0 is refused; the strict
+    apply also refuses d > 5 (a 'fabrication rule'); x >= 100 ends the episode (a 'blackout')."""
+    def clone(self, st):
+        return {"x": st["x"], "cell": dict(st["cell"])}
+
+    def _apply_unchecked(self, st, mv):
+        if mv["d"] == 0:
+            raise ValueError("changes nothing")
+        st["x"] += mv["d"]
+        if st["x"] >= 100:
+            st["cell"] = {"done": True, "reason": "power flow diverged"}
+
+    def apply(self, st, mv):
+        if mv["d"] > 5:
+            raise ValueError("breaks the rule")
+        self._apply_unchecked(st, mv)
+
+    def format_move(self, mv):
+        return "ADD(%d)" % mv["d"]
+
+    def load(self, spec):
+        return {"x": spec["x0"], "cell": {"done": False}}
+
+
+def test_open_rules_apply():
+    d = _Dom()
+    st = {"x": 0, "cell": {"done": False}}
+    strict = lambda dd, s, m: OR.try_apply_open(dd, "other", s, m, None)          # noqa: E731
+    assert strict(d, st, {"d": 7})[0] is None and "breaks the rule" in strict(d, st, {"d": 7})[2]["err"]
+    child, mv, info = OR.try_apply_open(d, "photonics", st, {"d": 7}, None)        # photonics: applied
+    assert child["x"] == 7 and st["x"] == 0 and info["err"] is None
+    big = {"x": 98, "cell": {"done": False}}
+    child, mv, info = OR.try_apply_open(d, "grid2op", big, {"d": 3}, None)         # the episode would end: refused
+    assert child is None and "would end the episode (power flow diverged)" in info["err"] and big["x"] == 98
+    assert OR.try_apply_open(d, "photonics", st, {"d": 0}, None)[0] is None        # changes nothing: still refused
+
+    class SP:
+        is_set_param = True
+    assert OR.try_apply_open(d, "grid2", st, SP(), lambda *a: "strict path") == "strict path"
+    applied = []
+    st2 = OR.rebuild_open(d, "photonics", {"x0": 1}, [{"d": 9}, {"d": 2}], lambda dd, s, a: applied.append(a), lambda a: a)
+    assert st2["x"] == 12 and applied == []
+    OR.rebuild_open(d, "grid2op", {"x0": 1}, [{"d": 2}], lambda dd, s, a: applied.append(a), lambda a: a)
+    assert applied == [{"d": 2}]
+
+
+def test_open_prompt():
+    s, u = OR.open_prompt("photonics", "sys", "rule. " + OR.PHOTONICS_RULE_OLD + " more")
+    assert u == "rule. " + OR.PHOTONICS_RULE_NEW + " more" and s == "sys"
+    with pytest.raises(ValueError):
+        OR.open_prompt("photonics", "sys", "no rule here")
+    assert OR.open_prompt("grid2op", "s", "u") == ("s", "u" + OR.GRID2OP_RULE)
+    with pytest.raises(ValueError):
+        OR.open_prompt("grid2op", "s", "u" + OR.GRID2OP_RULE)
+    assert OR.open_prompt("circuit2", "s", "u") == ("s", "u")
+
+
+def test_open_states_from_recorded_prompts(tmp_path):
+    OS = load("open_states")
+    spec = {"problem_id": "p1", "x": 1}
+    turns = [{"t": 0, "system": "S", "user": "U0", "binding": "b", "fail": None, "action": {"verb": "A", "args": {}}, "phi_after": -5.0},
+             {"t": 1, "system": "S", "user": "U1", "fail": "illegal:A would end the episode (x)", "action": {"verb": "B", "args": {}},
+              "phi_after": -5.0},
+             {"t": 2, "system": "S", "user": "U1\n\nREFUSED MOVES ...would end the episode...", "reject_note": 1, "fail": None,
+              "action": {"verb": "C", "args": {}}, "phi_after": -1.0},
+             {"t": 3, "system": "S", "user": "U3\n\nFABRICATION: the current design breaks", "fail": None, "action": {"verb": "D", "args": {}},
+              "phi_after": 0.0}]
+    rec = {"key": "m/r1/p1", "variant": "photonics", "episode": {"phi_start": -9.0, "turns": turns, "native": True, "feasible@20": True}}
+    ep = tmp_path / "e.episodes.jsonl"
+    ep.write_text(json.dumps(rec) + "\n" + json.dumps(rec) + "\n")
+    req = {"harness_argv": ["--code", "c", "--open-rules", "--record-prompts"], "env": {}, "episodes": [{"key": "m/r1/p1", "spec": spec}]}
+    (tmp_path / "e.episodes.jsonl.request.json").write_text(json.dumps(req))
+    out = tmp_path / "states.jsonl"
+    assert OS.main(["--episodes", str(ep), "--out", str(out)]) == 0
+    rows = [json.loads(x) for x in open(out)]
+    assert [r["turn"] for r in rows] == [0, 1, 2, 3]                                  # the second copy adds nothing
+    assert [len(r["history"]) for r in rows] == [0, 1, 1, 2] and rows[3]["history"][1] == {"verb": "C", "args": {}}
+    assert [r["phi_before"] for r in rows] == [-9.0, -5.0, -5.0, -1.0]
+    assert rows[1]["sid"] != rows[2]["sid"] and rows[1]["sid"].split("~")[0] == rows[2]["sid"].split("~")[0]
+    assert [r["own_action"] is not None for r in rows] == [True, False, True, True]
+    assert rows[2]["note_refused"] == 1 and rows[2]["note_blackout"] and rows[3]["note_fabrication"] and all(r["open_rules"] for r in rows)
+    assert rows[1]["observation"] == "U1" and rows[1]["instruction"] == ""
+    bad = dict(req, harness_argv=["--code", "c"])
+    (tmp_path / "e.episodes.jsonl.request.json").write_text(json.dumps(bad))
+    with pytest.raises(SystemExit):
+        OS.main(["--episodes", str(ep), "--out", str(out)])
+
+
+def test_open_replay(tmp_path):
+    RP = load("open_replay")
+    rows = [{"domain": "photonics", "sid": "a", "messages": [{"role": "system", "content": "s"},
+                                                            {"role": "user", "content": "x " + OR.PHOTONICS_RULE_OLD},
+                                                            {"role": "assistant", "content": "<action>A()</action>"}]},
+            {"domain": "grid2op", "sid": "b", "messages": [{"role": "system", "content": "s"}, {"role": "user", "content": "u"},
+                                                          {"role": "assistant", "content": "c"}]},
+            {"domain": "seir2", "sid": "c", "messages": [{"role": "system", "content": "s"}, {"role": "user", "content": "u"},
+                                                        {"role": "assistant", "content": "c"}]}]
+    src = tmp_path / "rep.jsonl"
+    src.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    out = tmp_path / "out.jsonl"
+    assert RP.main(["--in", str(src), "--out", str(out)]) == 0
+    got = [json.loads(x) for x in open(out)]
+    assert got[0]["messages"][1]["content"] == "x " + OR.PHOTONICS_RULE_NEW and got[0]["prompt_rules"] == "open"
+    assert got[1]["messages"][1]["content"] == "u" + OR.GRID2OP_RULE
+    assert got[2] == rows[2] and [g["messages"][2] for g in got] == [r["messages"][2] for r in rows]

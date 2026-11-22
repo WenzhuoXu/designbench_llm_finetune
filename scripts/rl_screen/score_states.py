@@ -19,6 +19,9 @@ with what the reply said (refused | worse | better) and what the simulator retur
     <sim python> score_states.py --code <dataxp code dir> --states states.jsonl --samples samples.jsonl \\
         --out scored.jsonl [--workers 32]
 Resumable: states already in --out are skipped.
+
+A state written by open_states.py ("open_rules": true) is rebuilt and every move applied under the open rules of
+dataxp_policy_eval_v3r.py --open-rules (open_rules.py), the legal-move enumeration of pct included.
 """
 import os
 os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -43,19 +46,36 @@ def score_state(job):
     t0 = time.time()
     sid, pid = row["sid"], row["problem_id"]
     out = []
+    # a state of an open-rules round (open_states.py) is rebuilt and its moves applied under the open rules
+    # (open_rules.py): photonics without the fabrication refusal, a grid2op move that ends the episode refused
+    opened = bool(row.get("open_rules"))
+    tap = try_apply
     try:
         d = get_domain(row["variant"])
-        st = rebuild_state(d, row["spec"], row["history"])
+        if opened:
+            from dataxp.domain import apply_action
+            from open_rules import rebuild_open, try_apply_open
+            st = rebuild_open(d, row["variant"], row["spec"], row["history"], apply_action, Move.from_dict)
+
+            def tap(dd, s, m):
+                return try_apply_open(dd, row["variant"], s, m, try_apply)
+        else:
+            st = rebuild_state(d, row["spec"], row["history"])
         ev = evaluator(d, row["spec"])
         base = ev.score(st, seed0=stable_seed(pid, "scr", "state"))
         phi0 = float(base.mean)
         cand = []
         for m in d.legal_moves(st, legal_rng(pid, row["k"])):
-            ch = d.clone(st)
-            try:
-                d.apply(ch, m)
-            except Exception:                                # noqa: BLE001
-                continue
+            if opened:
+                ch = tap(d, st, m)[0]
+                if ch is None:
+                    continue
+            else:
+                ch = d.clone(st)
+                try:
+                    d.apply(ch, m)
+                except Exception:                            # noqa: BLE001
+                    continue
             cand.append(float(ev.score(ch, seed0=move_seed(pid, d, m)).mean))
         cand = np.array(cand, float)
         own = Move.from_dict(row["own_action"]) if row.get("own_action") else None
@@ -71,7 +91,7 @@ def score_state(job):
             return {"parsed": False}
         key = d.format_move(mv)
         if key not in seen:
-            child, applied, info = try_apply(d, st, mv)
+            child, applied, info = tap(d, st, mv)
             if child is None:
                 seen[key] = {"truth": "refused", "phi": None, "noop": False, "err": info["err"]}
             else:
@@ -107,7 +127,7 @@ def score_state(job):
         rec["pick_text"] = d.format_move(mv)
         for c in rec.get("forecasts") or []:                 # the candidate the reply went on to make
             c["is_pick"] = bool(c.get("parsed") and c["text"] == rec["pick_text"])
-        child, applied, info = try_apply(d, st, mv)
+        child, applied, info = tap(d, st, mv)
         if child is None:
             rec["reason"] = info["err"]
             out.append(rec)
