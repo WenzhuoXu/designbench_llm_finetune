@@ -602,7 +602,8 @@ def test_open_prompt():
 def test_open_states_from_recorded_prompts(tmp_path):
     OS = load("open_states")
     spec = {"problem_id": "p1", "x": 1}
-    turns = [{"t": 0, "system": "S", "user": "U0", "binding": "b", "fail": None, "action": {"verb": "A", "args": {}}, "phi_after": -5.0},
+    turns = [{"t": 0, "system": "S", "user": "U0" + OR.GRID2OP_RULE, "binding": "b", "fail": None, "action": {"verb": "A", "args": {}},
+              "phi_after": -5.0},
              {"t": 1, "system": "S", "user": "U1", "fail": "illegal:A would end the episode (x)", "action": {"verb": "B", "args": {}},
               "phi_after": -5.0},
              {"t": 2, "system": "S", "user": "U1\n\nREFUSED MOVES ...would end the episode...", "reject_note": 1, "fail": None,
@@ -623,6 +624,7 @@ def test_open_states_from_recorded_prompts(tmp_path):
     assert rows[1]["sid"] != rows[2]["sid"] and rows[1]["sid"].split("~")[0] == rows[2]["sid"].split("~")[0]
     assert [r["own_action"] is not None for r in rows] == [True, False, True, True]
     assert rows[2]["note_refused"] == 1 and rows[2]["note_blackout"] and rows[3]["note_fabrication"] and all(r["open_rules"] for r in rows)
+    assert not rows[0]["note_blackout"]                                               # the rule line is not a note
     assert rows[1]["observation"] == "U1" and rows[1]["instruction"] == ""
     bad = dict(req, harness_argv=["--code", "c"])
     (tmp_path / "e.episodes.jsonl.request.json").write_text(json.dumps(bad))

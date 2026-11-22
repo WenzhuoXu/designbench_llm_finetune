@@ -38,6 +38,7 @@ def episode_states(rec: dict, spec: dict, spelling) -> list:
             raise ValueError("%s: turn %s has no recorded prompt (collect with --record-prompts)" % (rec["key"], t.get("t")))
         applied = t.get("fail") is None and t.get("action") is not None
         user = t["user"]
+        note = user.split("\n\nREFUSED MOVES", 1)[1] if "\n\nREFUSED MOVES" in user else ""
         rows.append({
             "sid": open_sid(rec["variant"], spec["problem_id"], moves, t["system"], user),
             "variant": rec["variant"], "problem_id": spec["problem_id"], "k": len(moves), "turn": int(t["t"]), "split": "train",
@@ -48,7 +49,8 @@ def episode_states(rec: dict, spec: dict, spelling) -> list:
             "source_refused": int(str(t.get("fail") or "").startswith("illegal")),
             "own_action": t["action"] if applied else None,
             "open_rules": True, "note_refused": int(t.get("reject_note") or 0),
-            "note_fabrication": "\nFABRICATION: " in user, "note_blackout": "would end the episode" in user,
+            # (the grid2op rule line says "would end the episode" too: the note is read on its own)
+            "note_fabrication": "\nFABRICATION: " in user, "note_blackout": "would end the episode" in note,
         })
         if applied:
             moves.append(t["action"])
