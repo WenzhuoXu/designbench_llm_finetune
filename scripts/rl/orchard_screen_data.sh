@@ -121,7 +121,7 @@ mkdir -p "$OUT/logs" "$OUT/collect" "$TMPDIR" "$C/xdg"
 cd "$REPO"
 echo "=== $(date '+%F %T %Z') host=$(hostname) job=${SLURM_JOB_ID:-none} restarts=${SLURM_RESTART_COUNT:-0}"
 echo "=== repo=$REPO label=$LABEL adapter=$ADAPTER rollouts=$ROLLOUTS out=$OUT k=$K collect='$COLLECT_VARIANTS' first='$FIRST' cpu_workers=$CPU_WORKERS"
-echo "=== states_file=${STATES_FILE:-none} open_episodes=${OPEN_EPISODES:-none}sample_instruction=${SAMPLE_INSTRUCTION:-none} prompt_tag=${PROMPT_TAG:-none} rows=$ROWS sample_workers=${SAMPLE_WORKERS:-40} cue=${SAMPLE_CUE:-none} kv_budget=${SAMPLE_KV_BUDGET:-none} stop_after=${STOP_AFTER:-none} gate=${GATE_STATES:-none}"
+echo "=== states_file=${STATES_FILE:-none} open_episodes=${OPEN_EPISODES:-none} sample_instruction=${SAMPLE_INSTRUCTION:-none} prompt_tag=${PROMPT_TAG:-none} rows=$ROWS sample_workers=${SAMPLE_WORKERS:-40} cue=${SAMPLE_CUE:-none} kv_budget=${SAMPLE_KV_BUDGET:-none} stop_after=${STOP_AFTER:-none} gate=${GATE_STATES:-none}"
 
 # one thread per simulator, as the rollouts ran
 sim() { OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH="$REPO" "$SIM_PY" "$@"; }
