@@ -10,3 +10,20 @@ photonics fabrication-rule moves applied, design invalid until repaired). Copies
 - `sample_open.sh` (drc GPU 4): the same steps for drc's share (vLLM server, open_states, sample_states with a KV
   budget, `scripts/rl_screen/score_loop.sh` alongside, last scoring pass, build_rows).
 - `check_lex.py`: the photonics ranking fix (score_states.py, commit ca66454) checked on real benchmark states.
+
+Sampling shares (2026-11-23): fixed, disjoint shares instead of two machines meeting in the middle.
+
+- `regrid.sh` (Orchard login node): drc's 4,440 grid2op states split at file index D=2220; the Orchard advanced job
+  (OUT grid2op_drc_rev) restarted with its states file cut to [D, 4440) and a KV budget of 330,000 per server (200,000
+  left 60% of the cache empty).
+- `drc_stop_at.sh` + `drc_cover_upto.py` (drc, setsid): stop drc's sampler once every state below D has 8 replies, cut
+  drc's states file to its share, rerun `sample_open.sh` for the last scoring pass and the rows.
+- `split_g2e.py` + `resplit_g2e.sh` (Orchard login node): the general-GPU job on Orchard's own grid2op + engibench
+  states restarted with SAMPLE_LIMIT=1200 (its next 1,200 states); the other 2,257 written to a states file for a
+  second job (preempt, 2 GPUs).
+- `after_g2r.sh` (Orchard login node): when the grid2op share job ends, that second job moves to the advanced GPUs.
+- `merge_open_rows.py`: all shares' gain rows in one file, one row per state (first file wins), each row checked
+  (message structure, one action line, rationale present and at most 1,000 words, the family's served system prompt
+  as in the replay rows, tier).
+- `photonics_rows_kind.py`: what the picked photonics moves did (rule-breaking pixels before/after); `row_shape.py`:
+  the message layout of a rows file.
