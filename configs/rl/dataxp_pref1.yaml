@@ -1,0 +1,48 @@
+# Preference round 1 from the dx38mtR adapter (llm_finetune/rl_dataxp/dpo_rows.py), 2026-11-23.
+#
+# Pairs: per state of the open-rules collection (photonics, grid2op, engibench), the reply the open1 round trained
+# on (applied, raises the potential, highest percentile) against one of the state's own replies the simulator
+# refused or that did not raise the potential (scripts/rl_screen/build_pairs.py, merge_pairs.py). Replay rows (the
+# rows that trained dx38mtR, as mixed into open1) at 1 per 4 pairs keep the other families' supervised anchor.
+#
+# Why: open1 (supervised on 13,166 of the policy's own best-of-8 replies) changed the moves (turn-0 move agreement
+# with dx38 0.16 against 0.40 between two dx38 runs) without making them better (feasible@20 +0.004, se 0.019, on
+# the trained families); the move line was 1.7% of the supervised text and the loss stayed at 0.21 all epoch. The
+# pair loss puts the update on what separates a reply the simulator bore out from one it did not.
+#
+# Loss per pair: -log sigmoid(beta * [(log pi(c) - log ref(c)) - (log pi(r) - log ref(r))]) + alpha * nll(c), ref =
+# dx38mtR frozen (grpo.kl_reference = init). beta 0.1 (the DPO default); alpha 1 (Pang et al. 2024); lr 3e-5 (a
+# third of the supervised rounds' 1e-4: the pair gradient sums over the completion's tokens); LoRA r64 / alpha 128 as dx38.
+#
+#   sbatch --export=ALL,RUN_DIR=/project/community/wxu2/rl/runs/<name>,CONFIG=configs/rl/dataxp_pref1.yaml,\
+#          PAIRS=<pairs_train.jsonl>,REPLAY=<replay_pool.jsonl>,DEV_PAIRS=<pairs_dev.jsonl>,DEV=<dev rows> \
+#          slurm/orchard_pref_rows.sbatch
+seed: 0
+
+model:
+  path: /project/community/wxu2/rl/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  gradient_checkpointing: true
+
+policy:
+  init_adapter: /project/community/wxu2/rl/inputs/dx38mtR_final
+  require_init_adapter: true
+
+pref:
+  beta: 0.1
+  alpha: 1.0
+  replay_per_pair: 0.25
+  replay_weight: 1.0
+  epochs: 1.0
+  items_per_step: 64
+  lr: 3.0e-5
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+  lora_dropout: 0.0
+  temperature: 1.0
+  seed: 42
+  save_every: 5
+  dev_every: 20
+  keep_adapter_every: 40
