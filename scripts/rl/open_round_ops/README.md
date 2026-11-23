@@ -32,3 +32,6 @@ Sampling shares (2026-11-23): fixed, disjoint shares instead of two machines mee
   (weak three families on general, the other eight on advanced, both afterok on the training).
 - `photonics_rows_kind.py`: what the picked photonics moves did (rule-breaking pixels before/after); `row_shape.py`:
   the message layout of a rows file.
+- `drc_eval_open.sh` (drc GPU 4, setsid): a benchmark pair under the open rules with the Orchard eval settings (same
+  problem files, harness and instruction by sha1); used for a third pair of dx38 runs on the weak families during training.
+- `submit_dx38_weak_b.sh`: the second pair of dx38 runs on the weak families (Orchard general, during training).
