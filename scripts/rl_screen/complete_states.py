@@ -21,20 +21,30 @@ except FileNotFoundError:
     pass
 per = collections.defaultdict(dict)
 n_lines = n_bad = 0
-with open(samples, "rb") as f:
-    for raw in f:
-        n_lines += 1
-        if not raw.endswith(b"\n"):
-            n_bad += 1
-            continue
-        try:
-            o = json.loads(raw)
-        except ValueError:
-            n_bad += 1
-            continue
-        if o.get("error") or o["sid"] in done:
-            continue
-        per[o["sid"]][int(o["sample"])] = raw
+
+
+def raw_lines(path):
+    """The file's lines as bytes; none while the sampler has not written the file yet."""
+    try:
+        with open(path, "rb") as f:
+            yield from f
+    except FileNotFoundError:
+        return
+
+
+for raw in raw_lines(samples):
+    n_lines += 1
+    if not raw.endswith(b"\n"):
+        n_bad += 1
+        continue
+    try:
+        o = json.loads(raw)
+    except ValueError:
+        n_bad += 1
+        continue
+    if o.get("error") or o["sid"] in done:
+        continue
+    per[o["sid"]][int(o["sample"])] = raw
 full = [sid for sid, d in per.items() if sorted(d) == list(range(k))]
 with open(out + ".tmp", "wb") as fo:
     for sid in full:
