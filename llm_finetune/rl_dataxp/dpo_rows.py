@@ -277,6 +277,9 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
     for k in ("items_per_step", "seed", "save_every", "dev_every", "keep_adapter_every"):
         p[k] = int(p[k])
     p["betas"] = [float(b) for b in p["betas"]]
+    if p["lora_dropout"] > 0:
+        # set_lora_dropout would reach the frozen 'ref' adapter too, and the two passes of a rejected reply would differ
+        raise SystemExit("pref.lora_dropout must be 0 (got %g)" % p["lora_dropout"])
     cfg["pref"] = p
     run_dir = cfg["run_dir"]
     for key, val in (("run_dir", run_dir), ("model.path", cfg["model"]["path"]), ("pref.pairs_file", p["pairs_file"]),
@@ -296,6 +299,8 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
         pairs = read_rows(p["pairs_file"])
         replay = read_rows(p["replay_file"]) if p["replay_file"] else []
         dev_pairs = read_rows(p["dev_pairs_file"]) if p["dev_pairs_file"] else []
+        if not all(is_pair(x) for x in dev_pairs):
+            raise SystemExit("pref.dev_pairs_file has lines that are not pairs")
         dev_rows = read_rows(p["dev_file"]) if p["dev_file"] else []
         h = hashlib.sha1(open(p["pairs_file"], "rb").read())
         if p["replay_file"]:
