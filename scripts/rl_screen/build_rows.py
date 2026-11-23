@@ -113,15 +113,18 @@ def pick(scored: list, replies: dict, min_pct: float, max_words: int, require_ga
         if w is not None:
             why[w] += 1
             continue
-        cand = (int(forecast and forecasts.has_negative(x.get("forecasts"))), float(x["pct"]), -int(x["sample"]), x, reason)
-        if best is None or cand[:3] > best[:3]:
+        # open_rank (photonics under the open rules, score_states.py): fewer rule-breaking pixels, then Phi; it breaks
+        # ties of the percentile (the same for every reply of a state elsewhere)
+        cand = (int(forecast and forecasts.has_negative(x.get("forecasts"))), float(x["pct"]), tuple(x.get("open_rank") or ()),
+                -int(x["sample"]), x, reason)
+        if best is None or cand[:4] > best[:4]:
             best = cand
     if best is None:
         top = why.most_common(1)[0][0] if why else "no_reply"
         return None, None, "no_eligible_reply (mostly %s)" % top
     if best[1] < min_pct:
         return None, None, "below_min_pct"
-    return best[3], best[4], None
+    return best[4], best[5], None
 
 
 def reply_fault(x: dict, reason: str):

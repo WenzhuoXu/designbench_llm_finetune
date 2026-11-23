@@ -221,9 +221,10 @@ def draw_state(state: dict, missing: list[int], j: int, a, post_fn=post, post_to
     """The missing replies of one state: the first alone (it fills the prefix cache), then the rest
     at once. Cued sampling renders the state's prompt once for all of them (if that fails, every
     reply renders it again in its own tries). With --kv-budget the state first waits for room on its
-    server: --prompt-weight times its prompt plus --reply-tokens for each reply."""
+    server: --prompt-weight times its prompt plus --reply-tokens for each reply (plain sampling renders
+    the prompt only to count its tokens; its replies are chat requests as before)."""
     ids = None
-    if getattr(a, "cue", None):
+    if getattr(a, "cue", None) or getattr(a, "budgets", None):
         try:
             ids = render_prompt(state, a, a.servers[j % len(a.servers)], post_to_fn)
         except Exception:                                    # noqa: BLE001
@@ -322,7 +323,7 @@ def main(argv=None) -> int:
     ap.add_argument("--cue-min-lines", type=int, default=2)
     ap.add_argument("--cue-max", type=int, default=3, help="cues per reply at most")
     ap.add_argument("--kv-budget", type=int, default=0,
-                    help="with --cue: KV-cache tokens the states in flight on one server may need (0: only --workers limits them)")
+                    help="KV-cache tokens the states in flight on one server may need (0: only --workers limits them)")
     ap.add_argument("--reply-tokens", type=int, default=1700, help="tokens counted for one reply under --kv-budget")
     ap.add_argument("--prompt-weight", type=float, default=1.0,
                     help="under --kv-budget a state counts this many times its prompt (measured on the servers: about 1.8 "

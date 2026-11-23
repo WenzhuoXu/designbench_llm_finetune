@@ -71,6 +71,27 @@ def try_apply_open(domain, variant: str, st, move, try_apply):
     return child, move, info
 
 
+def bad_pixels(variant: str, st) -> int:
+    """Pixels of `st` that break photonics' minimum-feature rule (min_feature_violations); 0 in other families."""
+    if variant != "photonics":
+        return 0
+    from dataxp.domains.photonics import _drc_count
+    return int(_drc_count(st["fx"], st["pat"]))
+
+
+def open_rank(bad: int, phi: float) -> tuple:
+    """How a design ranks under the open rules in photonics: fewer rule-breaking pixels first, then Phi. Phi alone
+    cannot rank it: the potential gives every design outside the validity envelope a flat objective of 10, so on a
+    problem whose valid objective is above 10 breaking the rule would raise Phi and a repair would lower it."""
+    return (-int(bad), float(phi))
+
+
+def open_gain(bad: int, phi: float, bad0: int, phi0: float, tol: float = 1e-9) -> bool:
+    """A move improves the design under the open rules (photonics): fewer rule-breaking pixels, or as many and a
+    higher Phi."""
+    return bad < bad0 or (bad == bad0 and phi > phi0 + tol)
+
+
 def rebuild_open(domain, variant: str, spec: dict, history: list, apply_action, move_from_dict):
     """The state after the applied moves `history` (serialised) under the open rules. Only photonics differs from
     dataxp.ownrows.common.rebuild_state: a history may hold moves that break the fabrication rule."""

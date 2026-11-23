@@ -80,6 +80,8 @@ def main(argv=None) -> int:
             hargv = req["harness_argv"]
             if "--open-rules" not in hargv or "--record-prompts" not in hargv:
                 raise SystemExit("%s was not collected with --open-rules --record-prompts: %s" % (path, hargv))
+            if "--no-think" in hargv:                        # sample_states.py samples with thinking on
+                raise SystemExit("%s was collected with --no-think: %s" % (path, hargv))
             spelling = (req.get("env") or {}).get("DATAXP_SPELLING") or os.environ.get("DATAXP_SPELLING")
             specs = {e["key"]: e["spec"] for e in req["episodes"]}
             for line in open(path, encoding="utf-8"):

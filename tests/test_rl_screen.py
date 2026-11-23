@@ -588,6 +588,25 @@ def test_open_rules_apply():
     assert applied == [{"d": 2}]
 
 
+def test_open_rank_puts_the_fabrication_rule_first():
+    assert OR.bad_pixels("grid2op", {"anything": 1}) == 0
+    # a move that breaks the rule at a clean design is not a gain, whatever Phi does (Phi is capped for invalid designs)
+    assert not OR.open_gain(bad=3, phi=-19.99, bad0=0, phi0=-22.77)
+    assert OR.open_gain(bad=0, phi=-22.77, bad0=3, phi0=-19.99)                     # a full repair is
+    assert OR.open_gain(bad=1, phi=-30.0, bad0=3, phi0=-19.99)                      # a partial repair is
+    assert OR.open_gain(bad=2, phi=-19.0, bad0=2, phi0=-19.99)                      # as many pixels, higher Phi
+    assert not OR.open_gain(bad=2, phi=-19.99, bad0=2, phi0=-19.99)
+    assert OR.open_rank(0, -30.0) > OR.open_rank(1, -1.0) > OR.open_rank(1, -2.0)
+
+
+def test_pick_breaks_percentile_ties_by_open_rank():
+    ans = {("s", k): ("why %d" % k, "h%d" % k) for k in range(3)}
+    sc = [dict(_scored(0, 100), open_rank=[-2, -10.0]), dict(_scored(1, 100), open_rank=[0, -25.0]),
+          dict(_scored(2, 100), open_rank=[-1, -5.0])]
+    assert BR.pick(sc, ans, 0.0, 0, True)[0]["sample"] == 1                           # the full repair
+    assert BR.pick([_scored(0, 80), _scored(1, 80)], ans, 0.0, 0, True)[0]["sample"] == 0   # elsewhere as before
+
+
 def test_open_prompt():
     s, u = OR.open_prompt("photonics", "sys", "rule. " + OR.PHOTONICS_RULE_OLD + " more")
     assert u == "rule. " + OR.PHOTONICS_RULE_NEW + " more" and s == "sys"

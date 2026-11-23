@@ -21,7 +21,12 @@ with what the reply said (refused | worse | better) and what the simulator retur
 Resumable: states already in --out are skipped.
 
 A state written by open_states.py ("open_rules": true) is rebuilt and every move applied under the open rules of
-dataxp_policy_eval_v3r.py --open-rules (open_rules.py), the legal-move enumeration of pct included.
+dataxp_policy_eval_v3r.py --open-rules (open_rules.py), the legal-move enumeration of pct included. In photonics
+such a design can break the fabrication rule, and the potential gives every such design the same objective (10), so
+gain and pct go by open_rules.open_rank there: fewer rule-breaking pixels first, then the potential (a move that
+breaks the rule at a clean design is never a gain; a repair is). Those replies also carry bad_after and open_rank, the
+state line bad_before; pct_basis "state" marks a design no legal (fabricable) candidate exists for, where the reply
+is ranked against the design as it stands.
 """
 import os
 os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -49,12 +54,15 @@ def score_state(job):
     # a state of an open-rules round (open_states.py) is rebuilt and its moves applied under the open rules
     # (open_rules.py): photonics without the fabrication refusal, a grid2op move that ends the episode refused
     opened = bool(row.get("open_rules"))
+    # photonics under the open rules: a design can break the fabrication rule, and Phi alone does not rank such a
+    # design (open_rules.open_rank): gain and percentile go by (fewer rule-breaking pixels, then Phi)
+    lex = opened and row["variant"] == "photonics"
     tap = try_apply
     try:
         d = get_domain(row["variant"])
         if opened:
             from dataxp.domain import apply_action
-            from open_rules import rebuild_open, try_apply_open
+            from open_rules import bad_pixels, open_gain, open_rank, rebuild_open, try_apply_open
             st = rebuild_open(d, row["variant"], row["spec"], row["history"], apply_action, Move.from_dict)
 
             def tap(dd, s, m):
@@ -64,7 +72,8 @@ def score_state(job):
         ev = evaluator(d, row["spec"])
         base = ev.score(st, seed0=stable_seed(pid, "scr", "state"))
         phi0 = float(base.mean)
-        cand = []
+        bad0 = bad_pixels(row["variant"], st) if lex else 0
+        cand, cand_rank = [], []
         for m in d.legal_moves(st, legal_rng(pid, row["k"])):
             if opened:
                 ch = tap(d, st, m)[0]
@@ -77,6 +86,8 @@ def score_state(job):
                 except Exception:                            # noqa: BLE001
                     continue
             cand.append(float(ev.score(ch, seed0=move_seed(pid, d, m)).mean))
+            if lex:
+                cand_rank.append(open_rank(bad_pixels(row["variant"], ch), cand[-1]))
         cand = np.array(cand, float)
         own = Move.from_dict(row["own_action"]) if row.get("own_action") else None
     except Exception as e:                                   # noqa: BLE001
@@ -138,12 +149,25 @@ def score_state(job):
                    pct=percentile(cand, phi), gain=bool(phi > phi0 + 1e-9), feasible_after=bool(sc.feasible),
                    clamped=bool(info["clamped"]), noop=bool(info["noop"]),
                    same_as_own=bool(own is not None and applied.matches(own, rel=1e-2)))
+        if lex:
+            bad = bad_pixels(row["variant"], child)
+            r = open_rank(bad, phi)
+            # the legal candidates are fabricable designs only (photonics.legal_moves); at a design that no single
+            # move repairs there are none, and the reply is then ranked against the design as it stands
+            ref = cand_rank or [open_rank(bad0, phi0)]
+            rec.update(bad_after=bad, open_rank=list(r), gain=bool(open_gain(bad, phi, bad0, phi0)),
+                       pct=float(sum(c <= r for c in ref)) * 100.0 / len(ref),
+                       pct_basis="candidates" if cand_rank else "state")
         out.append(rec)
-    out.append({"sid": sid, "variant": row["variant"], "state": True, "n_candidates": int(cand.size),
-                "phi_before": phi0, "phi_recorded": row.get("phi_before"), "feasible_before": bool(base.feasible),
-                "cand_best": float(cand.max()) if cand.size else None,
-                "cand_gain_share": float((cand > phi0 + 1e-9).mean()) if cand.size else None,
-                "t": round(time.time() - t0, 2)})
+    srec = {"sid": sid, "variant": row["variant"], "state": True, "n_candidates": int(cand.size),
+            "phi_before": phi0, "phi_recorded": row.get("phi_before"), "feasible_before": bool(base.feasible),
+            "cand_best": float(cand.max()) if cand.size else None,
+            "cand_gain_share": float((cand > phi0 + 1e-9).mean()) if cand.size else None,
+            "t": round(time.time() - t0, 2)}
+    if lex:
+        srec.update(bad_before=bad0, cand_gain_share=(float(np.mean([open_gain(-c[0], c[1], bad0, phi0) for c in cand_rank]))
+                                                      if cand_rank else None))
+    out.append(srec)
     return out
 
 

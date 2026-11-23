@@ -76,7 +76,7 @@ CPU_WORKERS=${CPU_WORKERS:-$(( ${SLURM_CPUS_PER_TASK:-32} > 16 ? ${SLURM_CPUS_PE
 S="$REPO/scripts/rl_screen"
 for f in "$VENV/bin/vllm" "$SIM_PY" "$MODEL_PATH/config.json" "$H/scripts/dataxp_policy_eval_v3.py" \
          "$H/scripts/dataxp_policy_eval_v3n.py" "$H/configs/task_instruction_V2.txt" $EXCLUDE \
-         "$ADAPTER/adapter_config.json" "$S/policy_states.py" "$S/forecasts.py" \
+         "$ADAPTER/adapter_config.json" "$S/policy_states.py" "$S/forecasts.py" "$S/open_rules.py" "$S/score_states.py" \
          ${STATES_FILE:+"$STATES_FILE"} ${SAMPLE_INSTRUCTION:+"$SAMPLE_INSTRUCTION"} \
          $([ -z "$STATES_FILE" ] && echo "$POOL" "$ROLLOUTS"); do
   [ -e "$f" ] || { echo "ABORT: missing $f"; exit 2; }
@@ -97,9 +97,10 @@ if [ -n "$SAMPLE_CUE" ]; then
   [ -n "$SAMPLE_INSTRUCTION" ] || { echo "ABORT: SAMPLE_CUE needs SAMPLE_INSTRUCTION"; exit 2; }
   SAMPLE_EXTRA+=(--cue "$SAMPLE_CUE")
   ROW_TAG="$ROW_TAG+cue"                 # sample_states.py tags cued replies this way
-  # states in flight limited by the KV-cache tokens they need instead of by SAMPLE_WORKERS alone
-  [ -n "${SAMPLE_KV_BUDGET:-}" ] && SAMPLE_EXTRA+=(--kv-budget "$SAMPLE_KV_BUDGET" --reply-tokens "${SAMPLE_REPLY_TOKENS:-1700}")
 fi
+# states in flight limited by the KV-cache tokens they need instead of by SAMPLE_WORKERS alone (cued or plain)
+[ -n "${SAMPLE_KV_BUDGET:-}" ] && SAMPLE_EXTRA+=(--kv-budget "$SAMPLE_KV_BUDGET" --reply-tokens "${SAMPLE_REPLY_TOKENS:-1700}" \
+                                                 --prompt-weight "${SAMPLE_PROMPT_WEIGHT:-1.0}")
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-$("$SIM_PY" -c 'import json, sys
 c = json.load(open(sys.argv[1])); t = c.get("text_config", c)
 print(t.get("max_position_embeddings") or c.get("max_position_embeddings"))' "$MODEL_PATH/config.json")}"
@@ -302,7 +303,8 @@ fi
 
 # ---- rows under the two screens
 "$SIM_PY" "$S/build_rows.py" --states "$OUT/states.jsonl" --samples "$OUT/samples.jsonl" --scored "$OUT/scored.jsonl" \
-    --out "$OUT/rows_gain.jsonl" --min-pct 0 --tier "${TIER:-scr1}_gain" > "$OUT/rows_gain.report.txt" || { echo "ABORT: rows failed"; exit 8; }
+    --out "$OUT/rows_gain.jsonl" --min-pct 0 --max-words "${MAX_WORDS:-1000}" --tier "${TIER:-scr1}_gain" \
+    > "$OUT/rows_gain.report.txt" || { echo "ABORT: rows failed"; exit 8; }
 "$SIM_PY" "$S/build_rows.py" --states "$OUT/states.jsonl" --samples "$OUT/samples.jsonl" --scored "$OUT/scored.jsonl" \
     --out "$OUT/rows_pct90.jsonl" --min-pct 90 --tier "${TIER:-scr1}_pct90" > "$OUT/rows_pct90.report.txt" || { echo "ABORT: rows failed"; exit 8; }
 cat "$OUT/rows_gain.report.txt"
