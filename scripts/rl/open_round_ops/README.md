@@ -25,5 +25,10 @@ Sampling shares (2026-11-23): fixed, disjoint shares instead of two machines mee
 - `merge_open_rows.py`: all shares' gain rows in one file, one row per state (first file wins), each row checked
   (message structure, one action line, rationale present and at most 1,000 words, the family's served system prompt
   as in the replay rows, tier).
+- `drc_tail.sh` + `drc_frontier.py`: when the general GPU frees, drc's last grid2op states [D2, 2220) go to a job on
+  it (back to front, OUT grid2op_drc_tail) and drc's stop watcher is restarted with D2.
+- `after_rows.sh` (Orchard login node; `DRY=1` merges and mixes into `open_round/dry_merge` only): merge, mix (replay
+  1 per 2 new rows, dev 1.2% of problems), training from dx38 on advanced, then the benchmark under the open rules
+  (weak three families on general, the other eight on advanced, both afterok on the training).
 - `photonics_rows_kind.py`: what the picked photonics moves did (rule-breaking pixels before/after); `row_shape.py`:
   the message layout of a rows file.
