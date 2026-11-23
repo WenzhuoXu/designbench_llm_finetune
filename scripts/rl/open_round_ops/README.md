@@ -35,3 +35,6 @@ Sampling shares (2026-11-23): fixed, disjoint shares instead of two machines mee
 - `drc_eval_open.sh` (drc GPU 4, setsid): a benchmark pair under the open rules with the Orchard eval settings (same
   problem files, harness and instruction by sha1); used for a third pair of dx38 runs on the weak families during training.
 - `submit_dx38_weak_b.sh`: the second pair of dx38 runs on the weak families (Orchard general, during training).
+- `submit_dx38_rest_b.sh`: a second pair of dx38 runs on the other eight families (held-out three + frame3d2 on
+  general, circuit2 grid2 seir2 traffic2 on preempt) during training. `pair_agree.py`: per-problem agreement of two
+  benchmark pairs (T=0 runs disagree on 21 of 60 engibench problems across four runs).
