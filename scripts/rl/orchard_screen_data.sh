@@ -29,6 +29,8 @@
 # STATES_LIMIT (episodes per rollout file), SAMPLE_LIMIT (states sampled), a short POOL.
 #
 # A forecast-checked round (scripts/rl_screen/forecasts.py) reuses the states of an earlier round:
+#   OPEN_EPISODES="<files>"      an open-rules round: the states are those of these episodes (open_states.py; collected
+#                                with dataxp_policy_eval_v3r.py --open-rules --record-prompts); otherwise as STATES_FILE
 #   STATES_FILE=<states.jsonl>   the states to sample; the states_run / collect / states stages are
 #                                skipped and ROLLOUTS, POOL are not needed
 #   SAMPLE_INSTRUCTION=<file>    a collection-only instruction put after the served prompt of every
@@ -43,6 +45,8 @@
 #                                (sample_states.py --kv-budget; 270000 on an H100 for prompts of 4-6k tokens,
 #                                210000 for grid2op's 12-18k; SAMPLE_REPLY_TOKENS, default 1700, per reply)
 #   STOP_AFTER=samples           end after the sampling stage (a job that samples a share of the states)
+#   SCORE_ALONGSIDE=<seconds>    score while the GPUs sample (scripts/rl_screen/score_loop.sh, SCORE_WORKERS
+#                                processes, default CPU_WORKERS): every <seconds>, the states with all K replies
 #   GATE_STATES=<file> GATE_MIN_ROWS=<n>   a subset of the states (lines of STATES_FILE) sampled, scored
 #                                and turned into rows first; the job stops (exit 9) before the rest is
 #                                sampled when they give fewer than n rows. Their replies are kept.
@@ -53,7 +57,9 @@ OUT="${OUT:?output dir}"
 LABEL="${LABEL:?the served name of the adapter}"
 ADAPTER="${ADAPTER:?adapter dir}"
 STATES_FILE="${STATES_FILE:-}"
-if [ -n "$STATES_FILE" ]; then ROLLOUTS="${ROLLOUTS:-}"; POOL="${POOL:-}"
+OPEN_EPISODES="${OPEN_EPISODES:-}"
+[ -n "$OPEN_EPISODES" ] && [ -n "$STATES_FILE" ] && { echo "ABORT: OPEN_EPISODES and STATES_FILE both set"; exit 2; }
+if [ -n "$STATES_FILE$OPEN_EPISODES" ]; then ROLLOUTS="${ROLLOUTS:-}"; POOL="${POOL:-}"
 else
   ROLLOUTS="${ROLLOUTS:?rollouts dir of the run whose states are used}"
   POOL="${POOL:?training problem pool, one variant + spec per line}"
@@ -69,7 +75,7 @@ H="${HARNESS:-$HOME/rl/harness}"
 C="${CACHE_DIR:-$B/rl/cache}"
 EXCLUDE="${EXCLUDE:-$HOME/rl/eval/problems_v3_native.jsonl $H/problems_v2.jsonl}"
 COLLECT_VARIANTS="${COLLECT_VARIANTS-photonics grid2op engibench}"
-[ -n "$STATES_FILE" ] && COLLECT_VARIANTS=""
+[ -n "$STATES_FILE$OPEN_EPISODES" ] && COLLECT_VARIANTS=""
 FIRST="${FIRST-photonics grid2op engibench}"
 K=${K:-8}
 CPU_WORKERS=${CPU_WORKERS:-$(( ${SLURM_CPUS_PER_TASK:-32} > 16 ? ${SLURM_CPUS_PER_TASK:-32} - 8 : 8 ))}
@@ -77,8 +83,9 @@ S="$REPO/scripts/rl_screen"
 for f in "$VENV/bin/vllm" "$SIM_PY" "$MODEL_PATH/config.json" "$H/scripts/dataxp_policy_eval_v3.py" \
          "$H/scripts/dataxp_policy_eval_v3n.py" "$H/configs/task_instruction_V2.txt" $EXCLUDE \
          "$ADAPTER/adapter_config.json" "$S/policy_states.py" "$S/forecasts.py" "$S/open_rules.py" "$S/score_states.py" \
-         ${STATES_FILE:+"$STATES_FILE"} ${SAMPLE_INSTRUCTION:+"$SAMPLE_INSTRUCTION"} \
-         $([ -z "$STATES_FILE" ] && echo "$POOL" "$ROLLOUTS"); do
+         "$S/complete_states.py" "$S/score_loop.sh" \
+         ${STATES_FILE:+"$STATES_FILE"} $OPEN_EPISODES ${SAMPLE_INSTRUCTION:+"$SAMPLE_INSTRUCTION"} \
+         $([ -z "$STATES_FILE$OPEN_EPISODES" ] && echo "$POOL" "$ROLLOUTS"); do
   [ -e "$f" ] || { echo "ABORT: missing $f"; exit 2; }
 done
 GATE_STATES="${GATE_STATES:-}"
@@ -114,7 +121,7 @@ mkdir -p "$OUT/logs" "$OUT/collect" "$TMPDIR" "$C/xdg"
 cd "$REPO"
 echo "=== $(date '+%F %T %Z') host=$(hostname) job=${SLURM_JOB_ID:-none} restarts=${SLURM_RESTART_COUNT:-0}"
 echo "=== repo=$REPO label=$LABEL adapter=$ADAPTER rollouts=$ROLLOUTS out=$OUT k=$K collect='$COLLECT_VARIANTS' first='$FIRST' cpu_workers=$CPU_WORKERS"
-echo "=== states_file=${STATES_FILE:-none} sample_instruction=${SAMPLE_INSTRUCTION:-none} prompt_tag=${PROMPT_TAG:-none} rows=$ROWS sample_workers=${SAMPLE_WORKERS:-40} cue=${SAMPLE_CUE:-none} kv_budget=${SAMPLE_KV_BUDGET:-none} stop_after=${STOP_AFTER:-none} gate=${GATE_STATES:-none}"
+echo "=== states_file=${STATES_FILE:-none} open_episodes=${OPEN_EPISODES:-none}sample_instruction=${SAMPLE_INSTRUCTION:-none} prompt_tag=${PROMPT_TAG:-none} rows=$ROWS sample_workers=${SAMPLE_WORKERS:-40} cue=${SAMPLE_CUE:-none} kv_budget=${SAMPLE_KV_BUDGET:-none} stop_after=${STOP_AFTER:-none} gate=${GATE_STATES:-none}"
 
 # one thread per simulator, as the rollouts ran
 sim() { OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH="$REPO" "$SIM_PY" "$@"; }
@@ -166,7 +173,12 @@ wait_servers() {
   echo "=== $NSERVERS vLLM server(s) ready after $(( $(date +%s) - T0 )) s"
 }
 
-if [ -n "$STATES_FILE" ] && ! stage_done states; then
+if [ -n "$OPEN_EPISODES" ] && ! stage_done states; then          # an open-rules round: states of its own episodes
+  sim "$S/open_states.py" --episodes $OPEN_EPISODES --out "$OUT/states.jsonl" --exclude-specs $EXCLUDE \
+      ${VARIANTS:+--variants $VARIANTS} 2>&1 | tee "$OUT/logs/open_states.log"
+  grep -q OPEN_STATES_DONE "$OUT/logs/open_states.log" || { echo "ABORT: open_states failed"; exit 3; }
+  mark states_run; mark states
+elif [ -n "$STATES_FILE" ] && ! stage_done states; then
   cp "$STATES_FILE" "$OUT/states.jsonl.tmp" && mv "$OUT/states.jsonl.tmp" "$OUT/states.jsonl" || { echo "ABORT: cannot copy $STATES_FILE"; exit 3; }
   echo "=== states: $(wc -l < "$OUT/states.jsonl") lines from $STATES_FILE"
   mark states_run; mark states
@@ -258,8 +270,16 @@ if [ -n "$GATE_STATES" ] && ! stage_done gate && ! stage_done samples; then
 fi
 
 # ---- K replies per state
+SCORE_PID=""
 if ! stage_done samples; then
   wait_servers
+  if [ -n "${SCORE_ALONGSIDE:-}" ] && [ "${STOP_AFTER:-}" != samples ]; then     # scoring while the GPUs sample
+    rm -f "$OUT/logs/score.stop"
+    SIM_PY="$SIM_PY" REPO="$REPO" H="$H" bash "$S/score_loop.sh" "$OUT" "$K" "$SCORE_ALONGSIDE" \
+        "${SCORE_WORKERS:-$CPU_WORKERS}" < /dev/null &
+    SCORE_PID=$!
+    echo "=== scoring alongside sampling (pid $SCORE_PID, every $SCORE_ALONGSIDE s; log logs/scored_alongside.log)"
+  fi
   "$SIM_PY" "$S/sample_states.py" --states "$OUT/states.jsonl" --out "$OUT/samples.jsonl" --servers "${URLS[@]}" \
       --model "$LABEL" --k "$K" --temperature "${TEMPERATURE:-0.8}" --workers "${SAMPLE_WORKERS:-40}" --limit "${SAMPLE_LIMIT:-0}" ${SAMPLE_EXTRA[@]+"${SAMPLE_EXTRA[@]}"} --first $FIRST \
       2>&1 | tee -a "$OUT/logs/samples.log"
@@ -276,6 +296,11 @@ if ! stage_done samples; then
   mark samples
 fi
 cleanup                              # the GPUs are not needed from here on
+if [ -n "$SCORE_PID" ]; then         # the scoring loop ends its pass in progress before the last scoring pass
+  touch "$OUT/logs/score.stop"
+  echo "=== $(date '+%F %T %Z') waiting for the scoring loop to end its pass"
+  wait "$SCORE_PID"
+fi
 if [ "${STOP_AFTER:-}" = samples ]; then      # a job that only samples a share of the states (merged elsewhere)
   echo "DX_SCREEN_DATA_STOP after samples $(date '+%F %T %Z')"
   exit 0
