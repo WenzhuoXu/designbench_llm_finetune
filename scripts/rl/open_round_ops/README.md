@@ -38,3 +38,6 @@ Sampling shares (2026-11-23): fixed, disjoint shares instead of two machines mee
 - `submit_dx38_rest_b.sh`: a second pair of dx38 runs on the other eight families (held-out three + frame3d2 on
   general, circuit2 grid2 seir2 traffic2 on preempt) during training. `pair_agree.py`: per-problem agreement of two
   benchmark pairs (T=0 runs disagree on 21 of 60 engibench problems across four runs).
+- `submit_dx38_rest_c1.sh`: a third dx38 pair on inventory2 molopt thermal2 frame3d2 in the general GPU's gaps
+  (TLIMIT per piece, resumes the same OUT). `submit_open1_b.sh`: the open1 adapter's second benchmark pair, afterok on
+  its training (advanced: the eight other families; general: engibench; drc: photonics + grid2op).
