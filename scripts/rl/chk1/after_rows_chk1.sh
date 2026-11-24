@@ -1,6 +1,6 @@
 #!/bin/bash
 # after_rows_chk1.sh (Orchard login node): the chk1 round's rows, training and benchmark.
-#  rows   check_rows.py on Orchard's collection (collect_rev) + drc's rows (uploaded to $C/drc_rows/rows_fwd.jsonl with an
+#  rows   check_rows.py on Orchard's collection (collect_rev, + collect_adv when the advanced-node collector ran) + drc's rows (uploaded to $C/drc_rows/rows_fwd.jsonl with an
 #         UPLOADED marker); an instance's rows come from one machine only (Orchard first, then drc)
 #  mix    new rows + replay of the open-rules restated dx38 rows (replay_open.jsonl), 1 per 2 new rows; dev = 1.2% of the
 #         new rows' problems, at most 240 rows (open1's recipe)
@@ -23,7 +23,9 @@ done
 [ -s $C/drc_rows/rows_fwd.jsonl ] && [ -e $C/drc_rows/UPLOADED ] || { [ -n "${DRY:-}" ] && echo "dry: no drc rows" || { echo "ABORT: drc rows not uploaded"; exit 2; }; }
 [ -z "${DRY:-}" ] && [ -e "$RUN_DIR" ] && { echo "ABORT: $RUN_DIR exists"; exit 2; }
 echo "=== $(date '+%F %T') rows"
-python3 scripts/rl_screen/check_rows.py --episodes $C/collect_rev/dx38mtR.episodes.jsonl --out $D/rows_rev.jsonl \
+EPS=$C/collect_rev/dx38mtR.episodes.jsonl            # + the advanced-node collector's (collect_adv.sbatch), if it ran
+[ -s $C/collect_adv/dx38mtR.episodes.jsonl ] && EPS="$EPS $C/collect_adv/dx38mtR.episodes.jsonl"
+python3 scripts/rl_screen/check_rows.py --episodes $EPS --out $D/rows_rev.jsonl \
     --report $D/rows_rev.report.txt || { echo "ABORT: rows failed"; exit 3; }
 python3 - "$D/rows_rev.jsonl" "$C/drc_rows/rows_fwd.jsonl" "$D/rows_all.jsonl" <<'EOF' | tee $D/rows_all.report.txt
 import collections, json, os, sys
