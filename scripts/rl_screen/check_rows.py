@@ -10,7 +10,10 @@ A turn is kept when
      commit's outcome equals that check's: the check is scored with the commit's seed) and it was applied,
   3. its outcome is the best of the turn's applied checks (key: feasible, fewer feature-rule pixels (photonics),
      higher Phi; ties allowed),
-  4. it improves on the design the turn started from (same key).
+  4. it improves on the design the turn started from (same key),
+  5. no check of the turn is unreadable, every check reply ends with a <check> tag, and (grid2op, where time advances
+     every turn) the commit is not DO_NOTHING() unless it makes the design feasible: the null move's Phi change is
+     load drift, not a gain (review 11-24).
 A kept turn gives one row per reply: messages = the conversation up to that reply (earlier replies as the answer text
 the harness sent, without their thinking) + the reply as the target {reasoning_content: its thinking, content: its
 answer}. The rows' prompts are the prompts the model was served.
@@ -96,9 +99,16 @@ def judge(ep, t, before):
         return "a reply did not finish", None
     if t.get("fail"):
         return "commit refused or unread", None
+    if any(x.get("parse") for x in checks):
+        return "a check could not be read", None        # its reply would teach an unreadable move
+    if any(last_tag(x.get("answer"))[0] != "check" for x in checks):
+        return "a check reply does not end with a check tag", None
     kind, text = last_tag(t.get("answer"))
     if kind != "action":
         return "commit has no action tag", None
+    if v == "grid2op" and squash(text) == "DO_NOTHING()" and not t.get("feasible_after"):
+        # time advances in grid2op: the null move's Phi change is load drift, not a gain the move made
+        return "commit is DO_NOTHING and the design stays infeasible", None
     idx = [i for i, x in enumerate(checks) if "phi" in x and squash(x.get("text")) == squash(text)]
     if not idx:
         return "committed move not among the applied checks", None
@@ -136,7 +146,8 @@ def main(argv=None):
             r = json.loads(line)
             ep = r.get("episode") or r
             v = ep.get("variant", "?")
-            k_ep = (v, ep.get("problem_id"), r.get("run", ep.get("run")))
+            k_ep = r.get("key") or (v, ep.get("problem_id"))   # rollout key (variant, problem, run member)
+            k_ep = json.dumps(k_ep, sort_keys=True)
             if k_ep in seen_ep:
                 c[v]["duplicate episode (kept the first)"] += 1
                 continue
