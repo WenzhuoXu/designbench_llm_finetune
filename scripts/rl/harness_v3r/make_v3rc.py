@@ -19,6 +19,13 @@ followed by the budget line. Earlier assistant messages are sent as their answer
 their thinking). Review 11-24 (one agent): probe prompts have no YOUR MOVE section (handled); the native-only check
 runs per episode (a non-native variant crashes its episodes: give native variants only).
 
+--check-actions (with --checks C; data collection for a check-trained adapter, 2026-11-24). dx38 never writes a
+<check> tag on its own (0 checks in 563 turns of the zero-shot pilot), so while fewer than C checks have been made,
+a reply ending with an <action> line whose move has not been checked in this turn (or cannot be read) is checked
+instead: its last <action>...</action> is renamed <check>...</check> in the conversation and in the record
+(check entry converted = true), so the model's later replies see the history a check-trained model would write.
+A reply naming a move already checked in this turn commits it; after C checks the next reply commits.
+
 usage: python make_v3rc.py <v3r> <out>
 """
 import hashlib
@@ -56,6 +63,15 @@ def last_tag(answer):
     """(kind, text) of the last <action>/<check> tag of the answer, or (None, None)."""
     m = TAG_LAST.findall(answer or "")
     return (m[-1][0], " ".join(m[-1][1].split())) if m else (None, None)
+
+
+def as_check(answer):
+    """The answer with its last <action>...</action> tag renamed to <check>...</check> (--check-actions)."""
+    i = answer.rfind("<action>")
+    j = answer.find("</action>", i)
+    if not 0 <= i < j:
+        return answer
+    return answer[:i] + "<check>" + answer[i + len("<action>"):j] + "</check>" + answer[j + len("</action>"):]
 
 
 def llm_chat(llm, messages):
@@ -125,7 +141,7 @@ def check_turn(a, llm, C, D, L, R, domain, spec, st, ev, pid, t, history, metric
     """(the committing reply, the turn's check records): see --checks. Called with SIM held."""
     keep = getattr(a, "record_prompts", False)
     msgs = [{"role": "system", "content": system}, {"role": "user", "content": user + check_rule(nchk)}]
-    log = []
+    log, seen = [], set()
     while True:
         SIM.release()
         try:
@@ -135,11 +151,17 @@ def check_turn(a, llm, C, D, L, R, domain, spec, st, ev, pid, t, history, metric
         if "err" in reply or not reply.get("think_closed", True):
             return reply, log
         kind, text = last_tag(reply.get("answer"))
+        conv = False
+        if kind == "action" and getattr(a, "check_actions", False) and len(log) < nchk:
+            mv0, _ = C.parse_reply(domain, "<action>%s</action>" % text)
+            if mv0 is None or domain.format_move(mv0) not in seen:      # a move not checked yet: check it
+                kind, conv = "check", True
+                reply = dict(reply, answer=as_check(reply.get("answer", "")))
         if kind != "check":
             return reply, log
         if len(log) >= nchk:                       # told to commit: the checked move is the commitment
             return dict(reply, answer=reply["answer"] + "\\n<action>%s</action>" % text, check_as_action=True), log
-        ent = {"i": len(log), "text": text, "finish": reply.get("finish"),
+        ent = {"i": len(log), "text": text, "converted": conv, "finish": reply.get("finish"),
                "completion_tokens": reply.get("completion_tokens"),
                "reasoning": reply.get("reasoning", "") if keep else reply.get("reasoning", "")[:4000],
                "answer": reply.get("answer", "") if keep else reply.get("answer", "")[:600]}
@@ -162,6 +184,8 @@ def check_turn(a, llm, C, D, L, R, domain, spec, st, ev, pid, t, history, metric
                 ent.update(move=domain.format_move(mv), feasible=bool(sc.feasible), phi=float(sc.mean), viol=viol)
                 result = check_text(C, R, L, domain, spec, child, sc, mv, history, metrics, variant, native_prompt, ev)
         ent["result"] = result
+        if ent.get("move"):
+            seen.add(ent["move"])
         log.append(ent)
         left = nchk - len(log)
         tail = ("You may check %d more move%s, or commit one with the <action> line." % (left, "" if left == 1 else "s")
@@ -182,6 +206,8 @@ rep('''                SIM.release()
 ''', '''                nchk = int(getattr(a, "checks", 0) or 0)
                 if nchk > 0 and not native:
                     raise SystemExit("--checks takes native variants only (got %s)" % variant)
+                if getattr(a, "check_actions", False) and nchk <= 0:
+                    raise SystemExit("--check-actions needs --checks C > 0")
                 if nchk > 0:
                     reply, rec["checks"] = check_turn(a, llm, C, D, L, R, domain, spec, st, ev, pid, t, history,
                                                       metrics, variant, opening, native_prompt, system, user + note,
@@ -202,6 +228,10 @@ rep('''    ap.add_argument("--native-prompt", choices=["served", "probe"], defau
     '''    ap.add_argument("--checks", type=int, default=0,
                     help="episodes, llm, native variants (v3rc): up to C checks per turn -- a reply ending with "
                          "<check>MOVE</check> is simulated on a copy and its result shown before the model commits")
+    ap.add_argument("--check-actions", action="store_true",
+                    help="with --checks (data collection, v3rc): a reply ending with an <action> line whose move "
+                         "was not checked yet in this turn is checked instead (its tag renamed to <check> in the "
+                         "conversation and the record); naming a checked move again commits it")
     ap.add_argument("--native-prompt", choices=["served", "probe"], default="served",''')
 
 open(dst, "w", encoding="utf-8", newline="").write(s)

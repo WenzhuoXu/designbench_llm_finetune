@@ -52,6 +52,8 @@ class H(BaseHTTPRequestHandler):
         n = sum(1 for m in msgs if m["role"] == "user")
         steps = SCRIPT[v]
         content = "Scripted reply %d for %s.\n%s" % (n, v, steps[min(n, len(steps)) - 1])
+        if ARGS.actions_only:              # every tag an <action> (tests of --check-actions)
+            content = content.replace("<check>", "<action>").replace("</check>", "</action>")
         with LOCK, open(ARGS.log, "a", encoding="utf-8") as fo:
             fo.write(json.dumps({"variant": v, "n_user": n, "messages": msgs, "reply": content}) + "\n")
         self._send({"choices": [{"index": 0, "finish_reason": "stop",
@@ -63,5 +65,6 @@ class H(BaseHTTPRequestHandler):
 ap = argparse.ArgumentParser()
 ap.add_argument("--port", type=int, default=8799)
 ap.add_argument("--log", required=True)
+ap.add_argument("--actions-only", action="store_true", help="write every scripted tag as <action>")
 ARGS = ap.parse_args()
 ThreadingHTTPServer(("127.0.0.1", ARGS.port), H).serve_forever()
