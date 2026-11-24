@@ -17,7 +17,7 @@ for line in open(sys.argv[1], encoding="utf-8"):
         continue
     r = json.loads(line)
     ep = r.get("episode") or {}
-    if r.get("rl_error") or ep.get("crashed") or ep.get("feasible_start"):
+    if r.get("rl_error") not in (None, "calls_turns_mismatch") or ep.get("crashed") or ep.get("feasible_start"):
         continue
     v = ep["variant"]
     s = S[v]

@@ -141,7 +141,8 @@ def main(argv=None):
                 c[v]["duplicate episode (kept the first)"] += 1
                 continue
             seen_ep.add(k_ep)
-            if r.get("rl_error") or ep.get("crashed"):
+            # calls_turns_mismatch: the RL wrapper wants one model call per turn; a checked turn makes several
+            if r.get("rl_error") not in (None, "calls_turns_mismatch") or ep.get("crashed"):
                 c[v]["episode crashed"] += 1
                 continue
             if ep.get("feasible_start"):
