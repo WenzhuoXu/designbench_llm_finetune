@@ -25,14 +25,19 @@ squeue -h -j "$OLD" 2>/dev/null | grep -q . && scancel "$OLD"
 for i in $(seq 90); do squeue -h -j "$OLD" 2>/dev/null | grep -q . || break; sleep 10; done
 squeue -h -j "$OLD" 2>/dev/null | grep -q . && { echo "ABORT: $OLD is still in the queue"; exit 3; }
 sleep 30                                    # NFS: let the old node's last writes reach the server
-mkdir -p $C/collect_adv
-if [ ! -s $C/collect_adv/pool_adv.jsonl ]; then
+# the collecting policy: dx38mtR by default; COLLECT_LABEL/COLLECT_ADAPTER/COLLECT_OUT switch it (pref1, 11-24)
+L=${COLLECT_LABEL:-dx38mtR}
+A=${COLLECT_ADAPTER:-/project/community/wxu2/rl/inputs/dx38mtR_final}
+O=${COLLECT_OUT:-$C/collect_adv}
+echo "=== policy $L ($A) -> $O"
+mkdir -p "$O"
+if [ ! -s "$O/pool_adv.jsonl" ]; then
   /project/community/wxu2/rl/envs/sim/bin/python "$REPO/scripts/rl/chk1/remaining_pool.py" \
-      $HOME/rl/logs/chk1/pool_rev.jsonl $C/collect_adv/pool_adv.jsonl $C/collect_rev/dx38mtR.episodes.jsonl \
+      $HOME/rl/logs/chk1/pool_rev.jsonl "$O/pool_adv.jsonl" $C/collect_rev/dx38mtR.episodes.jsonl \
       || { echo "ABORT: pool_adv not built"; exit 4; }
 fi
-export OUT=$C/collect_adv LABEL=dx38mtR ADAPTER=/project/community/wxu2/rl/inputs/dx38mtR_final THINK=1 \
+export OUT="$O" LABEL="$L" ADAPTER="$A" THINK=1 \
        HARNESS_SCRIPT=dataxp_policy_eval_v3rc.py HARNESS_ARGS="--open-rules --record-prompts --checks 4 --check-actions" \
-       PROBLEMS=$C/collect_adv/pool_adv.jsonl VARIANTS="photonics grid2op engibench" RUNS=1 NSERVERS=4 \
+       PROBLEMS="$O/pool_adv.jsonl" VARIANTS="photonics grid2op engibench" RUNS=1 NSERVERS=4 \
        WORKERS=${WORKERS:-80}
 exec bash "$REPO/scripts/rl/orchard_dataxp_eval.sh"

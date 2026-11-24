@@ -4,7 +4,7 @@
 #         UPLOADED marker); an instance's rows come from one machine only (Orchard first, then drc)
 #  mix    new rows + replay of the open-rules restated dx38 rows (replay_open.jsonl), 1 per 2 new rows; dev = 1.2% of the
 #         new rows' problems, at most 240 rows (open1's recipe)
-#  train  from dx38mtR, advanced 4 GPUs, dataxp_sft_scr1.yaml + sft.temperature=1.0
+#  train  from dx38mtR (or INIT=<adapter dir>), advanced 4 GPUs, dataxp_sft_scr1.yaml + sft.temperature=1.0
 #  bench  afterok, two pairs (RUNS=2 each): photonics grid2op engibench with harness v3rc --open-rules --checks 4
 #         (the model may check up to 4 moves per turn; every check counted as a simulator call), the other eight
 #         families with v3r --open-rules, as dx38's baseline ran
@@ -24,7 +24,7 @@ done
 [ -z "${DRY:-}" ] && [ -e "$RUN_DIR" ] && { echo "ABORT: $RUN_DIR exists"; exit 2; }
 echo "=== $(date '+%F %T') rows"
 EPS=$C/collect_rev/dx38mtR.episodes.jsonl            # + the advanced-node collector's (collect_adv.sbatch), if it ran
-[ -s $C/collect_adv/dx38mtR.episodes.jsonl ] && EPS="$EPS $C/collect_adv/dx38mtR.episodes.jsonl"
+for f in $C/collect_adv*/*.episodes.jsonl; do [ -s "$f" ] && EPS="$EPS $f"; done
 python3 scripts/rl_screen/check_rows.py --episodes $EPS --out $D/rows_rev.jsonl \
     --report $D/rows_rev.report.txt || { echo "ABORT: rows failed"; exit 3; }
 python3 - "$D/rows_rev.jsonl" "$C/drc_rows/rows_fwd.jsonl" "$D/rows_all.jsonl" <<'EOF' | tee $D/rows_all.report.txt
@@ -54,10 +54,13 @@ python3 scripts/rl_screen/mix_rows.py --new $D/rows_all.jsonl --replay $REPLAY \
     | tee $D/mix.report.txt
 grep -q MIX_ROWS_DONE $D/mix.report.txt || { echo "ABORT: mix failed"; exit 4; }
 [ -n "${DRY:-}" ] && { echo "DRY_DONE"; exit 0; }
+# INIT: the adapter training starts from (default the config's, dx38mtR_final), e.g. pref1's final adapter
+[ -n "${INIT:-}" ] && { [ -s "$INIT/adapter_model.safetensors" ] || { echo "ABORT: INIT $INIT has no adapter"; exit 2; }; }
+export OVERRIDES="sft.temperature=1.0${INIT:+ policy.init_adapter=$INIT}"
 T=$(sbatch --parsable -J dx_sft_chk1 \
-    --export=ALL,RUN_DIR=$RUN_DIR,CONFIG=configs/rl/dataxp_sft_scr1.yaml,ROWS=$D/train_chk1.jsonl,DEV=$D/dev_chk1.jsonl,OVERRIDES=sft.temperature=1.0 \
+    --export=ALL,RUN_DIR=$RUN_DIR,CONFIG=configs/rl/dataxp_sft_scr1.yaml,ROWS=$D/train_chk1.jsonl,DEV=$D/dev_chk1.jsonl \
     slurm/orchard_sft_rows.sbatch) || { echo "ABORT: training not submitted"; exit 6; }
-echo "training: $T (run $RUN_DIR)"
+echo "training: $T (run $RUN_DIR, overrides '$OVERRIDES')"
 export LABEL=chk1 ADAPTER=$RUN_DIR/final THINK=1
 export PROBLEMS="/home/wxu2/rl/harness/problems_v2.jsonl /home/wxu2/rl/eval/problems_v3_native.jsonl"
 E=/home/wxu2/rl/eval/${NAME}_open

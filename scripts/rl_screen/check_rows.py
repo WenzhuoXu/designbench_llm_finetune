@@ -183,6 +183,7 @@ def main(argv=None):
                             "n_checks": len(t["checks"]), "commit_check": i, "checks_max": C,
                             "kind": "commit" if k == len(t["checks"]) else "check",
                             "messages": prefix + [target], "tier": a.tier, "teacher": a.teacher,
+                            "policy": ep.get("policy"),
                             "sid": "%s|%s|%s" % (v, ep["problem_id"], t["t"]),
                             "feasible_after": bool(t.get("feasible_after")), "phi_after": t.get("phi_after"),
                             "words": len((target.get("reasoning_content") or "").split()), "source": path})
