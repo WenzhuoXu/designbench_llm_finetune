@@ -2,14 +2,15 @@
 # collect_chk.sh: chk1 data collection on drc GPU 4. dx38mtR on the training pool (photonics, grid2op, engibench of
 # train_p2_datav4, no benchmark problem), harness v3rc --checks 4 --check-actions (each new move dx38 proposes is
 # checked in the simulator before it commits; naming a checked move again commits it), open rules, T=0, 20 turns,
-# thinking on, every prompt and whole reply recorded (--record-prompts). POOL (default chk1/pool_fwd.jsonl), OUT.
-# Resumable by episode key.
+# thinking on, every prompt and whole reply recorded (--record-prompts). POOL (default chk1/pool_fwd.jsonl), OUT,
+# LABEL + ADAPTER (default dx38mtR; pref1 may take over, 11-24). Resumable by episode key.
+# (deployed on drc as collect_chk2.sh: never edit the file a running bash is reading)
 set -uo pipefail
 W=/storage/wxu/rl_open
 OUT=${OUT:-$W/chk1/collect_fwd}; mkdir -p "$OUT/logs"
 POOL=${POOL:-$W/chk1/pool_fwd.jsonl}
-LABEL=dx38mtR
-ADAPTER=/storage/wxu/rl_fc/inputs/dx38mtR_final
+LABEL=${LABEL:-dx38mtR}
+ADAPTER=${ADAPTER:-/storage/wxu/rl_fc/inputs/dx38mtR_final}
 VENV=/storage/wenwenw/envs/vllm_drc
 SIM_PY=/home/wxu/corpus_env/bin/python
 SNAP=/storage/wxu/huggingface/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
