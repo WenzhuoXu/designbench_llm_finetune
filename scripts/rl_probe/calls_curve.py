@@ -1,8 +1,9 @@
-"""Feasible rate against simulator calls: greedy runs (1 call per turn) vs best-of-K runs (K calls per turn).
+"""Feasible rate against simulator calls: greedy runs (1 call per turn), best-of-K runs (K calls per turn), check runs
+(harness v3rc: 1 + the turn's checks whose move was read).
 
-An episode counts as feasible within N calls when its design is feasible after a turn t (0-based) with
-(t + 1) * cost <= N, where cost = 1 for a greedy file and K (from the turn's best_of record) for a best-of file.
-Per variant, per-problem rates averaged over problems (each file's runs pooled within its arm).
+An episode counts as feasible within N calls when the simulator calls of its turns up to and including the first turn
+after which the design is feasible add up to at most N. Per variant, per-problem rates averaged over problems (each
+file's runs pooled within its arm).
 
 usage: python calls_curve.py --a NAME FILE... --b NAME FILE... [--variants v1,v2] [--calls 1,2,4,8,...]
 """
@@ -12,7 +13,7 @@ import json
 
 
 def load(paths, variants):
-    per = collections.defaultdict(list)          # (variant, problem) -> [(cost per turn, first feasible turn or None)]
+    per = collections.defaultdict(list)          # (variant, problem) -> [calls up to the first feasible design or None]
     for p in paths:
         for line in open(p, encoding="utf-8"):
             if not line.strip():
@@ -23,13 +24,18 @@ def load(paths, variants):
                 continue
             if variants and ep["variant"] not in variants:
                 continue
-            ff, cost = None, 1
-            for i, t in enumerate(ep.get("turns") or []):
+            calls, hit = 0, None
+            for t in ep.get("turns") or []:
                 if t.get("best_of"):
-                    cost = int(t["best_of"]["k"])
-                if ff is None and t.get("feasible_after"):
-                    ff = i
-            per[(ep["variant"], ep["problem_id"])].append((cost, ff))
+                    calls += int(t["best_of"]["k"])
+                elif "checks" in t:
+                    calls += 1 + sum(1 for c in t["checks"] if not c.get("parse"))
+                else:
+                    calls += 1
+                if t.get("feasible_after"):
+                    hit = calls
+                    break
+            per[(ep["variant"], ep["problem_id"])].append(hit)
     return per
 
 
@@ -47,7 +53,7 @@ fams = sorted({v for v, _ in keys})
 
 
 def rate(eps, n):
-    return sum(1 for c, ff in eps if ff is not None and (ff + 1) * c <= n) / len(eps)
+    return sum(1 for hit in eps if hit is not None and hit <= n) / len(eps)
 
 
 print("feasible within N simulator calls (per-problem rate, mean over problems); A=%s B=%s" % (a.a[0], a.b[0]))

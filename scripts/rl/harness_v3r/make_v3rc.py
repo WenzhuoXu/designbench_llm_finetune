@@ -10,9 +10,14 @@ scored with the seed the harness scores the next design with (so a check of a mo
 the model then gets, as the next user message of the same conversation, the copy's CONSTRAINT STATUS and the move's
 EFFECT (before -> after), in the observation's own format, or the simulator's refusal; and replies again. A reply
 whose last tag is <action> commits as in a plain turn. After C checks the model is told to commit; a reply that
-still ends with <check> then commits that move. The turn record gets checks = [{i, text, parse | refused |
-move/feasible/phi/viol, result (the text shown), finish, completion_tokens, reasoning, answer}]; the turn's simulator calls are
-len(checks) + 1. Earlier assistant messages are sent as their answer text (the chat template drops their thinking).
+still ends with <check> then commits that move (the turn record gets check_as_action = true; the answer recorded
+carries the <action> line appended to it). The turn record gets checks_max = C and checks = [{i, text, parse |
+refused | move/feasible/phi/viol, result (the text shown), finish, completion_tokens, reasoning, answer}]; the
+turn's simulator calls are 1 + the checks whose move was read (an unreadable check calls no simulator). The
+conversation of a turn rebuilds from the record: user + check_rule(C), then per check its answer and its result
+followed by the budget line. Earlier assistant messages are sent as their answer text (the chat template drops
+their thinking). Review 11-24 (one agent): probe prompts have no YOUR MOVE section (handled); the native-only check
+runs per episode (a non-native variant crashes its episodes: give native variants only).
 
 usage: python make_v3rc.py <v3r> <out>
 """
@@ -99,6 +104,8 @@ def check_text(C, R, L, domain, spec, child, sc, mv, history, metrics, variant, 
                                variant, native_prompt)
     i, j = u2.find("CONSTRAINT STATUS"), u2.find("CHANGES ALREADY MADE")
     k, e = u2.find("OBSERVED EFFECT OF THE LAST CHANGE"), u2.find("YOUR MOVE")
+    if e < 0:                                  # --native-prompt probe: no YOUR MOVE section, the effect runs to the end
+        e = len(u2)
     if not (0 <= i < j <= k < e):
         raise RuntimeError("check_text: observation sections not found in order (%d %d %d %d)" % (i, j, k, e))
     status = u2[i:j].strip().replace("CONSTRAINT STATUS (current design)", "CONSTRAINT STATUS (after this move)")
@@ -179,6 +186,9 @@ rep('''                SIM.release()
                     reply, rec["checks"] = check_turn(a, llm, C, D, L, R, domain, spec, st, ev, pid, t, history,
                                                       metrics, variant, opening, native_prompt, system, user + note,
                                                       nchk)
+                    rec["checks_max"] = nchk
+                    if reply.get("check_as_action"):
+                        rec["check_as_action"] = True
                 else:
                     SIM.release()
                     try:
