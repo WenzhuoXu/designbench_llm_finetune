@@ -10,6 +10,8 @@ B="${BASE:-/project/community/wxu2}"
 REPO="${REPO:-$B/con1/repo}"
 OUT="${OUT:?output dir}"
 ARMS="${ARMS:?label:format:rows ...}"
+# a pending job can be re-pointed: $OUT/ARMS.override (one line, same syntax) replaces the exported ARMS
+[ -s "$OUT/ARMS.override" ] && { ARMS="$(head -1 "$OUT/ARMS.override")"; echo "ARMS from $OUT/ARMS.override"; }
 QUERIES="${QUERIES:?queries.jsonl}"
 VARIANTS="${VARIANTS:?families}"
 TMPRUN="${TMPRUN:-/tmp/con1_abl_${SLURM_JOB_ID:-x}}"
