@@ -387,3 +387,7 @@ step). So:
 3. How much the map alone predicts: sign agreement of the map's first-order target_loss change with the true change
    on the photonics questions is reported (`map_sign.py`; a property of the data, not a con1 result).
 Not built (undecided by the owner): an eval-only photonics condition without the map.
+   Measured 11-25 15:05 on the 47 photonics test states (354 applied questions with a nonzero true change): the map's
+   first-order target_loss change has the right sign for **0.684** of moves (own moves 33/48 = 0.69, legal moves
+   209/306 = 0.68) and is within a factor of 2 of the true change for **0.257**. So the map alone carries most of the
+   direction of target_loss but little of its size (the moves flip many pixels at once, beyond first order).
