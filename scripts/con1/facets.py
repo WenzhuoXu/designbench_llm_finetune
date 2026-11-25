@@ -264,7 +264,11 @@ def main(argv=None):
             fmt = r.get("target", "verbatim")
             formats[r["predictor"]] = fmt
             t = truth_facets(q, q["moves"][r["qi"]])
-            pf = pred_facets(r.get("text"), fmt, q)
+            if r.get("facets") is not None:                # a predictor that outputs facets directly (trees)
+                pf = dict(r["facets"])
+                pf["violated"] = set(pf.get("violated") or [])
+            else:
+                pf = pred_facets(r.get("text"), fmt, q)
             per[r["predictor"]].setdefault(r["sid"], collections.Counter()).update(move_counts(q, t, pf))
     fams = sorted({q["variant"] for q in qs.values()})
     sids = {v: sorted(s for s, q in qs.items() if q["variant"] == v) for v in fams}

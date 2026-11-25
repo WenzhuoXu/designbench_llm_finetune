@@ -132,9 +132,14 @@ def main(argv=None):
         except EOFError:                                   # a file still being written: what is complete is used
             print("note: %s ends in an incomplete gzip member (still being written)" % path)
 
+    seen_sid = set()
     for path in a.states:
         for line in lines_of(path):
             st = json.loads(line)
+            if st["sid"] in seen_sid:                      # the same state from two machines' outputs: first wins
+                c["duplicate states skipped"] += 1
+                continue
+            seen_sid.add(st["sid"])
             v = st["variant"]
             if v in HELD_OUT or v not in TRAIN_FAMILIES:
                 raise SystemExit("%s: state of family %s in the training states" % (path, v))
