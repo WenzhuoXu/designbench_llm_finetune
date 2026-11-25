@@ -221,7 +221,8 @@ Relayed by the parent session ("Zero-shot physics reasoning comparison"), the ow
   infeasible).
 - Violated-after set (applied moves predicted applied): exact-set accuracy and per-constraint crossing accuracy
   (does a constraint cross its limit in either direction). Baseline: the current violated set.
-- Direction per metric line (up / down / same, same = change within 1e-6 relative): balanced accuracy over the
+- Direction per metric line (up / down / same, same = change within 1e-5 of the value: the verbatim message prints
+  6 digits, so smaller changes are not expressible in it): balanced accuracy over the
   three classes per family. Baseline: all 'same'.
 - Size per metric line with a true change: right direction and predicted relative change within the same or an
   adjacent half-decade bin (factor ~3). Baseline: 0.

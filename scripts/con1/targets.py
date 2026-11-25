@@ -22,7 +22,7 @@ FORMATS = ("verbatim", "masked", "facet", "delta")
 BINS = [(0.001, "<0.1%"), (0.003, "0.1-0.3%"), (0.01, "0.3-1%"), (0.03, "1-3%"), (0.1, "3-10%"), (0.3, "10-30%"),
         (1.0, "30-100%"), (3.0, "100-300%"), (10.0, "300-1000%"), (math.inf, ">1000%")]
 BIN_NAMES = [b for _, b in BINS]
-SAME_TOL = 1e-6
+SAME_TOL = 1e-5            # relative: a change below 0.001% of the value is 'same' (the verbatim message prints 6 digits)
 
 QUESTION_HEAD = ("\n\nQUESTION (no move is made now): if the move {move} were played at the current design, what would "
                  "the simulator return? ")
@@ -52,9 +52,13 @@ def question(fmt: str, move: str, first: bool) -> str:
     return (QUESTION_HEAD if first else FOLLOW_HEAD).format(move=move) + FORMAT_TEXT[fmt]
 
 
+def is_same(before: float, after: float) -> bool:
+    return abs(after - before) <= max(SAME_TOL * abs(before), 1e-12)
+
+
 def size_bin(before: float, after: float) -> str:
     d = after - before
-    if abs(d) <= SAME_TOL * max(1.0, abs(before)):
+    if is_same(before, after):
         return "same"
     if before == 0:
         return "from 0"
@@ -67,7 +71,7 @@ def size_bin(before: float, after: float) -> str:
 
 def direction(before: float, after: float) -> str:
     d = after - before
-    if abs(d) <= SAME_TOL * max(1.0, abs(before)):
+    if is_same(before, after):
         return "same"
     return "up" if d > 0 else "down"
 
