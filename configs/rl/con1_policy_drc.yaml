@@ -1,0 +1,30 @@
+# con1 stage 2 / control on drc GPU 4 (docs/consequence_round_con1.md section 11, note of 11-25 16:50): policy rows
+# only (the open-rules restated dx38 replay rows, tier ownrows_own, rationale then action, 8 training families), one
+# epoch, dx38's recipe (lr 1e-4, cosine, 3% warm-up, 64 rows per step, loss temperature 1.0, LoRA r64, dropout off).
+# CONTROL: init_adapter = pref1 final (no consequence stage). STAGE 2: init_adapter = the consequence-stage adapter.
+seed: 0
+
+model:
+  path: /storage/wxu/huggingface/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  gradient_checkpointing: true
+
+policy:
+  init_adapter: /storage/wxu/rl_open/inputs/pref1_final
+  require_init_adapter: true
+
+sft:
+  epochs: 1.0
+  rows_per_step: 64
+  lr: 1.0e-4
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  lora_dropout: 0.0
+  temperature: 1.0
+  seed: 42
+  save_every: 5
+  keep_last: 1
+  dev_every: 20
+  keep_adapter_every: 100000
