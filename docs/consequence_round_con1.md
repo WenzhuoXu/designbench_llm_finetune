@@ -429,3 +429,31 @@ engibench off-menu 0.35 / 0.65 / 0 / 0 (menu 0.42 / 0.58 / 0 / 0); grid2op 0.22 
 0.26 / 0); photonics 0.40 / 0.60 / 0 / 0 (menu 0.62 / 0.38 / 0 / 0); molopt 0.43 / 0.57 / 0 / 0 (menu 0.43 / 0.57). Yield
 2 per state except photonics (88 of 120: states whose design breaks the fabrication rule have tiny menus).
 The final skill test's question set (`queries_v2`) and the main-run states use these.
+
+**Note 2026-11-25, 16:25 — round 2 = the owner's P rows (before any result).** Round 1 (175877) still decides how the
+outcome is written. Round 2 contrasts the row *structure*, on the same training states, with the encoding round 1
+picks (rows are pre-built in all four encodings; the round-1 winner's set is used):
+- **P** (owner's format): the state and goal exactly as the policy prompt shows them; then the model's OWN reply:
+  its reasoning (loss 0), its action (loss 0: its own pick, good or bad), then `EXPECTED RESULT:` and the true
+  simulator result of that action (the header and the informative tokens weigh 1, fixed wording 0.05). Replies:
+  pref1's first reply of each turn in the chk1 collection (pref1 at T = 0 on training-pool problems, the reply to the
+  turn's prompt before any check result), labelled with the result `transitions.py` simulated for that own move.
+  Native families only in round 2 (chk1 covers engibench, grid2op, photonics); for the other families the main run
+  would use dx38's replay rows, which needs their states rebuilt from the rows (not done yet).
+- **Qown**: the same states, ONE question about the same own move, the same result: identical supervised outcomes,
+  only the structure differs.
+- **Q12**: the round-1 question rows (12 questions: own / best legal / off-menu / uniform legal) on a twelfth of the
+  same states: the same number of supervised outcomes as P (matched outcome tokens), more diverse moves.
+- **PQ**: P rows + Q12 rows together (the main-run candidate if both structures help).
+400 states per native family (selection seeded; the selected states first got their off-menu moves), rows per step
+16, one epoch, lr 1e-4, LoRA from pref1, one 1-GPU arm each.
+**Both test forms for every arm:** the question form (the skill test, `queries_v2`: the round-1 recipe plus the
+native test states' off-menu moves; held-out problems only) and the **P form**: the test state's policy prompt, the
+model's own reply sampled at T = 0, its own action simulated, its EXPECTED RESULT block scored with the same facets
+(`p_client.py` on GPU, `p_score.py` + `facets.py` on CPU). The P form also reports the chosen actions' verdict mix.
+Multi-turn P rows (each later turn showing the real result) are not built: a turn's prompt is a full observation of
+4–12k tokens, so an episode row would run past what one H100 trains on.
+The harness already ignores an `EXPECTED RESULT:` block after the action: it reads the last `<action>` line of the
+answer (checked on Orchard with `dataxp.ownrows.common.parse_reply`); benchmark runs need no change.
+Selection between the round-2 arms uses the same facet score (§11 notes), in the question form; the P form is
+reported beside it. The structure (P, Q, or PQ) and the encoding chosen go to the main run.
