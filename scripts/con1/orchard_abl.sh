@@ -96,19 +96,36 @@ for arm in "${ARR[@]}"; do
     >> "$OUT/logs/client_$lab.log" 2>&1 &
 done
 wait
-# P-form test (round 2): each arm answers the policy prompt of every test state; p_score.py (CPU) simulates the chosen
-# action and pairs it with the reply's EXPECTED RESULT block
-if [ -n "${P_TEST:-}" ]; then
+# keep the arms' final adapters (adapter files only, ~1.9 GB each; the optimizer state stays in /tmp), one at a time
+# while /project/community has more than KEEP_IF_FREE_GB free
+for arm in "${ARR[@]}"; do
+  IFS=: read -r lab fmt rows <<< "$arm"
+  if [ "$(df -BG --output=avail "$B" | tail -1 | tr -dc 0-9)" -gt "${KEEP_IF_FREE_GB:-4}" ]; then
+    mkdir -p "$OUT/adapters/$lab" && cp -r "$TMPRUN/$lab/final/." "$OUT/adapters/$lab/" && echo "adapter $lab kept in $OUT/adapters/$lab"
+  else
+    echo "adapter $lab NOT kept (under ${KEEP_IF_FREE_GB:-4} GB free); it rebuilds from the rows"
+  fi
+done
+# phase 3 (flag file $OUT/BENCH.on): the real task for every arm, on the servers already up: the policy prompt, the
+# reply rationale then action, the benchmark harness and settings of pref1's baseline (v3r --open-rules, thinking on,
+# T = 0, 20 turns, RUNS runs), on the round's families; episodes resume by key
+if [ -e "$OUT/BENCH.on" ]; then
+  H=$HOME/rl/harness
+  SIM_PY="${SIM_PY:-$B/rl/envs/sim/bin/python}"
+  export DX_ORIG_SCRIPTS=$H/scripts DATAXP_SPELLING=multitool DATAXP_MOLOPT_ORACLE_DIR=$H/molopt_oracle MPLBACKEND=Agg
+  BV="$(cat "$OUT/BENCH.on" | head -1)"; BV="${BV:-$VARIANTS}"
+  mkdir -p "$OUT/bench"
+  echo "=== $(date '+%F %T') benchmark of the arms on: $BV"
   for arm in "${ARR[@]}"; do
     IFS=: read -r lab fmt rows <<< "$arm"
-    PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/p_client.py --queries "$QUERIES" --base-url "${URLS[@]}" --model "$lab"       --label "$lab" --out "$OUT/predsP_$lab.jsonl" --groups heldout_problem --variants $VARIANTS --max-tokens 8192       --workers 64 >> "$OUT/logs/pclient_$lab.log" 2>&1 &
+    PYTHONPATH="$REPO" "$SIM_PY" -m llm_finetune.rl_dataxp.rollout eval \
+      --script "$H/scripts/dataxp_policy_eval_v3r.py" --problems "$H/problems_v2.jsonl" "$HOME/rl/eval/problems_v3_native.jsonl" \
+      --variants $BV --servers "${URLS[@]}" --model "$lab" --label "$lab" --runs "${BENCH_RUNS:-2}" --turns 20 \
+      --workers "${BENCH_WORKERS:-32}" --out "$OUT/bench/$lab.episodes.jsonl" -- \
+      --code "$H/dataxp_code_v3" --native-prompt served --instruction-file "$H/configs/task_instruction_V2.txt" --open-rules \
+      >> "$OUT/logs/bench_$lab.log" 2>&1 &
   done
   wait
-fi
-if [ "$(df -BG --output=avail "$B" | tail -1 | tr -dc 0-9)" -gt "${KEEP_IF_FREE_GB:-40}" ]; then
-  for arm in "${ARR[@]}"; do IFS=: read -r lab fmt rows <<< "$arm"; mkdir -p "$OUT/adapters/$lab"; cp -r "$TMPRUN/$lab/final/." "$OUT/adapters/$lab/"; done
-  echo "adapters copied to $OUT/adapters"
-else
-  echo "adapters NOT kept (free space under ${KEEP_IF_FREE_GB:-40} GB); they rebuild from the rows"
+  echo "=== $(date '+%F %T') benchmark done"
 fi
 echo "CON1_ABL_DONE $(date '+%F %T %Z')"

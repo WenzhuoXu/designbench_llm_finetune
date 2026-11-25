@@ -457,3 +457,20 @@ The harness already ignores an `EXPECTED RESULT:` block after the action: it rea
 answer (checked on Orchard with `dataxp.ownrows.common.parse_reply`); benchmark runs need no change.
 Selection between the round-2 arms uses the same facet score (§11 notes), in the question form; the P form is
 reported beside it. The structure (P, Q, or PQ) and the encoding chosen go to the main run.
+
+**Note 2026-11-25, 16:40 — round 2 (P rows) WITHDRAWN; real-task check added (before any result).** The 16:25 note
+above is withdrawn: the owner was asking why we chose the question format, not proposing theirs. No round-2 rows or
+job remain (the row build, Orchard 175908, was cancelled and its outputs deleted; `build_prows.py`, `p_client.py`,
+`p_score.py` stay in the repo unused). The owner's actual question: does a model trained on question rows still do
+the real task (the policy prompt, a reply that gives a rationale then an action)? Round 1 alone does not measure this,
+so round 1 now also:
+1. keeps every arm's final adapter (adapter files only, ~1.9 GB each; copied while /project/community has more than
+   4 GB free; the optimizer state stays on the node), and
+2. runs each arm on the real task in the same job, on the servers already up: the benchmark harness and settings of
+   pref1's baseline (`dataxp_policy_eval_v3r.py --open-rules`, thinking on, T = 0, 20 turns, one simulator call per
+   turn, 2 runs per problem) on the round's 5 families (engibench, grid2op, photonics, circuit2, frame3d2; 60
+   benchmark problems each), episodes resumable by key. Reported per arm against pref1's two pairs on the same
+   families (`bench_format.py`, `ab_pooled.py`): whether the reply format holds (rationale before the action, action
+   parse rate, result-message or answer-format text leaking into the reply, completion tokens) and feasible@20 at equal
+   simulator calls. This tells whether training on consequence questions damaged or helped the policy before the
+   main run commits to a row mix; it is supporting evidence, not a selection rule.
