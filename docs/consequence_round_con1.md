@@ -494,3 +494,12 @@ as cited by the owner:
 3. **Main run**: the joint mix of section 1 (consequence rows + 1/3 policy rows) is replaced by the two stages —
    consequence rows (chosen format, 8 families) then the same policy rows — against the same control (one control
    run serves both the pilot and the main run: same rows, steps and lr from pref1).
+
+**Note 2026-11-25, 17:10 — placement corrections (no result yet).** (a) Round 1's first job (175877) waited two hours
+and then failed in its first minutes: the repo copy uploaded from the Windows checkout had CRLF line endings, which
+bash rejects (`set: pipefail\r`). Every text file of the Orchard copy is now LF (checked with `bash -n`), and round 1 is
+resubmitted unchanged as **175928**. (b) The control could not run on drc: the box has 93 GB of RAM with about 18 GB
+free, and the kernel killed the 27B trainer (SIGKILL) at its first step after loading. The control now runs on
+Orchard in the same job as stage 2 (**175931**, `advanced`, after round 1): two 2-GPU trainings side by side on one
+node (the same hardware for both arms, the same rows / steps / lr), then the skill questions and the real task for
+both. The policy rows are rebuilt on Orchard from the same chk1 file with the same seed (175930).
