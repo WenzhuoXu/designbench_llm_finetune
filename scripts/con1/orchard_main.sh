@@ -45,13 +45,19 @@ NG=${#DEVS[@]}
 
 train() {   # name rows dev init
   local name=$1 rows=$2 dev=$3 init=$4
-  if [ -e "$M/$name/final/adapter_config.json" ]; then echo "$name: final adapter exists"; return 0; fi
+  if [ -e "$M/$name/final/adapter_config.json" ]; then echo "$name: final adapter exists"; FINAL=$M/$name/final; return 0; fi
   CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${DEVS[*]}") NTRAIN=$NG REPO="$REPO" RUN_DIR="$TMPRUN/$name" \
     CONFIG=configs/rl/con1_sft.yaml ROWS="$rows" DEV="$dev" \
     OVERRIDES="sft.save_every=10 sft.keep_last=1 sft.dev_every=20 sft.keep_adapter_every=100000 policy.init_adapter=$init" \
     bash "$REPO/scripts/rl/orchard_sft_rows.sh" > "$M/logs/train_$name.log" 2>&1
   [ -e "$TMPRUN/$name/final/adapter_config.json" ] || { echo "ABORT: $name has no final adapter"; tail -30 "$M/logs/train_$name.log"; exit 3; }
-  mkdir -p "$M/$name/final" && cp -r "$TMPRUN/$name/final/." "$M/$name/final/" && cp "$TMPRUN/$name/metrics.jsonl" "$M/$name/"
+  FINAL=$TMPRUN/$name/final                      # what the rest of the job uses; the shared copy is best effort
+  cp "$TMPRUN/$name/metrics.jsonl" "$M/${name}_metrics.jsonl" 2>/dev/null
+  if [ "$(df -BG --output=avail "$B" | tail -1 | tr -dc 0-9)" -gt 3 ]; then
+    mkdir -p "$M/$name/final" && cp -r "$TMPRUN/$name/final/." "$M/$name/final/" && echo "$name adapter kept in $M/$name/final"       || { rm -rf "$M/$name/final"; echo "!!! $name adapter NOT kept (copy failed)"; }
+  else
+    echo "!!! $name adapter NOT kept: /project/community has under 3 GB free"
+  fi
   echo "=== $(date '+%F %T') $name trained"
 }
 
@@ -102,7 +108,8 @@ for s in ss: print(s.getsockname()[1])' "$NG")
 }
 
 train stage1 "$M/train_stage1.jsonl" "$M/dev_stage1.jsonl" "$PREF1"
-ask stage1 "$M/stage1/final" "zero seq" "$M/preds_stage1.jsonl"
-train stage2 "$B/con1/stage2/policy_train.jsonl" "$B/con1/stage2/policy_dev.jsonl" "$M/stage1/final"
-ask stage2 "$M/stage2/final" "zero" "$M/preds_stage2.jsonl"
+S1=$FINAL
+ask stage1 "$S1" "zero seq" "$M/preds_stage1.jsonl"
+train stage2 "$B/con1/stage2/policy_train.jsonl" "$B/con1/stage2/policy_dev.jsonl" "$S1"
+ask stage2 "$FINAL" "zero" "$M/preds_stage2.jsonl"
 echo "CON1_MAIN_DONE $(date '+%F %T %Z')"

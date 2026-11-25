@@ -10,7 +10,7 @@ O=$B/abl1/score
 PY=/project/community/wxu2/rl/envs/sim/bin/python
 CODE=$HOME/rl/harness/dataxp_code_v3
 HV=$G/h/dataxp_policy_eval_v3rc.py
-export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 DATAXP_SPELLING=multitool PYTHONWARNINGS=ignore TREES_THREADS=2
+export PYTHONPATH=/project/community/wxu2/con1/pylib OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 DATAXP_SPELLING=multitool PYTHONWARNINGS=ignore TREES_THREADS=2
 mkdir -p $O
 Q=$B/skill/queries.jsonl
 ST="$D/states_native.jsonl.gz $D/states_native_drc_snap.jsonl.gz $G/out/states_scripted.jsonl.gz"
