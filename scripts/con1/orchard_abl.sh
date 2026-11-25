@@ -113,14 +113,17 @@ if [ -e "$OUT/BENCH.on" ]; then
   H=$HOME/rl/harness
   SIM_PY="${SIM_PY:-$B/rl/envs/sim/bin/python}"
   export DX_ORIG_SCRIPTS=$H/scripts DATAXP_SPELLING=multitool DATAXP_MOLOPT_ORACLE_DIR=$H/molopt_oracle MPLBACKEND=Agg
-  BV="$(cat "$OUT/BENCH.on" | head -1)"; BV="${BV:-$VARIANTS}"
+  # BENCH.on: line 1 the families, line 2 the problem file(s) (default: the full benchmark), line 3 runs per problem
+  BV="$(sed -n 1p "$OUT/BENCH.on")"; BV="${BV:-$VARIANTS}"
+  BP="$(sed -n 2p "$OUT/BENCH.on")"; BP="${BP:-$H/problems_v2.jsonl $HOME/rl/eval/problems_v3_native.jsonl}"
+  BR="$(sed -n 3p "$OUT/BENCH.on")"; BR="${BR:-${BENCH_RUNS:-2}}"
   mkdir -p "$OUT/bench"
   echo "=== $(date '+%F %T') benchmark of the arms on: $BV"
   for arm in "${ARR[@]}"; do
     IFS=: read -r lab fmt rows <<< "$arm"
     PYTHONPATH="$REPO" "$SIM_PY" -m llm_finetune.rl_dataxp.rollout eval \
-      --script "$H/scripts/dataxp_policy_eval_v3r.py" --problems "$H/problems_v2.jsonl" "$HOME/rl/eval/problems_v3_native.jsonl" \
-      --variants $BV --servers "${URLS[@]}" --model "$lab" --label "$lab" --runs "${BENCH_RUNS:-2}" --turns 20 \
+      --script "$H/scripts/dataxp_policy_eval_v3r.py" --problems $BP \
+      --variants $BV --servers "${URLS[@]}" --model "$lab" --label "$lab" --runs "$BR" --turns 20 \
       --workers "${BENCH_WORKERS:-32}" --out "$OUT/bench/$lab.episodes.jsonl" -- \
       --code "$H/dataxp_code_v3" --native-prompt served --instruction-file "$H/configs/task_instruction_V2.txt" --open-rules \
       >> "$OUT/logs/bench_$lab.log" 2>&1 &

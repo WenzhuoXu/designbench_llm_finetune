@@ -474,3 +474,23 @@ so round 1 now also:
    parse rate, result-message or answer-format text leaking into the reply, completion tokens) and feasible@20 at equal
    simulator calls. This tells whether training on consequence questions damaged or helped the policy before the
    main run commits to a row mix; it is supporting evidence, not a selection rule.
+
+**Note 2026-11-25, 16:55 — two stages in the published order (owner-approved, before any result).** Following Early
+Experience (arXiv 2510.08558: world-model rows first, then policy training; its comparison is imitation learning vs
+implicit-world-modelling-then-imitation at an equal update budget) and Dyna-Think (arXiv 2506.00320, the same order),
+as cited by the owner:
+1. **Round 1** (175877): training and skill questions unchanged. Its real-task run is cut to a damage check: 1 run per
+   problem on 20 benchmark problems per family (the first 20 by id; `data/bench_sub20.jsonl`), 5 families, 100 episodes
+   per arm; reported: format holding (rationale before the action), action parse rate, leakage, feasible@20. These
+   arms have no policy stage, so this only shows how much damage prediction-only training does; it is not the test.
+2. **Stage 2**: the winning round-1 arm's adapter continued on policy rows only (the open-rules restated dx38 replay
+   rows, tier `ownrows_own`, rationale then action, 8 training families: 8,753 rows, 60 more held out as dev), one
+   epoch = 137 steps of 64 rows, lr 1e-4 (dx38's recipe; `configs/rl/con1_policy_drc.yaml`).
+   **Control**: the same rows, steps and lr from pref1 with no consequence stage (the papers' comparison; without it a
+   gain could come from the policy rows alone). The control does not depend on round 1 and started at once on drc GPU
+   4 (run `/storage/wxu/con1/stage2/runs/control_pref1_policy`, 15:49).
+   Both are tested on the real task with pref1's benchmark settings on held-out problems, plus the skill questions;
+   held-out families stay untouched until the final test.
+3. **Main run**: the joint mix of section 1 (consequence rows + 1/3 policy rows) is replaced by the two stages —
+   consequence rows (chosen format, 8 families) then the same policy rows — against the same control (one control
+   run serves both the pilot and the main run: same rows, steps and lr from pref1).
