@@ -135,12 +135,23 @@ def _masked(lp, sample: dict):
     return lp[torch.tensor(mask, dtype=torch.bool, device=lp.device)]
 
 
+def _split_losses(stats, prefix: str) -> dict:
+    """Row-mean loss of the masked (consequence) rows and of the other rows, when a batch holds any of them."""
+    out = {}
+    for name, k in (("conseq", 4), ("policy", 6)):
+        if float(stats[k]) > 0:
+            out["%sloss_%s" % (prefix, name)] = float(stats[k + 1]) / float(stats[k])
+            out["%srows_%s" % (prefix, name)] = int(stats[k])
+    return out
+
+
 def train_step(policy, samples: list[dict], dist, opt, max_grad_norm: float, temperature: float = 1.0) -> dict:
     """One optimizer step on the mean per-row cross-entropy of `samples` (this rank's share), the
     log-probabilities taken at `temperature`."""
     import torch
     mine = shard_samples(samples, dist.world, dist.rank)
-    stats = torch.zeros(4, dtype=torch.float64, device=policy.device)     # rows, row-mean nll, tokens, token nll
+    # rows, row-mean nll, tokens, token nll; then rows / row-mean nll of masked (consequence) rows and of the others
+    stats = torch.zeros(8, dtype=torch.float64, device=policy.device)
     cuda = policy.device.type == "cuda"
     if cuda:
         torch.cuda.reset_peak_memory_stats(policy.device)
@@ -157,6 +168,9 @@ def train_step(policy, samples: list[dict], dist, opt, max_grad_norm: float, tem
             stats[1] += nll.double()
             stats[2] += lp.numel()
             stats[3] += -lp.sum().double()
+            k = 4 if s.get("mask") is not None else 6
+            stats[k] += 1
+            stats[k + 1] += nll.double()
     dist.all_reduce_grads(policy.params)
     gn = float(torch.nn.utils.clip_grad_norm_(policy.params, float(max_grad_norm)))
     opt.step()
@@ -167,6 +181,7 @@ def train_step(policy, samples: list[dict], dist, opt, max_grad_norm: float, tem
     dist.all_reduce_(peak, op="max")
     return {"rows": int(stats[0]), "loss": float(stats[1]) / max(1.0, float(stats[0])), "tokens": int(stats[2]),
             "nll_per_token": float(stats[3]) / max(1.0, float(stats[2])), "grad_norm": gn,
+            **_split_losses(stats, ""),
             "peak_mem_gib": round(float(peak[0]), 2) if cuda else None,
             "max_row_tokens": max(len(s["prompt_ids"]) + len(s["completion_ids"]) for s in samples)}
 
@@ -175,7 +190,7 @@ def score_rows(policy, samples: list[dict], dist, temperature: float = 1.0) -> d
     """Mean per-row and per-token negative log-probability, no gradient, dropout off."""
     import torch
     mine = shard_samples(samples, dist.world, dist.rank)
-    stats = torch.zeros(4, dtype=torch.float64, device=policy.device)
+    stats = torch.zeros(8, dtype=torch.float64, device=policy.device)
     policy.model.eval()
     try:
         with torch.no_grad():
@@ -186,11 +201,14 @@ def score_rows(policy, samples: list[dict], dist, temperature: float = 1.0) -> d
                 stats[1] += -lp.mean().double()
                 stats[2] += lp.numel()
                 stats[3] += -lp.sum().double()
+                k = 4 if s.get("mask") is not None else 6
+                stats[k] += 1
+                stats[k + 1] += -lp.mean().double()
     finally:
         policy.model.train()
     dist.all_reduce_(stats)
     return {"dev_rows": int(stats[0]), "dev_loss": float(stats[1]) / max(1.0, float(stats[0])),
-            "dev_nll_per_token": float(stats[3]) / max(1.0, float(stats[2]))}
+            "dev_nll_per_token": float(stats[3]) / max(1.0, float(stats[2])), **_split_losses(stats, "dev_")}
 
 
 def sft_fingerprint(cfg: dict, rows_sha1: str) -> str:
@@ -304,8 +322,11 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
                     retry_when_full(lambda: TR.prune_ckpts(run_dir, cfg, step + 1), "ckpt/ (removing old checkpoints)", wait_min, log)
             if dist.rank == 0:
                 retry_when_full(lambda: TR.append_metrics(run_dir, m), "metrics.jsonl", wait_min, log)
-                log("step %d/%d | loss %.4f (per token %.4f) | rows %d tok %d | gn %.3f lr %.2e | %s%.0fs | longest %d tok peak %s GiB" % (
-                    step + 1, steps, m["loss"], m["nll_per_token"], m["rows"], m["tokens"], m["grad_norm"], m["lr"],
+                log("step %d/%d | loss %.4f (per token %.4f)%s | rows %d tok %d | gn %.3f lr %.2e | %s%.0fs | longest %d tok peak %s GiB" % (
+                    step + 1, steps, m["loss"], m["nll_per_token"],
+                    "".join(" %s %.4f" % (k, m[k]) for k in ("loss_conseq", "loss_policy", "dev_loss_conseq",
+                                                              "dev_loss_policy") if k in m),
+                    m["rows"], m["tokens"], m["grad_norm"], m["lr"],
                     ("dev %.4f | " % m["dev_loss"]) if "dev_loss" in m else "", m["t_train"], m["max_row_tokens"], m["peak_mem_gib"]))
         if dist.rank == 0:
             final = os.path.join(run_dir, "final")
