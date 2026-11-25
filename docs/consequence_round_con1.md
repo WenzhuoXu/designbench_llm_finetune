@@ -187,6 +187,82 @@ RL session, else `preempt` with a checkpoint every step and resume); skill test 
 free after checking Orchard, drc GPU 4 and trace. Code under `scripts/con1/`; outputs in `analysis/remote/rl/con1/`
 (main checkout) and drc `/storage/wxu/con1/`.
 
-## 8. Results
+## 8. Owner revisions of 11-25 (before any result) — these override sections 1, 3, 4 where they differ
+
+Relayed by the parent session ("Zero-shot physics reasoning comparison"), the owner's instructions:
+
+- Answer structure, how predictions are compared and penalised, and what the model is shown change accuracy a lot;
+  each is an ablation axis chosen from evidence, with short, cheap runs before the main run (section 9).
+- Exact digits are the wrong measure of physics, and "close" is not understanding either (predicting no change is
+  often close). Scoring is by **physical facets**, each against a **no-change baseline**: regime (refused or
+  applied; feasible after; which constraints are violated after), direction (sign of each metric's change), size
+  (relative change, factor-scale bins), coupling (effects on quantities other than the element moved, where the
+  message exposes them). Decision weighting only for errors that flip the regime or feasibility. A profile across
+  facets is reported, not one number. Classes are skewed: balanced accuracy and per-class recall, not raw accuracy;
+  missed refusals and false refusals reported apart.
+- **Ranking is not a target and not a selection criterion** (choosing among moves is left to later steps: preference
+  rows, RL, the check loop). No ranking objective, no ranking-weighted loss. PO (section 3) is dropped as a metric.
+  One diagnostic is kept, reported but never used to select: **within-state discrimination** (do predictions
+  differ across the moves of one state; e.g. the true rate of 'better' among moves predicted better vs predicted
+  worse, the measure on which dx38 scored 0.47 vs 0.50 on engibench).
+- The stop rule (section 4 rule 1) compares con1 with the boosted trees **on the same per-move facets**, not on V or
+  within-state AUC. The trees get per-metric direction and size models.
+- Held-out families are touched once, at the end. Ablations select on held-out problems of training families,
+  split by problem.
+- Any change to the observation (what the model is shown) is a scope decision: it is reported with its measured
+  effect and needs the owner's yes before the main run; the policy's prompt must then change the same way.
+- Coupling: the result message carries system-level metrics only (no per-line flows, per-member stresses, per-pixel
+  fields), so coupling is **not measurable with the current message**; it needs a target or observation level that
+  exposes per-element quantities (a round-2 candidate, section 9).
+
+**Facet scorer (all formats parse into the same facets):**
+- Regime class per move: refused / applied-infeasible / applied-feasible. Balanced accuracy over the classes present
+  in a family, per-class recall, refusal precision and recall. No-change baseline: the state's own regime (applied,
+  infeasible).
+- Violated-after set (applied moves predicted applied): exact-set accuracy and per-constraint crossing accuracy
+  (does a constraint cross its limit in either direction). Baseline: the current violated set.
+- Direction per metric line (up / down / same, same = change within 1e-6 relative): balanced accuracy over the
+  three classes per family. Baseline: all 'same'.
+- Size per metric line with a true change: right direction and predicted relative change within the same or an
+  adjacent half-decade bin (factor ~3). Baseline: 0.
+- Decision-weighted: feasibility-after recall and precision for moves that make the design feasible.
+- Diagnostics (not selection): Phi verdict (better / worse) where values can be reconstructed (bin midpoints for the
+  facet format), within-state discrimination, exact-message match.
+- Group value = mean over families; se by bootstrap over states.
+
+## 9. Ablations (fixed before any ablation result)
+
+**Procedure.** Short LoRA runs from pref1 on consequence rows only (no policy rows), one 1-GPU run per arm, 4 arms
+in parallel on one 4-GPU job; identical states and moves for every arm (paired); then each arm answers the zero-shot
+questions of the held-out-problem test states of the same families. One factor changes per arm relative to the
+baseline B (a small fractional design over the axes).
+
+**Round 1 — answer structure and loss** (families with data ready: engibench, grid2op, photonics, circuit2,
+frame3d2; 150 training states per family, 12 questions per state, 16 rows per optimizer step, one epoch, lr 1e-4):
+- B  `verbatim`: the harness message word for word, every answer token supervised.
+- M  `masked`: same text, loss only on informative tokens (after values, VIOLATED markers, feasible word, refusal
+  reason; not the header, metric names, limits, before values).
+- F  `facet`: verdict first, FEASIBLE AFTER, VIOLATED AFTER, then per metric direction + half-decade size bin of the
+  relative change (no digits).
+- D  `delta`: verdict first, FEASIBLE AFTER, VIOLATED AFTER, then per metric the signed change and the relative change
+  at 3 significant digits.
+(scripts/con1/targets.py renders all four from the same simulated record.)
+
+**Selection metric (round 1 and later rounds).** Per family, the mean of three facet scores on held-out problems,
+zero-shot: regime balanced accuracy, direction balanced accuracy, size share; group = mean over the round's
+families. The arm with the highest score wins; if the best two are within 1 se (bootstrap over states), the one with
+fewer target tokens wins. The profile (every facet, baseline, trees) is reported for every arm.
+
+**Round 2 — what the model is shown** (levels fixed after round 1 and before its results, written here then):
+candidates are raw physical state that the message or observation leaves out, never ranked or influence tables
+(memory no-a-priori-influence) — e.g. grid2op per-line flows in the target (also the only way to measure coupling),
+the photonics pixel grid written as coordinates or run lengths instead of the current form. Any level that changes the
+observation needs the owner's yes before the main run.
+
+**Main run** after the rounds: the chosen format and loss, all 8 training families, ~2,000 states per family, policy
+rows mixed in (section 1), on `advanced` (owner: con1 has priority there). Sections 3–5 then apply with the facet
+scorer replacing V / D / PO as the primary skill measures.
+
+## 10. Results
 
 (none yet)

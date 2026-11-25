@@ -23,6 +23,25 @@ def answer_text(message: dict) -> str:
     return (message.get("reasoning_content") or "").strip() + "\n</think>\n\n" + (message.get("content") or "").strip() + END
 
 
+def _span_mask(tok, m: dict):
+    """Tokens of an answer and a mask that supervises only the tokens overlapping m['supervise_spans'] (character
+    ranges of m['content']), plus the think-closing piece before the content and the end token after it."""
+    content = m.get("content") or ""
+    lead = len(content) - len(content.lstrip())
+    prefix = (m.get("reasoning_content") or "").strip() + "\n</think>\n\n"
+    body = content.strip()
+    text = prefix + body + END
+    spans = [(0, len(prefix)), (len(prefix) + len(body), len(text))]
+    for a, b in m["supervise_spans"]:
+        a, b = max(0, a - lead), min(len(body), b - lead)
+        if b > a:
+            spans.append((len(prefix) + a, len(prefix) + b))
+    enc = tok(text, add_special_tokens=False, return_offsets_mapping=True)
+    ids, offs = list(enc["input_ids"]), enc["offset_mapping"]
+    mask = [1 if any(s < b and a < e for a, b in spans) else 0 for s, e in offs]
+    return ids, mask
+
+
 def _head_ids(tok, messages):
     ids = tok.apply_chat_template(messages[:2], tokenize=True, add_generation_prompt=True)
     ids = list(ids if isinstance(ids, list) else ids["input_ids"])
@@ -48,7 +67,10 @@ def encode(tok, messages: list) -> dict:
     ids = _head_ids(tok, messages)
     comp, mask = [], []
     for m in messages[2:]:
-        if m["role"] == "assistant":
+        if m["role"] == "assistant" and m.get("supervise_spans") is not None:
+            t, mk = _span_mask(tok, m)
+            mask += mk
+        elif m["role"] == "assistant":
             t = tok.encode(answer_text(m), add_special_tokens=False)
             mask += [1] * len(t)
         else:

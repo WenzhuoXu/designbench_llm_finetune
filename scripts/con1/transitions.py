@@ -319,6 +319,8 @@ def main(argv=None):
     ap.add_argument("--exclude-specs", nargs="*", default=[], help="problem files whose problems must not appear")
     ap.add_argument("--out", required=True)
     ap.add_argument("--workers", type=int, default=20)
+    ap.add_argument("--reverse", action="store_true", help="work the job list back to front")
+    ap.add_argument("--skip-keys", default=None, help="another output file (its .done keys are skipped)")
     a = ap.parse_args(argv)
     specs = read_specs(a.problems)
     banned = set()
@@ -364,6 +366,11 @@ def main(argv=None):
                 continue
             jobs.append((a.code, a.harness, v, spec, a.max_moves, a.offgrid))
         fn = scripted_job
+    if a.reverse:                                          # a second machine works the list from the other end
+        jobs = jobs[::-1]
+    if a.skip_keys:
+        skip = done_keys(a.skip_keys)
+        jobs = [j for j in jobs if (j[2]["key"] if a.mode == "episodes" else "scripted/%s" % j[3]["problem_id"]) not in skip]
     print("%s: %d jobs to run (%d already done)" % (a.mode, len(jobs), len(done)), flush=True)
     run(jobs, fn, a.out, a.workers)
 

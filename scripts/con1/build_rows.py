@@ -27,7 +27,7 @@ import random
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from conseq_lib import FOLLOW_UP, QUESTION  # noqa: E402
+from targets import FORMATS, question, render  # noqa: E402
 
 TRAIN_FAMILIES = ["engibench", "grid2op", "photonics", "circuit2", "frame3d2", "grid2", "seir2", "traffic2"]
 HELD_OUT = {"inventory2", "molopt", "thermal2"}
@@ -77,29 +77,40 @@ def pick_moves(st: dict, q: int, rng: random.Random) -> list:
     return chosen
 
 
-def conseq_row(st: dict, moves: list) -> dict:
+def answer(fmt: str, st: dict, m: dict) -> dict:
+    content, spans = render(fmt, m, st["metrics0"])
+    msg = {"role": "assistant", "content": content, "reasoning_content": ""}
+    if spans is not None:
+        msg["supervise_spans"] = spans
+    return msg
+
+
+def conseq_row(st: dict, moves: list, fmt: str = "verbatim") -> dict:
     msgs = [{"role": "system", "content": st["system"]},
-            {"role": "user", "content": st["user"] + QUESTION.format(move=moves[0]["move"])},
-            {"role": "assistant", "content": moves[0]["result"], "reasoning_content": ""}]
+            {"role": "user", "content": st["user"] + question(fmt, moves[0]["move"], True)},
+            answer(fmt, st, moves[0])]
     for m in moves[1:]:
-        msgs.append({"role": "user", "content": FOLLOW_UP.format(move=m["move"])})
-        msgs.append({"role": "assistant", "content": m["result"], "reasoning_content": ""})
+        msgs.append({"role": "user", "content": question(fmt, m["move"], False)})
+        msgs.append(answer(fmt, st, m))
     return {"messages": msgs, "supervise": "every_assistant", "domain": st["variant"], "tier": "con1_conseq",
-            "instance": st["problem_id"], "sid": st["sid"],
+            "instance": st["problem_id"], "sid": st["sid"], "format": fmt,
             "con1": {"moves": [m["move"] for m in moves], "verdicts": [m["verdict"] for m in moves],
                      "src": [m["src"] for m in moves]}}
 
 
 def est_tokens(st: dict, moves: list) -> int:
-    n = len(st["system"]) + len(st["user"]) + len(QUESTION)
-    n += sum(len(m["result"]) + len(FOLLOW_UP) + len(m["move"]) + 40 for m in moves)
+    n = len(st["system"]) + len(st["user"]) + len(question("verbatim", "", True))
+    n += sum(len(m["result"]) + len(question("verbatim", m["move"], False)) + 40 for m in moves)
     return int(n / CHARS_PER_TOKEN)
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--states", nargs="+", required=True)
-    ap.add_argument("--policy", required=True, help="rows file holding tier ownrows_own rows (e.g. train_chk1.jsonl.gz)")
+    ap.add_argument("--policy", default=None, help="rows file holding tier ownrows_own rows (e.g. train_chk1.jsonl.gz); "
+                    "none: consequence rows only (ablations)")
+    ap.add_argument("--target", choices=FORMATS, default="verbatim", help="answer format (targets.py)")
+    ap.add_argument("--families", nargs="*", default=None, help="only these training families (ablations)")
     ap.add_argument("--out-train", required=True)
     ap.add_argument("--out-dev", required=True)
     ap.add_argument("--per-family", type=int, default=2000)
@@ -114,8 +125,15 @@ def main(argv=None):
     rng = random.Random(a.seed)
     c = collections.Counter()
     pools = collections.defaultdict(list)                  # (split, family) -> states (only what the rows need)
+    def lines_of(path):
+        try:
+            for line in opener(path):
+                yield line
+        except EOFError:                                   # a file still being written: what is complete is used
+            print("note: %s ends in an incomplete gzip member (still being written)" % path)
+
     for path in a.states:
-        for line in opener(path):
+        for line in lines_of(path):
             st = json.loads(line)
             v = st["variant"]
             if v in HELD_OUT or v not in TRAIN_FAMILIES:
@@ -128,6 +146,8 @@ def main(argv=None):
             pools[(st["split"], v)].append(st)
     rows, dev = [], []
     for v in TRAIN_FAMILIES:
+        if a.families and v not in a.families:
+            continue
         for split, cap, out in (("train", a.per_family, rows), ("dev", None, dev)):
             sts = pools.get((split, v), [])
             rng.shuffle(sts)
@@ -142,7 +162,7 @@ def main(argv=None):
                 if est_tokens(st, moves) > a.max_tokens:
                     c["dropped: too long (%s)" % v] += 1
                     continue
-                out.append(conseq_row(st, moves))
+                out.append(conseq_row(st, moves, a.target))
                 n += 1
                 c["%s rows %s" % (split, v)] += 1
                 c["%s questions %s" % (split, v)] += len(moves)
@@ -153,14 +173,14 @@ def main(argv=None):
     rng.shuffle(dev)
     dev = dev[:a.dev_max]
     # policy rows
-    pol = [json.loads(l) for l in opener(a.policy)]
+    pol = [json.loads(l) for l in opener(a.policy)] if a.policy else []
     pol = [r for r in pol if r.get("tier") == "ownrows_own"]
     for r in pol:
         if r.get("domain") not in TRAIN_FAMILIES:
             raise SystemExit("policy row of family %s" % r.get("domain"))
     rng.shuffle(pol)
-    n_pol = min(len(pol) - a.dev_policy, int(round(a.policy_ratio * len(rows))))
-    dev += pol[:a.dev_policy]
+    n_pol = max(0, min(len(pol) - a.dev_policy, int(round(a.policy_ratio * len(rows)))))
+    dev += pol[:a.dev_policy] if pol else []
     prow = pol[a.dev_policy:a.dev_policy + n_pol]
     for r in prow:
         c["train policy rows %s" % r["domain"]] += 1

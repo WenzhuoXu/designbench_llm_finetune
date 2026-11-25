@@ -22,22 +22,25 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..")))
-from conseq_lib import FOLLOW_UP, QUESTION  # noqa: E402
+from targets import FORMATS, question  # noqa: E402
 from llm_finetune.rl_dataxp.conseq_format import prompt_ids  # noqa: E402
 
 LOCK = threading.Lock()
 
 
-def messages_for(q, j, seq):
+def messages_for(q, j, seq, fmt="verbatim"):
+    """The prompt for question j: alone (zero-shot), or after questions 0..j-1 answered with the TRUE results in
+    the asked format (sequential)."""
+    from targets import render
     ms = q["moves"]
     if not seq or j == 0:
         return [{"role": "system", "content": q["system"]},
-                {"role": "user", "content": q["user"] + QUESTION.format(move=ms[j]["move"])}]
+                {"role": "user", "content": q["user"] + question(fmt, ms[j]["move"], True)}]
     msgs = [{"role": "system", "content": q["system"]},
-            {"role": "user", "content": q["user"] + QUESTION.format(move=ms[0]["move"])}]
+            {"role": "user", "content": q["user"] + question(fmt, ms[0]["move"], True)}]
     for i in range(j):
-        msgs.append({"role": "assistant", "content": ms[i]["result"], "reasoning_content": ""})
-        msgs.append({"role": "user", "content": FOLLOW_UP.format(move=ms[i + 1]["move"])})
+        msgs.append({"role": "assistant", "content": render(fmt, ms[i], q["metrics0"])[0], "reasoning_content": ""})
+        msgs.append({"role": "user", "content": question(fmt, ms[i + 1]["move"], False)})
     return msgs
 
 
@@ -76,6 +79,8 @@ def main(argv=None):
     ap.add_argument("--max-tokens", type=int, default=2048)
     ap.add_argument("--workers", type=int, default=32)
     ap.add_argument("--variants", nargs="*", default=None)
+    ap.add_argument("--target", choices=FORMATS, default="verbatim", help="answer format asked for (targets.py)")
+    ap.add_argument("--groups", nargs="*", default=None, help="only states of these groups (heldout_problem, ...)")
     a = ap.parse_args(argv)
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(a.tokenizer)
@@ -83,6 +88,8 @@ def main(argv=None):
     qs = [json.loads(l) for l in open(a.queries, encoding="utf-8")]
     if a.variants:
         qs = [q for q in qs if q["variant"] in a.variants]
+    if a.groups:
+        qs = [q for q in qs if q["group"] in a.groups]
     done = set()
     if os.path.exists(a.out):
         for l in open(a.out, encoding="utf-8"):
@@ -107,10 +114,10 @@ def main(argv=None):
     with open(a.out, "a", encoding="utf-8") as fo, ThreadPoolExecutor(a.workers) as ex:
         def one(job):
             q, p, j = job
-            ids = prompt_ids(tok, messages_for(q, j, p == "seq"))
+            ids = prompt_ids(tok, messages_for(q, j, p == "seq", a.target))
             url = a.base_url[int(hashlib.sha1(q["sid"].encode()).hexdigest()[:8], 16) % len(a.base_url)]
             gen, fin, ntok = complete(url, a.model, ids, a.max_tokens, stop)
-            return {"sid": q["sid"], "variant": q["variant"], "predictor": label, "pass": p, "qi": j,
+            return {"sid": q["sid"], "variant": q["variant"], "predictor": label, "pass": p, "qi": j, "target": a.target,
                     "move": q["moves"][j]["move"], "text": answer_of(gen), "raw_tail": (gen or "")[-300:],
                     "finish": fin, "n_tokens": ntok, "prompt_tokens": len(ids)}
         futs = [ex.submit(one, jb) for jb in jobs]
