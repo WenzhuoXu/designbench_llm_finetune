@@ -10,6 +10,7 @@ The answer is the text after the last '</think>' of the generation (none: the th
 request: {sid, predictor, pass, qi, move, text, finish, n_tokens}. Resumable by (sid, pass, qi).
 """
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -67,7 +68,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--queries", required=True)
     ap.add_argument("--tokenizer", required=True)
-    ap.add_argument("--base-url", required=True)
+    ap.add_argument("--base-url", nargs="+", required=True, help="one or more servers; a state's requests stay on one")
     ap.add_argument("--model", required=True)
     ap.add_argument("--label", default=None)
     ap.add_argument("--out", required=True)
@@ -99,7 +100,6 @@ def main(argv=None):
                     continue                                 # position 0 of the sequential pass is the zero-shot question
                 if (q["sid"], p, j) not in done:
                     jobs.append((q, p, j))
-    # longest prompts first spreads the load; states of one sid stay close for the prefix cache
     print("%d requests (%d done)" % (len(jobs), len(done)), flush=True)
     label = a.label or a.model
     t0 = time.time()
@@ -108,7 +108,8 @@ def main(argv=None):
         def one(job):
             q, p, j = job
             ids = prompt_ids(tok, messages_for(q, j, p == "seq"))
-            gen, fin, ntok = complete(a.base_url, a.model, ids, a.max_tokens, stop)
+            url = a.base_url[int(hashlib.sha1(q["sid"].encode()).hexdigest()[:8], 16) % len(a.base_url)]
+            gen, fin, ntok = complete(url, a.model, ids, a.max_tokens, stop)
             return {"sid": q["sid"], "variant": q["variant"], "predictor": label, "pass": p, "qi": j,
                     "move": q["moves"][j]["move"], "text": answer_of(gen), "raw_tail": (gen or "")[-300:],
                     "finish": fin, "n_tokens": ntok, "prompt_tokens": len(ids)}
