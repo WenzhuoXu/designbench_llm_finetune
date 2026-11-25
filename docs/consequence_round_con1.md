@@ -503,3 +503,10 @@ free, and the kernel killed the 27B trainer (SIGKILL) at its first step after lo
 Orchard in the same job as stage 2 (**175931**, `advanced`, after round 1): two 2-GPU trainings side by side on one
 node (the same hardware for both arms, the same rows / steps / lr), then the skill questions and the real task for
 both. The policy rows are rebuilt on Orchard from the same chk1 file with the same seed (175930).
+
+**Note 2026-11-25, 17:25 — development loop only (owner).** No benchmark runs, control arms or baseline re-runs until
+prediction accuracy is clearly high: round 1's damage check and the pref1 skill baseline (175870) are cancelled, the
+stage-2 control (175931) is dropped. The loop: train, measure the facets on held-out problems of the training
+families, change data / format / method, repeat. Round 1's winning format goes straight into the two-stage main run
+(stage 1 consequence rows on 8 families, then stage 2 policy rows). Jobs: round 1 175928, its scoring 175933, stage-1
+data prep 175934 (2,000 states per family, off-menu moves, rows in every format, facet trees).
