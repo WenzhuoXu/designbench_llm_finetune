@@ -36,7 +36,7 @@ def job(args):
         have = {m["move"] for m in st["moves"]}
         rng = np.random.default_rng(seeded("con1-offmenu", st["sid"]))
         added = 0
-        for mv in offmenu_moves(s, s.legal(), k, rng):
+        for mv in offmenu_moves(s, s.legal(), k, rng, exclude=have):
             text = s.fmt(mv)
             if text in have:
                 continue

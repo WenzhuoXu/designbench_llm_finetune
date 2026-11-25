@@ -102,15 +102,15 @@ def _rule_refused(s, mv) -> bool:
     return False
 
 
-def offmenu_moves(s, legal, k: int, rng) -> list:
+def offmenu_moves(s, legal, k: int, rng, exclude=None) -> list:
     """k native verb calls with random arguments from outside the ranked menu (parent review 11-25), drawn within each
     verb's validity rules. Proposal: a verb the menu uses; its first argument uniformly from the values the menu gives
-    it; every later name / json argument from the values the menu pairs with that first argument (an element that sits
-    on the chosen substation, a fragment site of the chosen atom, ...), json lists as a random non-empty subset of
-    those items; numbers uniform over the menu's span for that verb (floats widened by a quarter of the span each way);
+    it; every later name / json argument, half the time from the values the menu pairs with that first argument (an
+    element that sits on the chosen substation, ...) and otherwise from all values the menu uses for it, json lists as a
+    random non-empty subset of those items; numbers uniform over the menu's span for that verb (floats widened by a quarter of the span each way);
     rectangle corners sorted. A proposal the state refuses by a RULE is redrawn (up to RULE_TRIES): bad combinations,
     cooldown, forced outage, out-of-ramp redispatch, a move that changes nothing. Refusals that are simulation outcomes
-    (a diverging power flow) are kept: they are physics."""
+    (a diverging power flow) are kept: they are physics. A proposal already in the menu (exclude) is redrawn too."""
     import json as _json
     from dataxp.domain import Move
     pools = collections.defaultdict(lambda: collections.defaultdict(list))
@@ -135,8 +135,8 @@ def offmenu_moves(s, legal, k: int, rng) -> list:
         args, ok, first = {}, True, None
         for n_a, a in enumerate(vs.args):
             vals = pools[vs.name].get(a.name)
-            if n_a > 0 and a.type in ("str", "json") and first is not None:
-                vals = co[(vs.name, first)].get(a.name) or vals
+            if n_a > 0 and a.type in ("str", "json") and first is not None and rng.random() < 0.5:
+                vals = co[(vs.name, first)].get(a.name) or vals   # half the time a value the menu pairs with it
             if not vals:
                 ok = False
                 break
@@ -169,7 +169,7 @@ def offmenu_moves(s, legal, k: int, rng) -> list:
         except Exception:                                  # noqa: BLE001
             continue
         mv2 = s.parse(text)
-        if mv2 is None or text in {s.fmt(m) for m in out} or _rule_refused(s, mv2):
+        if mv2 is None or text in {s.fmt(m) for m in out} or (exclude and text in exclude) or _rule_refused(s, mv2):
             continue
         out.append(mv2)
     return out
@@ -224,7 +224,7 @@ def simulate_state(s, own_texts, offgrid: int, rng):
             if r:
                 bad["offgrid " + r] += 1
     if offgrid and s.native:                               # out-of-menu native moves (src offmenu)
-        for mv in offmenu_moves(s, legal, offgrid, rng):
+        for mv in offmenu_moves(s, legal, offgrid, rng, exclude=set(moves)):
             r = add(mv, "offmenu")
             if r:
                 bad["offmenu " + r] += 1
