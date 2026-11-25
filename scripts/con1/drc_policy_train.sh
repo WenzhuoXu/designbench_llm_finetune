@@ -7,7 +7,7 @@ REPO=$C/repo
 RUN_DIR="${RUN_DIR:?run dir}"; ROWS="${ROWS:?rows}"; DEV="${DEV:-}"
 PY=/storage/wenwenw/envs/vllm_drc/bin/python
 export PYTHONPATH=$C/pylib:$REPO HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false PYTHONUNBUFFERED=1
-export CUDA_VISIBLE_DEVICES=${GPU:-4} PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS=4
+export CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=${GPU:-4} PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS=4
 export TMPDIR=$C/tmp TRITON_CACHE_DIR=$C/cache/triton TORCHINDUCTOR_CACHE_DIR=$C/cache/inductor
 mkdir -p "$RUN_DIR/logs" "$TMPDIR"
 cd $REPO
