@@ -234,7 +234,7 @@ def move_counts(q, t, p, ctx=None):
                 pd = None                                   # no metric prediction: wrong on every line
             pres = ("", "bk_") if k in direct else ("", "cpl_")
             if q["variant"] == "photonics" and k == "target_loss":
-                pres = pres + ("adj_",)                     # readable off the adjoint map in the observation
+                pres = pres + ("adj_",)                     # the simulator interface includes an adjoint map of it
             for pre in pres:
                 c[pre + "dir_true_" + td] += 1
                 c[pre + "dir_hit_" + td] += pd == td
@@ -411,10 +411,11 @@ def main(argv=None):
         vals = [x for x in vals if not math.isnan(x)]
         return float(np.mean(vals)) if vals else float("nan")
 
-    # every rule and the selection with and without photonics (its observation carries an adjoint map; doc section 11)
-    fsets = [("all", fams)]
+    # primary: all families; sensitivity check: without photonics (its simulator interface includes an adjoint map;
+    # owner 11-25: the map stays, it is part of that simulator's interface)
+    fsets = [("all (primary)", fams)]
     if "photonics" in fams and len(fams) > 1:
-        fsets.append(("no_photonics", [v for v in fams if v != "photonics"]))
+        fsets.append(("no_photonics (sensitivity check)", [v for v in fams if v != "photonics"]))
 
     lines = ["facet profile, pass %s, groups %s, families %s, states %s" % (
         a.pass_, a.groups, fams, {v: len(sids[v]) for v in fams})]

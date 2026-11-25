@@ -366,3 +366,24 @@ Rule 1: con1 beats the facet trees on `V_bal_applied` and on `cpl_dir_BA` (held-
 each), with and without photonics. Rule 3: on the held-out families, con1 beats pref1 and the oracle majority on
 `cpl_dir_BA` and `V_bal_applied` (2 se each). Ceilings measured by scoring the true answers in each level:
 `V_bal_applied` 0.992 (masked) vs 0.956 (facet: Phi from bin midpoints); `cpl_dir_BA` and `regime_phys` 1.000 for both.
+
+**Note 2026-11-25, 15:00 — owner decision on the photonics map (before any result).** The adjoint map stays and the
+observation is not changed: a map the simulator can compute deterministically is part of that simulator's
+interface; a physically reasoning model works with whatever a simulator returns (without a map it needs one more
+step). So:
+1. Primary rules and selection include photonics. The without-photonics numbers are a sensitivity check, not
+   co-primary. Photonics is described as "simulator interface includes an adjoint map" (target_loss facets still
+   listed apart as `adj_dir_BA` / `adj_size`).
+2. The surface-feature control gets the same information the observation shows (`scripts/con1/obs_features.py`,
+   `trees_facets.py --obs-feats`): photonics: the map's first-order change of target_loss for the move,
+   `PhotonicsDomain._gain(g, pat, new)` with g = `_sensitivity(fx, pat)` and new = the materialised pattern, plus the
+   pixels added / removed; engibench: the per-cell field S its observation lists (strain-energy share, |grad T|^2 or
+   optical intensity, top cells + coarse map), summed and averaged over the cells the move fills and clears;
+   circuit2: the simulator's own what-if rows in its observation (one-tunable x1.1 sensitivities of DC gain /
+   crossover / phase margin, scaled by log(new/old)/log 1.1 for the moved tunable; the other compensation schemes;
+   the cascode and nulling-resistor toggles). Checked and not given (their observations show per-element state —
+   member forces, line flows, queues, costs — but no per-move effect estimate): frame3d2, grid2, seir2, traffic2,
+   grid2op. Held-out families have no trees.
+3. How much the map alone predicts: sign agreement of the map's first-order target_loss change with the true change
+   on the photonics questions is reported (`map_sign.py`; a property of the data, not a con1 result).
+Not built (undecided by the owner): an eval-only photonics condition without the map.

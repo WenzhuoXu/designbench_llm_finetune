@@ -73,6 +73,8 @@ class Featurizer:
         f["k"] = ("num", float(st.get("k") or 0))
         f["n_legal"] = ("num", float(st.get("n_legal") or 0))
         f["bad0"] = ("num", float(st.get("bad0") or 0))
+        for k, v in (m.get("obs") or {}).items():           # first-order estimates the observation shows (obs_features)
+            f["obs:%s" % k] = ("num", num(v))
         out = {}
         for col, (kind, val) in f.items():
             if col not in self.cols:

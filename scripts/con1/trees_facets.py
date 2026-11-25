@@ -91,7 +91,19 @@ def main(argv=None):
     ap.add_argument("--groups", nargs="*", default=["heldout_problem"])
     ap.add_argument("--max-states-per-family", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--obs-feats", nargs="*", default=[], help="obs_features.py output(s): the observation's own "
+                    "first-order estimates of each move (photonics adjoint gain, engibench field sums, circuit2 what-ifs)")
     a = ap.parse_args(argv)
+    obs = {}
+    for p in a.obs_feats:
+        for line in open(p, encoding="utf-8"):
+            r = json.loads(line)
+            obs[r["sid"]] = r.get("feats") or {}
+
+    def attach(st):
+        f = obs.get(st["sid"], {})
+        for m in st["moves"]:
+            m["obs"] = f.get(m["move"], {})
     keep = None
     if a.rows:
         keep = set()
@@ -112,6 +124,7 @@ def main(argv=None):
             viol, lab = collections.defaultdict(list), collections.defaultdict(list)
             cons_all, metrics = set(), set()
             for st in data[v]:
+                attach(st)
                 cons, _ = current_violated(st["user"])
                 cons_all |= set(cons)
                 metrics |= set(st["metrics0"])
@@ -139,9 +152,11 @@ def main(argv=None):
                 ok = [i for i, y in enumerate(lab[k]) if y is not None]
                 if ok:
                     mm[k] = Multi(a.seed).fit(X[ok], [lab[k][i] for i in ok], cats)
-            print("%s: %d states, %d transitions, %d features, %d constraints, %d metrics" % (
-                v, len(data[v]), len(regime), X.shape[1], len(vm), len(mm)), flush=True)
+            print("%s: %d states, %d transitions, %d features (%d from the observation's estimates), %d constraints, "
+                  "%d metrics" % (v, len(data[v]), len(regime), X.shape[1],
+                                  sum(1 for c in fz.cols if c.startswith("obs:")), len(vm), len(mm)), flush=True)
             for q in [q for q in qs if q["variant"] == v]:
+                attach(q)
                 Xq = fz.matrix([fz.row(q, m, grow=False) for m in q["moves"]])
                 rg = reg.predict(Xq)
                 vg = ver.predict(Xq)
