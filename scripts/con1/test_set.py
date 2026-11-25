@@ -30,14 +30,16 @@ def main(argv=None):
     a = ap.parse_args(argv)
     rng = random.Random("con1-test-%d" % a.seed)
     by = collections.defaultdict(list)
+    seen = set()                                           # first copy of a state wins (e.g. its off-menu version)
     for p in a.states:
         f = gzip.open(p, "rt", encoding="utf-8") if p.endswith(".gz") else open(p, encoding="utf-8")
         for line in f:
             st = json.loads(line)
             if st["split"] != "test":
                 raise SystemExit("not a test state: %s" % st["sid"])
-            if "/r1/" not in st["key"]:                       # pair a's first run: one state per problem
+            if "/r1/" not in st["key"] or st["sid"] in seen:  # pair a's first run: one state per problem
                 continue
+            seen.add(st["sid"])
             by[st["variant"]].append(st)
     c = collections.Counter()
     with open(a.out, "w", encoding="utf-8") as fo:

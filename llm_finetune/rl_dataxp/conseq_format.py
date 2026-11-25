@@ -33,14 +33,29 @@ def _span_mask(tok, m: dict):
     prefix = (m.get("reasoning_content") or "").strip() + "\n</think>\n\n"
     body = content.strip()
     text = prefix + body + END
-    spans = [(0, len(prefix)), (len(prefix) + len(body), len(text))]
+    # (start, end, weight) over `text`; a token takes the largest weight of the spans it overlaps, else `fixed`.
+    # prefix_weight: the reasoning + think-closing piece (1 by default; P rows: 0, the model's own reasoning).
+    # zero_spans: content ranges that weigh 0 whatever else (P rows: the model's own action line).
+    pw = float(m.get("prefix_weight", 1.0))
+    spans = [(0, len(prefix), pw), (len(prefix) + len(body), len(text), 1.0)]
     for a, b in m["supervise_spans"]:
         a, b = max(0, a - lead), min(len(body), b - lead)
         if b > a:
-            spans.append((len(prefix) + a, len(prefix) + b))
+            spans.append((len(prefix) + a, len(prefix) + b, 1.0))
+    zeros = []
+    for a, b in m.get("zero_spans") or []:
+        a, b = max(0, a - lead), min(len(body), b - lead)
+        if b > a:
+            zeros.append((len(prefix) + a, len(prefix) + b))
     enc = tok(text, add_special_tokens=False, return_offsets_mapping=True)
     ids, offs = list(enc["input_ids"]), enc["offset_mapping"]
-    mask = [1.0 if any(s < b and a < e for a, b in spans) else fixed for s, e in offs]
+    mask = []
+    for s, e in offs:
+        if any(s < b and a < e for a, b in zeros):
+            mask.append(0.0)
+            continue
+        ws = [w for a, b, w in spans if s < b and a < e]
+        mask.append(max(ws) if ws else fixed)
     return ids, mask
 
 

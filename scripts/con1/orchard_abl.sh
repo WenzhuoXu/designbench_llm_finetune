@@ -96,6 +96,15 @@ for arm in "${ARR[@]}"; do
     >> "$OUT/logs/client_$lab.log" 2>&1 &
 done
 wait
+# P-form test (round 2): each arm answers the policy prompt of every test state; p_score.py (CPU) simulates the chosen
+# action and pairs it with the reply's EXPECTED RESULT block
+if [ -n "${P_TEST:-}" ]; then
+  for arm in "${ARR[@]}"; do
+    IFS=: read -r lab fmt rows <<< "$arm"
+    PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/p_client.py --queries "$QUERIES" --base-url "${URLS[@]}" --model "$lab"       --label "$lab" --out "$OUT/predsP_$lab.jsonl" --groups heldout_problem --variants $VARIANTS --max-tokens 8192       --workers 64 >> "$OUT/logs/pclient_$lab.log" 2>&1 &
+  done
+  wait
+fi
 if [ "$(df -BG --output=avail "$B" | tail -1 | tr -dc 0-9)" -gt "${KEEP_IF_FREE_GB:-40}" ]; then
   for arm in "${ARR[@]}"; do IFS=: read -r lab fmt rows <<< "$arm"; mkdir -p "$OUT/adapters/$lab"; cp -r "$TMPRUN/$lab/final/." "$OUT/adapters/$lab/"; done
   echo "adapters copied to $OUT/adapters"
