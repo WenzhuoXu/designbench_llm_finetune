@@ -5,22 +5,36 @@ metrics_after, feasible, the verbatim result message) and parses back (score_pre
 (regime, feasibility, violated constraints, per-metric direction and size, values where the format has them).
 
   verbatim   the harness's result message word for word (what a check returns)
-  masked     verbatim text; the loss only on informative tokens: the after values (status block and EFFECT block),
-             the VIOLATED markers, the feasible word, the refusal reason. Not supervised: the header, metric names,
-             limits, before values and section titles (all copyable from the prompt or the question)
+  masked     verbatim text with fixed wording down-weighted in the loss (the owner: mask fixed wording in any verbatim
+             level): informative = the after values (status block and EFFECT block), the VIOLATED markers, the feasible
+             word, the refusal reason; fixed = the header, metric names, limits, before values, section titles
   facet      verdict first, then FEASIBLE AFTER, VIOLATED AFTER, and one line per metric: direction (up / down / same)
-             and the size of the change relative to the current value in half-decade bins (no digits of the value)
-  delta      verdict first, then FEASIBLE AFTER, VIOLATED AFTER, and one line per metric: the signed change at 3
+             and the size of the change relative to the current value in 1-2-5 bins (about factor-2 wide; no digits)
+  delta      structured: verdict first, FEASIBLE AFTER, VIOLATED AFTER, one line per metric: the signed change at 3
              significant digits and the relative change in percent (3 significant digits)
+  absolute   structured: verdict first, FEASIBLE AFTER, VIOLATED AFTER, one line per metric: before -> after at 4
+             significant digits
+Every format's answer carries character spans of its informative content (render's second value); the loss weighs
+those tokens 1 and the fixed wording FIXED_WEIGHT (0.05, not 0: the model must still learn to write the scaffold it
+generates at test time; 0.05 removes ~95% of the scaffold's share of the loss).
 """
 from __future__ import annotations
 
 import math
 import re
 
-FORMATS = ("verbatim", "masked", "facet", "delta")
-BINS = [(0.001, "<0.1%"), (0.003, "0.1-0.3%"), (0.01, "0.3-1%"), (0.03, "1-3%"), (0.1, "3-10%"), (0.3, "10-30%"),
-        (1.0, "30-100%"), (3.0, "100-300%"), (10.0, "300-1000%"), (math.inf, ">1000%")]
+FORMATS = ("verbatim", "masked", "facet", "delta", "absolute")
+NL = chr(10)
+FIXED_WEIGHT = 0.05
+_EDGES = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]
+
+
+def _pct(x):
+    return ("%g" % (100 * x))
+
+
+BINS = [(_EDGES[0], "<0.1%")] + [(_EDGES[i + 1], "%s-%s%%" % (_pct(_EDGES[i]), _pct(_EDGES[i + 1])))
+                                 for i in range(len(_EDGES) - 1)] + [(math.inf, ">1000%")]
 BIN_NAMES = [b for _, b in BINS]
 SAME_TOL = 1e-5            # relative: a change below 0.001% of the value is 'same' (the verbatim message prints 6 digits)
 
@@ -44,6 +58,10 @@ FORMAT_TEXT = {
               "applied', 'FEASIBLE AFTER: yes|no', 'VIOLATED AFTER: <constraints violated after the move, or none>', "
               "then 'CHANGES:' and one line per metric: the metric, the signed change (after minus before) to 3 "
               "significant digits and the relative change in percent to 3 significant digits (or 'from 0')."),
+    "absolute": ("Answer in this form: either 'VERDICT: refused' and 'REASON: <the simulator's reason>', or 'VERDICT: "
+                 "applied', 'FEASIBLE AFTER: yes|no', 'VIOLATED AFTER: <constraints violated after the move, or none>', "
+                 "then 'METRICS (before -> after):' and one line per metric: the metric, its current value and its "
+                 "value after the move, both to 4 significant digits."),
 }
 FORMAT_TEXT["masked"] = FORMAT_TEXT["verbatim"]
 
@@ -95,36 +113,51 @@ def violated_after(result: str) -> list:
 
 
 def render(fmt: str, move: dict, metrics0: dict):
-    """(content, supervise_spans or None) of the answer for one simulated move."""
+    """(content, informative spans [(start, end)] or None). verbatim: None (every token weighs 1); every other
+    format: the spans of its informative content (the rest is fixed wording, FIXED_WEIGHT in the loss)."""
     res = move["result"]
     if fmt == "verbatim":
         return res, None
     if fmt == "masked":
         return res, informative_spans(res)
+    out, spans = [], []
+
+    def add(fixed: str, info: str = "", tail: str = ""):
+        start = sum(len(x) + 1 for x in out)
+        out.append(fixed + info + tail)
+        if info:
+            spans.append((start + len(fixed), start + len(fixed) + len(info)))
+
     if move["verdict"] == "refused":
         reason = move.get("refused") or res.split("refused by the simulator:", 1)[-1].strip()
-        return "VERDICT: refused\nREASON: %s" % reason, None
+        add("VERDICT: ", "refused")
+        add("REASON: ", reason)
+        return NL.join(out), spans
     after = move["metrics_after"]
     viol = violated_after(res)
-    lines = ["VERDICT: applied", "FEASIBLE AFTER: %s" % ("yes" if move["feasible"] else "no"),
-             "VIOLATED AFTER: %s" % (", ".join(viol) if viol else "none"), "CHANGES:"]
+    add("VERDICT: ", "applied")
+    add("FEASIBLE AFTER: ", "yes" if move["feasible"] else "no")
+    add("VIOLATED AFTER: ", ", ".join(viol) if viol else "none")
+    add("METRICS (before -> after):" if fmt == "absolute" else "CHANGES:")
     for k in sorted(metrics0):
         if k not in after:
             continue
         b, a = float(metrics0[k]), float(after[k])
+        name = "  %-22s " % k
         if fmt == "facet":
             sb = size_bin(b, a)
-            lines.append("  %-22s %s" % (k, "same" if sb == "same" else "%s %s" % (direction(b, a), sb)))
+            add(name, "same" if sb == "same" else "%s %s" % (direction(b, a), sb))
+        elif fmt == "absolute":
+            add(name + "%s -> " % sig(b, 4), sig(a, 4))
         else:
             dr = direction(b, a)
             if dr == "same":
-                lines.append("  %-22s same" % k)
+                add(name, "same")
             elif b == 0:
-                lines.append("  %-22s %s from 0" % (k, ("+" if a > b else "") + sig(a - b)))
+                add(name, "%s from 0" % (("+" if a > b else "") + sig(a - b)))
             else:
-                lines.append("  %-22s %s (%s%%)" % (k, ("+" if a > b else "") + sig(a - b),
-                                                    ("+" if a > b else "") + sig(100.0 * (a - b) / abs(b))))
-    return "\n".join(lines), None
+                add(name, "%s (%s%%)" % (("+" if a > b else "") + sig(a - b), ("+" if a > b else "") + sig(100.0 * (a - b) / abs(b))))
+    return NL.join(out), spans
 
 
 EFFECT_LINE = re.compile(r"^(\s+[A-Za-z_][\w.\-]*\s+\S+\s*->\s*)(\S+)\s*$")

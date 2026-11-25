@@ -36,6 +36,20 @@ from targets import BIN_NAMES, BINS, direction, size_bin, violated_after  # noqa
 NUM = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
 STATUS_CUR = re.compile(r"^\s+([A-Za-z_][\w.\-]*)\s+\S+\s+limit .*?(VIOLATED)?", re.M)
 REGIMES = ("refused", "applied-infeasible", "applied-feasible")
+VERDICTS = ("refused", "worse", "better")
+# 'Directly moved' metrics: bookkeeping of the move itself (amounts, sizes, counts, costs of what was set), readable
+# without solving any physics. Every other metric is a response the simulator computes; the coupling facet is the
+# direction / size facets on those response metrics only. Fixed 11-25 before any result (doc section 11).
+DIRECT = {
+    "circuit2": {"area", "power_mw"}, "engibench": {"volume", "n_components"}, "frame3d2": {"mass"},
+    "grid2": {"commitment_cost", "n_committed"},
+    "grid2op": {"step", "redispatch_mw", "redispatch_cost", "curtailed_mw", "storage_cost", "lines_out",
+                "lines_unavailable"},
+    "photonics": {"fill_fraction", "n_islands", "min_feature_violations"}, "seir2": {"doses_per_capita", "cost"},
+    "traffic2": {"lanes_used"}, "inventory2": set(),
+    "molopt": {"heavy_atoms", "mol_weight", "n_rings", "max_ring_size", "rot_bonds"},
+    "thermal2": {"cost", "link_cost", "sink_cost"},
+}
 
 
 def current_violated(user: str) -> tuple:
@@ -57,24 +71,26 @@ def current_violated(user: str) -> tuple:
 
 def truth_facets(q: dict, m: dict) -> dict:
     if m["verdict"] == "refused":
-        return {"regime": "refused"}
+        return {"regime": "refused", "verdict": "refused"}
     after = m["metrics_after"]
-    out = {"regime": "applied-feasible" if m["feasible"] else "applied-infeasible",
-           "violated": set(violated_after(m["result"])), "dir": {}, "bin": {}, "after": dict(after)}
+    out = {"regime": "applied-feasible" if m["feasible"] else "applied-infeasible", "verdict": m["verdict"],
+           "violated": set(violated_after(m["result"])), "dir": {}, "bin": {}, "change": {}, "after": dict(after)}
     for k, b in q["metrics0"].items():
         if k in after:
             out["dir"][k] = direction(float(b), float(after[k]))
             out["bin"][k] = size_bin(float(b), float(after[k]))
+            out["change"][k] = float(after[k]) - float(b)
     return out
 
 
 def _bins_from_values(m0: dict, after: dict) -> tuple:
-    d, b = {}, {}
+    d, b, ch = {}, {}, {}
     for k, v in after.items():
         if k in m0:
             d[k] = direction(float(m0[k]), float(v))
             b[k] = size_bin(float(m0[k]), float(v))
-    return d, b
+            ch[k] = float(v) - float(m0[k])
+    return d, b, ch
 
 
 def _mid_value(before: float, dr: str, bn: str):
@@ -103,8 +119,8 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
             return {"regime": r["kind"]}
         fe = r.get("feasible_said")
         out = {"regime": "applied-feasible" if fe else "applied-infeasible", "violated": set(violated_after(text))}
-        d, b = _bins_from_values(m0, r["metrics"])
-        out.update(dir=d, bin=b, after=r["metrics"])
+        d, b, ch = _bins_from_values(m0, r["metrics"])
+        out.update(dir=d, bin=b, change=ch, after=r["metrics"])
         return out
     low = text.lower()
     mv = re.search(r"VERDICT:\s*(\w+)", text)
@@ -121,8 +137,13 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
     if vl and vl.group(1).strip().lower() not in ("none", ""):
         viol = {x.strip() for x in vl.group(1).split(",") if x.strip()}
     out = {"regime": "applied-feasible" if feasible else "applied-infeasible", "violated": viol, "dir": {},
-           "bin": {}, "after": dict(m0)}
-    body = text.split("CHANGES:", 1)[1] if "CHANGES:" in text else ""
+           "bin": {}, "change": {}, "after": dict(m0)}
+    if "CHANGES:" in text:
+        body = text.split("CHANGES:", 1)[1]
+    elif "METRICS (before -> after):" in text:
+        body = text.split("METRICS (before -> after):", 1)[1]
+    else:
+        body = ""
     for line in body.splitlines():
         parts = line.split()
         if len(parts) < 2 or parts[0] not in m0:
@@ -142,6 +163,20 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
             v = _mid_value(b0, dr, out["bin"][k])
             if v is not None:
                 out["after"][k] = v
+                out["change"][k] = v - b0
+        elif fmt == "absolute":                            # 'b -> a' (4 significant digits each)
+            mm = re.match(r"(%s)\s*->\s*(%s)" % (NUM, NUM), rest)
+            if not mm:
+                continue
+            try:
+                bw, aw = float(mm.group(1)), float(mm.group(2))
+            except ValueError:
+                continue
+            dch = aw - bw                                  # the change as written (both values rounded alike)
+            out["after"][k] = b0 + dch
+            out["change"][k] = dch
+            out["dir"][k] = "same" if dch == 0 else ("up" if dch > 0 else "down")
+            out["bin"][k] = size_bin(b0, b0 + dch) if dch != 0 else "same"
         else:                                              # delta: '+x (+y%)' or '+x from 0'
             mm = re.match(r"(%s)" % NUM, parts[1])
             if not mm:
@@ -151,6 +186,7 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
             except ValueError:
                 continue
             out["after"][k] = a
+            out["change"][k] = a - b0
             out["dir"][k] = direction(b0, a)
             out["bin"][k] = size_bin(b0, a)
     return out
@@ -187,19 +223,47 @@ def move_counts(q, t, p, ctx=None):
             c["cross_hit"] += tc and pc
             c["nocross_true"] += not tc
             c["false_cross"] += (not tc) and pc
+    direct = DIRECT.get(q["variant"], set())
     if t["regime"] != "refused":
         for k, td in t["dir"].items():
-            pd = (p.get("dir") or {}).get(k, "same" if p["regime"] in ("refused", "unreadable") else "same")
+            pd = (p.get("dir") or {}).get(k, "same")
             if p["regime"] in ("refused", "unreadable"):
                 pd = None                                   # no metric prediction: wrong on every line
-            c["dir_true_" + td] += 1
-            c["dir_hit_" + td] += pd == td
-            tb = t["bin"][k]
-            if tb not in ("same", "from 0"):
-                c["size_n"] += 1
-                pb = (p.get("bin") or {}).get(k)
-                if pd == td and pb in BIN_NAMES and abs(BIN_NAMES.index(pb) - BIN_NAMES.index(tb)) <= 1:
-                    c["size_hit"] += 1
+            pres = ("",) if k in direct else ("", "cpl_")
+            for pre in pres:
+                c[pre + "dir_true_" + td] += 1
+                c[pre + "dir_hit_" + td] += pd == td
+            tch = t["change"][k]
+            if td != "same" and float(q["metrics0"][k]) != 0.0:
+                pch = (p.get("change") or {}).get(k)
+                ok = bool(pd == td and pch and tch and abs(math.log2(abs(pch / tch))) <= 1.0)
+                for pre in pres:
+                    c[pre + "size_n"] += 1
+                    c[pre + "size_hit"] += ok
+                if pd == td and pch and tch:
+                    c["logratio_n"] += 1
+                    c["logratio_abs_sum"] += abs(math.log2(abs(pch / tch)))
+    # verdict (refused / worse / better): truth from the record; the prediction from the predictor (trees) or from the
+    # problem's potential of the predicted metric values (ctx)
+    pv = p.get("verdict")
+    if pv is None and ctx is not None:
+        if p["regime"] in ("refused", "unreadable"):
+            pv = p["regime"]
+        else:
+            try:
+                after = p.get("after") or {}
+                phi = ctx.phi(after)
+                viol = float(after.get("min_feature_violations") or 0.0) if q["variant"] == "photonics" else 0.0
+                pv = ctx.verdict(phi, viol)
+            except Exception:                              # noqa: BLE001
+                pv = "unreadable"
+    if pv is not None:
+        tv = t["verdict"]
+        c["v_true_" + tv] += 1
+        c["v_hit_" + tv] += pv == tv
+        if tv != "refused" and pv in ("better", "worse"):
+            c["disc_pred_" + pv] += 1
+            c["disc_true_better_given_" + pv] += tv == "better"
     return c
 
 
@@ -208,9 +272,17 @@ def family_scores(cs: collections.Counter) -> dict:
         return cs[a] / cs[b] if cs[b] else float("nan")
     rec = [cs["regime_hit_" + r] / cs["regime_true_" + r] for r in REGIMES if cs["regime_true_" + r]]
     drec = [cs["dir_hit_" + d] / cs["dir_true_" + d] for d in ("up", "down", "same") if cs["dir_true_" + d]]
+    crec = [cs["cpl_dir_hit_" + d] / cs["cpl_dir_true_" + d] for d in ("up", "down", "same") if cs["cpl_dir_true_" + d]]
+    vrec = [cs["v_hit_" + v] / cs["v_true_" + v] for v in VERDICTS if cs["v_true_" + v]]
     out = {"regime_BA": float(np.mean(rec)) if rec else float("nan"),
            "dir_BA": float(np.mean(drec)) if drec else float("nan"),
            "size": rate("size_hit", "size_n"),
+           "cpl_dir_BA": float(np.mean(crec)) if crec else float("nan"),
+           "cpl_size": rate("cpl_size_hit", "cpl_size_n"),
+           "V_bal": float(np.mean(vrec)) if vrec else float("nan"),
+           "logratio_mean_abs": rate("logratio_abs_sum", "logratio_n"),
+           "disc": (rate("disc_true_better_given_better", "disc_pred_better")
+                    - rate("disc_true_better_given_worse", "disc_pred_worse")),
            "viol_exact": rate("viol_exact", "viol_n"),
            "cross_recall": rate("cross_hit", "cross_true"),
            "false_cross": rate("false_cross", "nocross_true"),
@@ -221,7 +293,9 @@ def family_scores(cs: collections.Counter) -> dict:
            "unreadable": rate("unreadable", "moves")}
     for r in REGIMES:
         out["recall_" + r] = rate("regime_hit_" + r, "regime_true_" + r)
-    sel = [out["regime_BA"], out["dir_BA"], out["size"]]
+    for v in VERDICTS:
+        out["recall_v_" + v] = rate("v_hit_" + v, "v_true_" + v)
+    sel = [out["regime_BA"], out["dir_BA"], out["cpl_dir_BA"], out["size"]]
     sel = [x for x in sel if not math.isnan(x)]
     out["select"] = float(np.mean(sel)) if sel else float("nan")
     return out
@@ -238,7 +312,34 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=None)
     ap.add_argument("--json", default=None)
+    ap.add_argument("--problems", nargs="*", default=[], help="problem specs (bench_problems.jsonl): with --code and "
+                    "--harness, the predicted Phi verdict (V_bal, disc) is computed for formats that give values")
+    ap.add_argument("--code", default=None)
+    ap.add_argument("--harness", default=None)
     a = ap.parse_args(argv)
+    ctxs = {}
+    if a.problems and a.code and a.harness:
+        os.environ.setdefault("OMP_NUM_THREADS", "1")
+        from conseq_lib import Env
+        from score_pred import PhiContext
+        env = Env(a.code, a.harness)
+        specs = {}
+        for path in a.problems:
+            for line in open(path, encoding="utf-8"):
+                r = json.loads(line)
+                specs[r["spec"]["problem_id"]] = (r["variant"], r["spec"])
+        evs = {}
+
+        def ctx_of(q):
+            if q["sid"] not in ctxs:
+                v, spec = specs[q["problem_id"]]
+                if q["problem_id"] not in evs:
+                    evs[q["problem_id"]] = env.D.PhiEvaluator(env.domain(v), spec)
+                ctxs[q["sid"]] = PhiContext(evs[q["problem_id"]], v, q["phi0"], q.get("bad0") or 0)
+            return ctxs[q["sid"]]
+    else:
+        def ctx_of(q):
+            return None
     qs = {}
     for line in open(a.queries, encoding="utf-8"):
         q = json.loads(line)
@@ -252,7 +353,7 @@ def main(argv=None):
     for q in qs.values():
         cs = collections.Counter()
         for m in q["moves"]:
-            cs.update(move_counts(q, truth_facets(q, m), nochange_facets(q)))
+            cs.update(move_counts(q, truth_facets(q, m), nochange_facets(q), ctx_of(q)))
         per["nochange"][q["sid"]] = cs
     formats = {}
     for p in a.preds:
@@ -269,7 +370,7 @@ def main(argv=None):
                 pf["violated"] = set(pf.get("violated") or [])
             else:
                 pf = pred_facets(r.get("text"), fmt, q)
-            per[r["predictor"]].setdefault(r["sid"], collections.Counter()).update(move_counts(q, t, pf))
+            per[r["predictor"]].setdefault(r["sid"], collections.Counter()).update(move_counts(q, t, pf, ctx_of(q)))
     fams = sorted({q["variant"] for q in qs.values()})
     sids = {v: sorted(s for s, q in qs.items() if q["variant"] == v) for v in fams}
     rng = np.random.default_rng(a.seed)
@@ -289,8 +390,9 @@ def main(argv=None):
 
     lines = ["facet profile, pass %s, groups %s, families %s, states %s" % (
         a.pass_, a.groups, fams, {v: len(sids[v]) for v in fams})]
-    keys = ["select", "regime_BA", "dir_BA", "size", "viol_exact", "cross_recall", "false_cross", "refused_recall",
-            "refused_precision", "feas_recall", "feas_precision", "unreadable"]
+    keys = ["select", "regime_BA", "V_bal", "dir_BA", "cpl_dir_BA", "size", "cpl_size", "logratio_mean_abs",
+            "viol_exact", "cross_recall", "false_cross", "refused_recall", "refused_precision", "feas_recall",
+            "feas_precision", "disc", "unreadable"]
     preds = ["nochange"] + sorted(k for k in per if k != "nochange")
     lines.append("%-10s %-11s" % ("predictor", "family") + "".join("%10s" % k[:10] for k in keys))
     res = {}
@@ -303,7 +405,7 @@ def main(argv=None):
     lines.append("group means (+- se, bootstrap over states)")
     for pr in preds:
         row = []
-        for k in ("select", "regime_BA", "dir_BA", "size"):
+        for k in ("select", "regime_BA", "V_bal", "dir_BA", "cpl_dir_BA", "size"):
             pt = group(pr, k)
             bs = [group(pr, k, b) for b in boots]
             se = float(np.nanstd(bs, ddof=1))

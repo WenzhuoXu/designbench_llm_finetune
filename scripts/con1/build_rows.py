@@ -27,7 +27,7 @@ import random
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from targets import FORMATS, question, render  # noqa: E402
+from targets import FIXED_WEIGHT, FORMATS, question, render  # noqa: E402
 
 TRAIN_FAMILIES = ["engibench", "grid2op", "photonics", "circuit2", "frame3d2", "grid2", "seir2", "traffic2"]
 HELD_OUT = {"inventory2", "molopt", "thermal2"}
@@ -82,6 +82,7 @@ def answer(fmt: str, st: dict, m: dict) -> dict:
     msg = {"role": "assistant", "content": content, "reasoning_content": ""}
     if spans is not None:
         msg["supervise_spans"] = spans
+        msg["fixed_weight"] = FIXED_WEIGHT
     return msg
 
 

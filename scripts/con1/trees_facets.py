@@ -5,7 +5,8 @@ training states, scored by facets.py exactly like a model's answers.
     python trees_facets.py --train states_*.jsonl.gz [--rows rows.jsonl] --queries queries.jsonl --out preds_trees.jsonl
         [--families ...] [--max-states-per-family N]
 
-Models per family (LightGBM): regime (refused / applied-infeasible / applied-feasible); per constraint, violated after
+Models per family (LightGBM): regime (refused / applied-infeasible / applied-feasible); verdict (refused / worse /
+better, the Phi rule); per constraint, violated after
 (yes / no); per metric, the joint label 'direction + size bin' (targets.size_bin, e.g. 'up 1-3%' or 'same'), from which
 direction and size are read. Output lines: {sid, predictor: 'trees', pass: 'zero', qi, target: 'facets', facets}.
 """
@@ -107,7 +108,8 @@ def main(argv=None):
                 print("%s: no training states, no tree" % v)
                 continue
             fz = Featurizer()
-            X_rows, regime, viol, lab = [], [], collections.defaultdict(list), collections.defaultdict(list)
+            X_rows, regime, verdict = [], [], []
+            viol, lab = collections.defaultdict(list), collections.defaultdict(list)
             cons_all, metrics = set(), set()
             for st in data[v]:
                 cons, _ = current_violated(st["user"])
@@ -119,6 +121,7 @@ def main(argv=None):
                     tf = truth_facets(st, m)
                     X_rows.append(fz.row(st, m, grow=True))
                     regime.append(tf["regime"])
+                    verdict.append(m["verdict"])
                     for c in cons_all:
                         viol[c].append(None if tf["regime"] == "refused" else (c in tf["violated"]))
                     for k in metrics:
@@ -126,6 +129,7 @@ def main(argv=None):
             X = fz.matrix(X_rows)
             cats = fz.cat_idx()
             reg = Multi(a.seed).fit(X, regime, cats)
+            ver = Multi(a.seed).fit(X, verdict, cats)
             vm, mm = {}, {}
             for c in cons_all:
                 ok = [i for i, y in enumerate(viol[c]) if y is not None]
@@ -140,10 +144,11 @@ def main(argv=None):
             for q in [q for q in qs if q["variant"] == v]:
                 Xq = fz.matrix([fz.row(q, m, grow=False) for m in q["moves"]])
                 rg = reg.predict(Xq)
+                vg = ver.predict(Xq)
                 vp = {c: mdl.predict(Xq) for c, mdl in vm.items()}
                 lp = {k: mdl.predict(Xq) for k, mdl in mm.items()}
                 for qi in range(len(q["moves"])):
-                    f = {"regime": rg[qi]}
+                    f = {"regime": rg[qi], "verdict": vg[qi]}
                     if rg[qi] != "refused":
                         f["violated"] = sorted(c for c in vm if vp[c][qi])
                         f["dir"], f["bin"] = {}, {}

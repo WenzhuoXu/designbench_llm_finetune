@@ -267,3 +267,79 @@ scorer replacing V / D / PO as the primary skill measures.
 ## 10. Results
 
 (none yet)
+
+## 11. Addendum 2026-11-25, 14:45 — the owner's consolidated goal (before any con1 result)
+
+Relayed by the parent session. This merges and supersedes the earlier owner messages; where it differs from
+sections 1–9, it wins.
+
+**Goal, in priority order.** (1) The model has learned physics: it predicts the consequences of moves on facets that
+need physics (regime, direction, relative size, coupling), beyond surface features and beyond refusal rules. (2) This
+holds on problem types it never trained on, at k = 0 and especially after a few probes. (3) Improvisation (I1, I2).
+(4) Supporting evidence only: the policy uses the skill (benchmark at equal simulator calls); feasibility is not the
+bar. Not goals: exact digits, ranking, raw accuracy.
+
+**Target axis (replaces §1's fixed choice and §6's "full message" decision).** The verbatim message is one level, and
+in any verbatim level the fixed wording is masked from the loss. Round 1 levels (one 1-GPU arm each, same states and
+moves): **M** verbatim with fixed wording masked; **F** facet: verdict, feasibility, violated constraints, then per
+metric direction and the relative change in 1-2-5 bins (0.1, 0.2, 0.5, 1, 2, 5, ... 1000 %, about factor-2 wide), no
+digits; **D** structured delta: verdict, feasibility, violated, per metric the signed change and percent change at 3
+significant digits; **S** structured absolute: verdict, feasibility, violated, per metric before -> after at 4
+significant digits. The question text states each level's form. The unmasked verbatim arm of §9 is dropped.
+*Decision (mine):* in every level the informative tokens weigh 1 and the fixed wording (labels, metric names, limits,
+before values, header) weighs 0.05, not 0: the model has to write that scaffold itself at test time and a zero weight
+gives it no gradient to learn it; 0.05 removes about 95% of the scaffold's share of the loss. The trainer reports the
+loss on informative tokens alone (`nll_info_token`).
+
+**Observation axis.** How the physics and simulator state is shown is a second axis (round 2: e.g. the photonics grid
+written differently, unranked element-level state). Any change needs the owner's yes with its measured effect;
+influence / fix tables stay banned. Noted for the owner: the photonics benchmark observation already carries an
+adjoint sensitivity map and the six pixels "whose filling/emptying lowers target_loss most"
+(`dataxp/domains/photonics.py`, ~l.1680–1708), an influence table of the banned kind, inherited, not changed here.
+
+**Metrics (replace §3's V / D / PO and §8's selection score).** Primary is a profile of facets, each against the
+no-change baseline (`scripts/con1/facets.py`):
+- regime: balanced accuracy over refused / applied-infeasible / applied-feasible with per-class recall; refusal
+  precision and recall; feasibility-flip recall and precision; constraint crossings (recall, false-crossing rate);
+- **V_bal**: the 3-way verdict (refused / worse / better by the Phi rule) as balanced accuracy with per-class recall;
+  the predicted Phi is the problem's potential of the predicted values (facet level: bin geometric midpoints);
+- **direction (D / N)**: per-metric sign (up / down / same) balanced accuracy;
+- **size**: per metric with a true change from a nonzero value, right sign and |log2(predicted change / actual
+  change)| <= 1 (within factor 2); the mean |log2| is reported too;
+- **coupling**: direction and size on the metrics not directly moved. *Decision (mine):* "directly moved" = the
+  move's own bookkeeping, readable without solving physics: circuit2 area, power_mw; engibench volume,
+  n_components; frame3d2 mass; grid2 commitment_cost, n_committed; grid2op step, redispatch_mw, redispatch_cost,
+  curtailed_mw, storage_cost, lines_out, lines_unavailable; photonics fill_fraction, n_islands,
+  min_feature_violations; seir2 doses_per_capita, cost; traffic2 lanes_used; molopt heavy_atoms, mol_weight, n_rings,
+  max_ring_size, rot_bonds; thermal2 cost, link_cost, sink_cost; inventory2 none. Everything else is coupled.
+- Diagnostics, never in a rule: within-state discrimination (P(true better | predicted better) − P(true better |
+  predicted worse)), PO, exact-message match. LambdaRank trees are dropped; the surface-feature control is the facet
+  trees (`trees_facets.py`: verdict, regime, violated per constraint, direction + size bin per metric).
+- Format ceilings, measured by scoring the true answers rendered in each level (4 native+replay families): selection
+  score masked 1.000, delta 1.000, facet 0.996, absolute 0.990; V_bal 0.992 / 0.998 / 0.965 / 0.996 (bin midpoints
+  and 4-digit rounding lose a little).
+
+**Selection (round 1 and later rounds).** Per family the mean of regime balanced accuracy, direction balanced
+accuracy, coupling direction balanced accuracy and size; group = mean over the round's families, held-out problems,
+zero-shot; highest wins, within 1 se the level with fewer target tokens wins. Held-out families are not looked at
+before the final skill test; splits are by problem.
+
+**Rules (replace §4).**
+1. Stop (surface features): on held-out problems of the 8 training families at k = 0, con1 beats the facet trees on
+   V_bal and on direction balanced accuracy, each by at least 2 se. Otherwise stop: "learns no more than surface
+   features".
+2. Refusal predictor: if con1 beats the trees (held-out problems) or pref1 and the oracle majority (held-out
+   families) on V_bal but not on direction balanced accuracy, the result is called a refusal predictor, for the
+   held-out families as well as the training families.
+3. Generalisation: on the held-out families, con1 beats pref1 (asked the same question) and the oracle majority on
+   direction balanced accuracy and on V_bal, each by 2 se; a pass on V_bal alone is not generalisation. Reported at
+   k = 0 and after probes (I1).
+4. Benchmark: reported as supporting evidence (feasible@20 at equal simulator calls, 2 pairs per side, refused share,
+   Phi-up share, recovery I2), not as a bar.
+5. Forecaster in the loop: unchanged (if rules 1–3 pass and the policy does not use the skill).
+I1 is judged on the k-shot gain in direction balanced accuracy and V_bal (same moves, sequential vs zero-shot).
+
+**Round 1 as submitted.** Families engibench, grid2op, photonics, circuit2, frame3d2 (the data generated by 13:47;
+engibench and photonics states come from about 15 episodes each, so the round compares formats, not final skill),
+150 training states per family, 12 questions per state, 16 rows per step, one epoch, lr 1e-4, LoRA from pref1, no
+policy rows. Orchard job 175877 (arms re-pointed to M / F / D / S before it started).

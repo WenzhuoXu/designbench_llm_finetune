@@ -24,8 +24,10 @@ def answer_text(message: dict) -> str:
 
 
 def _span_mask(tok, m: dict):
-    """Tokens of an answer and a mask that supervises only the tokens overlapping m['supervise_spans'] (character
-    ranges of m['content']), plus the think-closing piece before the content and the end token after it."""
+    """Tokens of an answer and per-token loss weights: 1 on tokens overlapping m['supervise_spans'] (character ranges
+    of m['content']), on the think-closing piece before the content and on the end token; m['fixed_weight'] (default
+    0: masked) on every other token (the fixed wording of the answer format)."""
+    fixed = float(m.get("fixed_weight") or 0.0)
     content = m.get("content") or ""
     lead = len(content) - len(content.lstrip())
     prefix = (m.get("reasoning_content") or "").strip() + "\n</think>\n\n"
@@ -38,7 +40,7 @@ def _span_mask(tok, m: dict):
             spans.append((len(prefix) + a, len(prefix) + b))
     enc = tok(text, add_special_tokens=False, return_offsets_mapping=True)
     ids, offs = list(enc["input_ids"]), enc["offset_mapping"]
-    mask = [1 if any(s < b and a < e for a, b in spans) else 0 for s, e in offs]
+    mask = [1.0 if any(s < b and a < e for a, b in spans) else fixed for s, e in offs]
     return ids, mask
 
 
