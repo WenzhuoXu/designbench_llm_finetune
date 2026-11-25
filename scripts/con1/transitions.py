@@ -320,6 +320,7 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--workers", type=int, default=20)
     ap.add_argument("--reverse", action="store_true", help="work the job list back to front")
+    ap.add_argument("--start-frac", type=float, default=0.0, help="start at this fraction of the job list (wraps)")
     ap.add_argument("--skip-keys", default=None, help="another output file (its .done keys are skipped)")
     a = ap.parse_args(argv)
     specs = read_specs(a.problems)
@@ -368,6 +369,9 @@ def main(argv=None):
         fn = scripted_job
     if a.reverse:                                          # a second machine works the list from the other end
         jobs = jobs[::-1]
+    if a.start_frac:                                       # a third machine starts in the middle
+        k = int(len(jobs) * a.start_frac)
+        jobs = jobs[k:] + jobs[:k]
     if a.skip_keys:
         skip = done_keys(a.skip_keys)
         jobs = [j for j in jobs if (j[2]["key"] if a.mode == "episodes" else "scripted/%s" % j[3]["problem_id"]) not in skip]
