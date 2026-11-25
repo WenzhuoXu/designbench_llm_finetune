@@ -69,7 +69,15 @@ def completion_text(message: dict) -> str:
 
 
 def row_sample(row: dict, tok) -> dict:
-    """prompt_ids / completion_ids of a row, tokenised as it is trained."""
+    """prompt_ids / completion_ids of a row, tokenised as it is trained. A row with supervise = 'every_assistant'
+    (con1 consequence rows, conseq_format.py) is a conversation whose every assistant turn is supervised: its sample
+    carries mask (1 on answer tokens) and the loss is the mean over the masked tokens."""
+    if row.get("supervise") == "every_assistant":
+        from .conseq_format import encode
+        e = encode(tok, row["messages"])
+        if not any(e["mask"]):
+            raise ValueError("a consequence row without an answer")
+        return dict(e, domain=row.get("domain"), tier=row.get("tier"))
     msgs = row["messages"]
     if not msgs or msgs[-1].get("role") != "assistant":
         raise ValueError("the row's last message is not the assistant turn")
@@ -116,6 +124,17 @@ def set_lora_dropout(model, p: float) -> int:
     return n
 
 
+def _masked(lp, sample: dict):
+    """The supervised tokens' log-probabilities: all of them, or those under the sample's mask (consequence rows)."""
+    mask = sample.get("mask")
+    if mask is None:
+        return lp
+    import torch
+    if len(mask) != lp.numel():
+        raise RuntimeError("mask of %d tokens for a completion of %d" % (len(mask), lp.numel()))
+    return lp[torch.tensor(mask, dtype=torch.bool, device=lp.device)]
+
+
 def train_step(policy, samples: list[dict], dist, opt, max_grad_norm: float, temperature: float = 1.0) -> dict:
     """One optimizer step on the mean per-row cross-entropy of `samples` (this rank's share), the
     log-probabilities taken at `temperature`."""
@@ -127,6 +146,7 @@ def train_step(policy, samples: list[dict], dist, opt, max_grad_norm: float, tem
         torch.cuda.reset_peak_memory_stats(policy.device)
     for s in mine:
         lp, _ = policy.logprobs(s["prompt_ids"], s["completion_ids"], float(temperature))
+        lp = _masked(lp, s)
         nll = -lp.mean()
         if not bool(torch.isfinite(nll)):
             raise RuntimeError("non-finite loss on a row of %d + %d tokens (%s)" % (
@@ -161,6 +181,7 @@ def score_rows(policy, samples: list[dict], dist, temperature: float = 1.0) -> d
         with torch.no_grad():
             for s in mine:
                 lp, _ = policy.logprobs(s["prompt_ids"], s["completion_ids"], float(temperature))
+                lp = _masked(lp, s)
                 stats[0] += 1
                 stats[1] += -lp.mean().double()
                 stats[2] += lp.numel()

@@ -163,14 +163,14 @@ class State:
                                   % (out["move"], why))
                 return out
             sc = self.ev.score(child, seed0=seed)
-            text = self._check_text_vs(child, sc, applied)
+            text = self._check_text_vs(child, sc, applied, out["move"])
         viol = float(sc.agg_metrics.get("min_feature_violations") or 0.0) if self.variant == "photonics" else 0.0
         out.update(phi=float(sc.mean), feasible=bool(sc.feasible), viol=viol,
                    metrics_after={k: float(v) for k, v in sc.agg_metrics.items()},
                    verdict=self.verdict(float(sc.mean), viol), result=text)
         return out
 
-    def _check_text_vs(self, child, sc, applied) -> str:
+    def _check_text_vs(self, child, sc, applied, mvtext: str) -> str:
         """check_text's construction for a verb-surface move: the observation after the move (history entry as the
         harness appends it on that path), cut to CONSTRAINT STATUS and the move's EFFECT, plus the feasible line."""
         H, d = self.env.H, self.domain
@@ -185,7 +185,6 @@ class State:
             e = len(u2)
         if not (0 <= i < j <= k < e):
             raise RuntimeError("check_text_vs: observation sections not found in order (%d %d %d %d)" % (i, j, k, e))
-        mvtext = self.fmt({"i": applied["i"], "p": applied["p"], "v": applied["v"]})
         status = u2[i:j].strip().replace("CONSTRAINT STATUS (current design)", "CONSTRAINT STATUS (after this move)")
         effect = u2[k:e].strip().replace("OBSERVED EFFECT OF THE LAST CHANGE", "EFFECT OF THIS MOVE")
         lines = ["CHECK RESULT for %s (simulated on a copy; the current design is unchanged)" % mvtext, status, effect,

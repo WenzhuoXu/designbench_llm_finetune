@@ -1,0 +1,34 @@
+# Consequence round con1 (docs/consequence_round_con1.md): LoRA from pref1's final adapter on consequence rows
+# (state + question about a move -> the simulator's result message, every answer of a row supervised:
+# supervise = every_assistant, llm_finetune/rl_dataxp/conseq_format.py) mixed with the open-rules dx38 replay
+# policy rows (rationale then action). dx38's recipe (dataxp_sft_scr1.yaml) otherwise: lr 1e-4, cosine, 3% warm-up,
+# 64 rows per step, one epoch, loss temperature 1.0, LoRA r64 / alpha 128, dropout off.
+# A full checkpoint every step (preempt-safe: the launcher resumes from the newest complete one).
+#
+#   sbatch --export=ALL,REPO=$HOME/con1/repo,RUN_DIR=<run>,CONFIG=configs/rl/con1_sft.yaml,ROWS=<train>,DEV=<dev> \
+#          slurm/con1_sft.sbatch
+seed: 0
+
+model:
+  path: /project/community/wxu2/rl/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  gradient_checkpointing: true
+
+policy:
+  init_adapter: /project/community/wxu2/rl/runs/pref1_dx38mtR_20261123/final
+  require_init_adapter: true
+
+sft:
+  epochs: 1.0
+  rows_per_step: 64
+  lr: 1.0e-4
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  lora_dropout: 0.0
+  temperature: 1.0
+  seed: 42
+  save_every: 1
+  dev_every: 20
+  keep_adapter_every: 40
