@@ -23,7 +23,7 @@ from facets import current_violated, truth_facets  # noqa: E402
 from trees import Featurizer  # noqa: E402
 
 PARAMS = dict(n_estimators=300, learning_rate=0.05, num_leaves=31, min_child_samples=10, subsample=0.8,
-              subsample_freq=1, colsample_bytree=0.8, verbose=-1)
+              subsample_freq=1, colsample_bytree=0.8, verbose=-1, n_jobs=int(os.environ.get("TREES_THREADS", "2")))
 
 
 def opener(path):
