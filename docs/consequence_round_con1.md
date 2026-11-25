@@ -391,3 +391,28 @@ Not built (undecided by the owner): an eval-only photonics condition without the
    first-order target_loss change has the right sign for **0.684** of moves (own moves 33/48 = 0.69, legal moves
    209/306 = 0.68) and is within a factor of 2 of the true change for **0.257**. So the map alone carries most of the
    direction of target_loss but little of its size (the moves flip many pixels at once, beyond first order).
+
+**Note 2026-11-25, 15:40 — parent review of round-1 rows (before any result).** Job 175877 is left as it is (a
+format comparison on the same 750 states and moves). Two changes for the main-run rows and for scoring:
+1. **Out-of-menu moves on native families.** engibench, grid2op and photonics questions came only from the policy's
+   own moves and the domain's ranked menu (photonics: 28 of 32 adjoint-ranked; 59% of applied photonics questions
+   are 'better'), so arbitrary and bad moves were rare there. Each native state now also gets 2 out-of-menu calls,
+   src `offmenu` (`transitions.offmenu_moves`; `add_offmenu.py` adds them to states generated earlier): a verb the
+   menu uses, every argument drawn at random over that argument's range across the whole menu (numbers uniform over
+   the menu's span, floats widened by a quarter of the span each way; names uniform over the names in the menu; json
+   lists a random non-empty subset of the items in the menu's lists; rectangle corners sorted). Some are refused, by
+   a rule or by the physics, as arbitrary moves are. Their verdict mix is reported next to the menu moves. The main
+   run's rows draw from own / best legal / off-menu (native) or off-grid (verb surface) / uniform legal as before.
+   Round 1's question set is unchanged; the final skill test uses a question set rebuilt the same way (`queries_v2`:
+   the round-1 recipe plus the off-menu moves of the native test states).
+2. **Refusal split by reason.** A refusal whose reason is a simulation outcome is physics and counts in the physics
+   regime: `refused-physical` = the reason matches "would end the episode", "diverge", "no AC solution", "blackout",
+   "isolated load", "non-connected grid" (grid2op: the move islands part of the grid and the power flow has no
+   solution; 46% of grid2op questions). Every other refusal is a rule and stays out: `refused-rule` = bad or
+   out-of-range arguments (e.g. "ERODE: px must be 1..2"), cooldown / one-action-per-step ("is illegal (cooldown,
+   ...)"), forced outage ("line N is under forced outage"), ambiguous redispatch ("is ambiguous: ...
+   InvalidRedispatching"), a move that changes nothing ("changes nothing"), unknown elements, the fabrication rule.
+   Physics regime = balanced accuracy over refused-physical / applied-infeasible / applied-feasible (true classes;
+   a predicted rule refusal counts as wrong) averaged with constraint-crossing balanced accuracy; the verdict in the
+   rules becomes **`V_bal_phys`** = balanced accuracy over diverged (refused) / worse / better on moves that are not
+   rule-refused. Refusal recall / precision (any reason) and per-kind recall stay in the profile.

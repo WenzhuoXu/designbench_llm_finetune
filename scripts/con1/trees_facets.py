@@ -136,9 +136,9 @@ def main(argv=None):
                     regime.append(tf["regime"])
                     verdict.append(m["verdict"])
                     for c in cons_all:
-                        viol[c].append(None if tf["regime"] == "refused" else (c in tf["violated"]))
+                        viol[c].append(None if not tf["regime"].startswith("applied") else (c in tf["violated"]))
                     for k in metrics:
-                        lab[k].append(None if tf["regime"] == "refused" else label_of(tf, k))
+                        lab[k].append(None if not tf["regime"].startswith("applied") else label_of(tf, k))
             X = fz.matrix(X_rows)
             cats = fz.cat_idx()
             reg = Multi(a.seed).fit(X, regime, cats)
@@ -164,7 +164,7 @@ def main(argv=None):
                 lp = {k: mdl.predict(Xq) for k, mdl in mm.items()}
                 for qi in range(len(q["moves"])):
                     f = {"regime": rg[qi], "verdict": vg[qi]}
-                    if rg[qi] != "refused":
+                    if rg[qi].startswith("applied"):
                         f["violated"] = sorted(c for c in vm if vp[c][qi])
                         f["dir"], f["bin"] = {}, {}
                         for k in lp:

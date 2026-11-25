@@ -17,7 +17,9 @@ Each state line: sid, variant, problem_id, split, t, turn_log (rebuilds the stat
 user (the served prompt), phi0, bad0, feasible0, n_legal, and moves = [{move (text as the domain formats it; the
 move simulated is that text parsed back, i.e. what a check of the text returns), src (own | legal | offgrid),
 verdict, phi, feasible, viol, refused, result, metrics_after}]. Every enumerated legal move is simulated; verb-
-surface families also get 2 off-grid moves (a parameter scaled by a log-uniform factor in [0.5, 2]).
+surface families also get 2 off-grid moves (a parameter scaled by a log-uniform factor in [0.5, 2]); native families
+2 out-of-menu moves (offmenu_moves: random arguments over the menu's argument ranges; added 11-25, states generated
+before that get them from add_offmenu.py).
 Resumable: episodes / problems already in --out (by key) are skipped; the file is gzip-appended per episode.
 """
 from __future__ import annotations
@@ -75,6 +77,55 @@ def move_args(s, mv) -> dict:
     return out
 
 
+def offmenu_moves(s, legal, k: int, rng) -> list:
+    """k native verb calls with random arguments (parent review 11-25: native families need moves from outside the
+    adjoint- / heuristic-ranked menu). Each argument is drawn from its range across the whole menu of this state, not
+    from the ranked list: numbers uniform over the menu's span (floats widened by a quarter of the span each way),
+    names uniformly from the names the menu uses, json lists as a random non-empty subset of the items the menu's lists
+    use; a rectangle's corner pairs are sorted. Some calls are refused (a rule or the physics), as arbitrary moves are."""
+    import json as _json
+    from dataxp.domain import Move
+    pools = collections.defaultdict(lambda: collections.defaultdict(list))
+    seen_verbs = set()
+    for mv in legal:
+        d = mv.as_dict()
+        seen_verbs.add(d["verb"])
+        for a, v in (d.get("args") or {}).items():
+            pools[d["verb"]][a].append(v)
+    specs = [vs for vs in s.domain.verbs if vs.name in seen_verbs]
+    out = []
+    for _ in range(6 * k):
+        if len(out) >= k or not specs:
+            break
+        vs = specs[int(rng.integers(len(specs)))]
+        args, ok = {}, True
+        for a in vs.args:
+            vals = pools[vs.name].get(a.name)
+            if not vals:
+                ok = False
+                break
+            if a.type in ("int", "float"):
+                nums = [float(x) for x in vals]
+                lo, hi = min(nums), max(nums)
+                if a.type == "float":
+                    lo, hi = lo - 0.25 * (hi - lo), hi + 0.25 * (hi - lo)
+                x = float(rng.uniform(lo, hi)) if hi > lo else lo
+                args[a.name] = int(round(x)) if a.type == "int" else round(x, 3)
+            elif a.type == "json":
+                items = sorted({_json.dumps(it) for v in vals for it in (v if isinstance(v, list) else [v])})
+                n = int(rng.integers(1, len(items) + 1))
+                args[a.name] = [_json.loads(items[i]) for i in sorted(rng.choice(len(items), n, replace=False))]
+            else:
+                args[a.name] = vals[int(rng.integers(len(vals)))]
+        if not ok:
+            continue
+        for lo_k, hi_k in (("x0", "x1"), ("y0", "y1")):
+            if lo_k in args and hi_k in args and args[lo_k] > args[hi_k]:
+                args[lo_k], args[hi_k] = args[hi_k], args[lo_k]
+        out.append(Move(vs.name, args))
+    return out
+
+
 def simulate_state(s, own_texts, offgrid: int, rng):
     """All moves of a state: own (texts as written), every enumerated legal move, off-grid (verb surface)."""
     from conseq_lib import finite
@@ -123,6 +174,11 @@ def simulate_state(s, own_texts, offgrid: int, rng):
             r = add({"i": i, "p": p, "v": cur * f}, "offgrid")
             if r:
                 bad["offgrid " + r] += 1
+    if offgrid and s.native:                               # out-of-menu native moves (src offmenu)
+        for mv in offmenu_moves(s, legal, offgrid, rng):
+            r = add(mv, "offmenu")
+            if r:
+                bad["offmenu " + r] += 1
     out = []
     for text in order:
         m = moves.pop(text)

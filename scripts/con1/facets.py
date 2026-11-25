@@ -35,7 +35,21 @@ from targets import BIN_NAMES, BINS, direction, size_bin, violated_after  # noqa
 
 NUM = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
 STATUS_CUR = re.compile(r"^\s+([A-Za-z_][\w.\-]*)\s+\S+\s+limit .*?(VIOLATED)?", re.M)
-REGIMES = ("refused", "applied-infeasible", "applied-feasible")
+REGIMES = ("refused-rule", "refused-physical", "applied-infeasible", "applied-feasible")
+PHYS_REGIMES = ("refused-physical", "applied-infeasible", "applied-feasible")
+# A refusal whose reason is a simulation outcome (the power flow diverges / no AC solution / blackout: the move would
+# end the episode) is physics; one whose reason is a rule (bad arguments, cooldown, forced outage, ambiguous redispatch,
+# a move that changes nothing, the fabrication rule, an unknown element) is not (parent review 11-25, doc section 11).
+PHYSICAL_REFUSAL = re.compile(r"would end the episode|diverge|no AC solution|blackout|isolated load|non-connected grid",
+                              re.I)
+
+
+def refusal_kind(reason: str) -> str:
+    return "refused-physical" if PHYSICAL_REFUSAL.search(reason or "") else "refused-rule"
+
+
+def is_applied(regime: str) -> bool:
+    return regime.startswith("applied")
 VERDICTS = ("refused", "worse", "better")
 # 'Directly moved' metrics: bookkeeping of the move itself (amounts, sizes, counts, costs of what was set), readable
 # without solving any physics. Every other metric is a response the simulator computes; the coupling facet is the
@@ -71,7 +85,7 @@ def current_violated(user: str) -> tuple:
 
 def truth_facets(q: dict, m: dict) -> dict:
     if m["verdict"] == "refused":
-        return {"regime": "refused", "verdict": "refused"}
+        return {"regime": refusal_kind(m.get("refused") or m["result"]), "verdict": "refused"}
     after = m["metrics_after"]
     out = {"regime": "applied-feasible" if m["feasible"] else "applied-infeasible", "verdict": m["verdict"],
            "violated": set(violated_after(m["result"])), "dir": {}, "bin": {}, "change": {}, "after": dict(after)}
@@ -115,6 +129,9 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
     if fmt in ("verbatim", "masked"):
         from score_pred import read_message
         r = read_message(text, m0)
+        if r["kind"] == "refused":
+            reason = text.split("refused by the simulator:", 1)[1] if "refused by the simulator:" in text else text
+            return {"regime": refusal_kind(reason)}
         if r["kind"] != "applied":
             return {"regime": r["kind"]}
         fe = r.get("feasible_said")
@@ -126,10 +143,11 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
     mv = re.search(r"VERDICT:\s*(\w+)", text)
     if not mv:
         if "refused" in low or "rejected" in low:
-            return {"regime": "refused"}
+            return {"regime": refusal_kind(text)}
         return {"regime": "unreadable"}
     if mv.group(1).lower().startswith("refus"):
-        return {"regime": "refused"}
+        rs = re.search(r"REASON:\s*(.*)", text)
+        return {"regime": refusal_kind(rs.group(1) if rs else text)}
     fe = re.search(r"FEASIBLE AFTER:\s*(\w+)", text)
     feasible = bool(fe and fe.group(1).lower().startswith("y"))
     vl = re.search(r"VIOLATED AFTER:\s*(.*)", text)
@@ -204,10 +222,12 @@ def move_counts(q, t, p, ctx=None):
     c = collections.Counter()
     c["regime_true_" + t["regime"]] += 1
     c["regime_hit_" + t["regime"]] += p["regime"] == t["regime"]
-    c["pred_refused"] += p["regime"] == "refused"
+    c["pred_refused"] += p["regime"].startswith("refused")
+    c["refused_any_true"] += t["regime"].startswith("refused")
+    c["refused_any_hit"] += t["regime"].startswith("refused") and p["regime"].startswith("refused")
     c["unreadable"] += p["regime"] == "unreadable"
     c["moves"] += 1
-    if t["regime"] != "refused":                           # physics regime on truly applied moves
+    if t["regime"] in PHYS_REGIMES:                        # physics regime: applied moves and physical refusals
         c["phys_true_" + t["regime"]] += 1
         c["phys_hit_" + t["regime"]] += p["regime"] == t["regime"]
     if t["regime"] == "applied-feasible":
@@ -215,7 +235,7 @@ def move_counts(q, t, p, ctx=None):
         c["feas_hit"] += p["regime"] == "applied-feasible"
     c["feas_pred"] += p["regime"] == "applied-feasible"
     c["feas_pred_ok"] += p["regime"] == "applied-feasible" and t["regime"] == "applied-feasible"
-    if t["regime"] != "refused" and p["regime"] in ("applied-infeasible", "applied-feasible"):
+    if is_applied(t["regime"]) and is_applied(p["regime"]):
         c["viol_n"] += 1
         c["viol_exact"] += p.get("violated", set()) == t["violated"]
         cons, now = current_violated(q["user"])
@@ -227,10 +247,10 @@ def move_counts(q, t, p, ctx=None):
             c["nocross_true"] += not tc
             c["false_cross"] += (not tc) and pc
     direct = DIRECT.get(q["variant"], set())
-    if t["regime"] != "refused":
+    if is_applied(t["regime"]):
         for k, td in t["dir"].items():
             pd = (p.get("dir") or {}).get(k, "same")
-            if p["regime"] in ("refused", "unreadable"):
+            if not is_applied(p["regime"]):
                 pd = None                                   # no metric prediction: wrong on every line
             pres = ("", "bk_") if k in direct else ("", "cpl_")
             if q["variant"] == "photonics" and k == "target_loss":
@@ -252,8 +272,8 @@ def move_counts(q, t, p, ctx=None):
     # problem's potential of the predicted metric values (ctx)
     pv = p.get("verdict")
     if pv is None and ctx is not None:
-        if p["regime"] in ("refused", "unreadable"):
-            pv = p["regime"]
+        if not is_applied(p["regime"]):
+            pv = "refused" if p["regime"].startswith("refused") else "unreadable"
         else:
             try:
                 after = p.get("after") or {}
@@ -266,9 +286,12 @@ def move_counts(q, t, p, ctx=None):
         tv = t["verdict"]
         c["v_true_" + tv] += 1
         c["v_hit_" + tv] += pv == tv
-        if tv != "refused":                                # the verdict on truly applied moves (physics part)
+        if tv != "refused":                                # the verdict on truly applied moves
             c["va_true_" + tv] += 1
             c["va_hit_" + tv] += pv == tv
+        if t["regime"] != "refused-rule":                  # the physics verdict: diverged (refused), worse, better
+            c["vp_true_" + tv] += 1
+            c["vp_hit_" + tv] += pv == tv
         if tv != "refused" and pv in ("better", "worse"):
             c["disc_pred_" + pv] += 1
             c["disc_true_better_given_" + pv] += tv == "better"
@@ -287,7 +310,7 @@ def family_scores(cs: collections.Counter) -> dict:
     vrec = [cs["v_hit_" + v] / cs["v_true_" + v] for v in VERDICTS if cs["v_true_" + v]]
     cross_r, false_c = rate("cross_hit", "cross_true"), rate("false_cross", "nocross_true")
     cross_ba = float(np.nanmean([cross_r, 1.0 - false_c])) if not (math.isnan(cross_r) and math.isnan(false_c)) else float("nan")
-    feas_ba = ba("phys_", ("applied-infeasible", "applied-feasible"))
+    feas_ba = ba("phys_", PHYS_REGIMES)
     phys = [x for x in (feas_ba, cross_ba) if not math.isnan(x)]
     out = {"regime_BA": float(np.mean(rec)) if rec else float("nan"),
            "dir_BA": float(np.mean(drec)) if drec else float("nan"),
@@ -296,6 +319,9 @@ def family_scores(cs: collections.Counter) -> dict:
            "cpl_size": rate("cpl_size_hit", "cpl_size_n"),
            "V_bal": float(np.mean(vrec)) if vrec else float("nan"),
            "V_bal_applied": ba("va_", ("worse", "better")),
+           "V_bal_phys": ba("vp_", VERDICTS),
+           "refused_physical_recall": rate("regime_hit_refused-physical", "regime_true_refused-physical"),
+           "refused_rule_recall": rate("regime_hit_refused-rule", "regime_true_refused-rule"),
            "feas_BA": feas_ba,
            "cross_BA": cross_ba,
            "regime_phys": float(np.mean(phys)) if phys else float("nan"),
@@ -309,8 +335,8 @@ def family_scores(cs: collections.Counter) -> dict:
            "viol_exact": rate("viol_exact", "viol_n"),
            "cross_recall": rate("cross_hit", "cross_true"),
            "false_cross": rate("false_cross", "nocross_true"),
-           "refused_recall": rate("regime_hit_refused", "regime_true_refused"),
-           "refused_precision": cs["regime_hit_refused"] / cs["pred_refused"] if cs["pred_refused"] else float("nan"),
+           "refused_recall": rate("refused_any_hit", "refused_any_true"),
+           "refused_precision": cs["refused_any_hit"] / cs["pred_refused"] if cs["pred_refused"] else float("nan"),
            "feas_recall": rate("feas_hit", "feas_true"),
            "feas_precision": cs["feas_pred_ok"] / cs["feas_pred"] if cs["feas_pred"] else float("nan"),
            "unreadable": rate("unreadable", "moves")}
@@ -419,7 +445,8 @@ def main(argv=None):
 
     lines = ["facet profile, pass %s, groups %s, families %s, states %s" % (
         a.pass_, a.groups, fams, {v: len(sids[v]) for v in fams})]
-    keys = ["select", "regime_phys", "feas_BA", "cross_BA", "V_bal_applied", "cpl_dir_BA", "cpl_size", "V_bal",
+    keys = ["select", "regime_phys", "feas_BA", "cross_BA", "V_bal_phys", "V_bal_applied", "cpl_dir_BA", "cpl_size",
+            "V_bal", "refused_physical_recall", "refused_rule_recall",
             "regime_BA", "dir_BA", "size", "bk_dir_BA", "bk_size", "adj_dir_BA", "adj_size", "logratio_mean_abs",
             "viol_exact", "refused_recall", "refused_precision", "feas_recall", "feas_precision", "disc", "unreadable"]
     preds = ["nochange"] + sorted(k for k in per if k != "nochange")
@@ -430,8 +457,8 @@ def main(argv=None):
             f = family_scores(fam_counter(pr, v))
             res["%s/%s" % (pr, v)] = f
             lines.append("%-10s %-11s" % (pr, v) + "".join("%10.3f" % f[k] for k in keys))
-    gkeys = ("select", "regime_phys", "V_bal_applied", "cpl_dir_BA", "cpl_size", "bk_dir_BA", "V_bal")
-    rkeys = ("select", "V_bal_applied", "cpl_dir_BA", "regime_phys")
+    gkeys = ("select", "regime_phys", "V_bal_phys", "cpl_dir_BA", "cpl_size", "bk_dir_BA", "V_bal")
+    rkeys = ("select", "V_bal_phys", "cpl_dir_BA", "regime_phys")
     arms = [p for p in preds if p != "nochange"]
     for fname, fl in fsets:
         lines.append("")
