@@ -64,7 +64,9 @@ def main(argv=None) -> int:
     for p in a.new:
         for r in read(p):
             key = r.get("sid") or json.dumps(r, sort_keys=True)
-            if key in seen:                  # the same state in two files: once
+            if r.get("sid") and "reply" in r:  # check_rows: one row per reply of a turn (each check, then the commit), one sid
+                key = "%s#%s" % (key, r["reply"])
+            if key in seen:                  # the same state (and reply) in two files: once
                 n_dup += 1
                 continue
             seen.add(key)

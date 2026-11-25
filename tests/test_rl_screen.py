@@ -217,6 +217,22 @@ def test_mix_drops_repeats_and_replay_rows_of_dev_problems(tmp_path):
     assert man["new rows given twice (kept once)"] == 10 and man["replay file rows on dev problems (never drawn)"] == 5
 
 
+def test_mix_keeps_every_reply_of_a_checked_turn(tmp_path):
+    # check_rows gives each reply of a turn (check 0..n-1, then the commit) the turn's sid; all of them are rows
+    new = [{"domain": "f", "instance": "p%02d" % (i // 9), "messages": [], "tier": "new", "sid": "f|p%02d|%d" % (i // 9, (i // 3) % 3),
+            "reply": i % 3} for i in range(90)]
+    rep = [{"domain": "f", "instance": "p%02d" % i, "messages": [], "tier": "old"} for i in range(10)]
+    for name, rows in (("a.jsonl", new), ("b.jsonl", new[:9]), ("rep.jsonl", rep)):
+        (tmp_path / name).write_text("".join(json.dumps(r) + "\n" for r in rows))
+    assert MX.main(["--new", str(tmp_path / "a.jsonl"), str(tmp_path / "b.jsonl"), "--replay", str(tmp_path / "rep.jsonl"),
+                    "--out-train", str(tmp_path / "train.jsonl"), "--out-dev", str(tmp_path / "dev.jsonl"),
+                    "--replay-ratio", "0", "--dev-frac", "0", "--dev-max", "0"]) == 0
+    train = [json.loads(line) for line in open(tmp_path / "train.jsonl")]
+    assert len(train) == 90                                                         # every reply once; b's 9 repeats dropped
+    man = json.load(open(str(tmp_path / "train.jsonl") + ".manifest.json"))
+    assert man["new rows given twice (kept once)"] == 9
+
+
 def _square(x):
     if x == 3:
         os._exit(1)                                                     # a simulator that takes its process down
