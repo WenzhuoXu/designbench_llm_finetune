@@ -34,7 +34,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 V3RC_SHA1 = "9c82418581a045d6655648315bfcddd2112765c8"
 
 QUESTION = ("\n\nQUESTION (no move is made now): if the move {move} were played at the current design, what would the "
-            "simulator return? Answer with the simulator's result message exactly as a check of that move returns it.")
+            "simulator return? Answer with the simulator's result message exactly as a check of that move returns it: "
+            "either the line 'CHECK RESULT for <move>: refused by the simulator: <reason>. The current design is "
+            "unchanged.', or the line 'CHECK RESULT for <move> (simulated on a copy; the current design is unchanged)' "
+            "followed by the block CONSTRAINT STATUS (after this move), the block EFFECT OF THIS MOVE (before -> after) "
+            "with one 'metric  before -> after' line per metric, and the line 'Feasible after this move: yes.' or "
+            "'Feasible after this move: no.'")
 FOLLOW_UP = ("QUESTION (no move is made now): if the move {move} were played at the current design, what would the "
              "simulator return? Answer with the simulator's result message exactly as a check of that move returns it.")
 

@@ -60,7 +60,7 @@ END = "<|im_end|>"
 SFT_DEFAULTS = {"rows_file": None, "dev_file": None, "epochs": 1.0, "rows_per_step": 64, "lr": 1.0e-4,
                 "warmup_ratio": 0.03, "weight_decay": 0.01, "betas": [0.9, 0.999], "eps": 1.0e-8,
                 "max_grad_norm": 1.0, "lora_dropout": 0.0, "seed": 42, "save_every": 25, "dev_every": 0,
-                "keep_adapter_every": 50, "temperature": 1.0}
+                "keep_adapter_every": 50, "temperature": 1.0, "keep_last": 2}
 
 
 def completion_text(message: dict) -> str:
@@ -209,7 +209,7 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
     # a command-line override such as sft.lr=5e-5 arrives as a string (YAML reads 5e-5 as one)
     for k in ("epochs", "lr", "warmup_ratio", "weight_decay", "eps", "max_grad_norm", "lora_dropout", "temperature"):
         s[k] = float(s[k])
-    for k in ("rows_per_step", "seed", "save_every", "dev_every", "keep_adapter_every"):
+    for k in ("rows_per_step", "seed", "save_every", "dev_every", "keep_adapter_every", "keep_last"):
         s[k] = int(s[k])
     s["betas"] = [float(b) for b in s["betas"]]
     cfg["sft"] = s
@@ -219,7 +219,8 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
             raise SystemExit("%s must be set" % key)
     cfg["grpo"]["kl_reference"] = "base"                 # no reference pass here: no second adapter is loaded
     # checkpoints: the RL trainer's rule, on this run's own cadence
-    cfg["checkpoint"] = {"keep_last": 2, "keep_adapter_every": int(s["keep_adapter_every"]), "keep_adapter_steps": []}
+    cfg["checkpoint"] = {"keep_last": int(s["keep_last"]), "keep_adapter_every": int(s["keep_adapter_every"]),
+                         "keep_adapter_steps": []}
     dist = TR.Dist(int(cfg["dist"]["timeout_min"]))
     wait_min = float(cfg.get("disk_full_wait_min") or 0)
     if dist.rank != 0:

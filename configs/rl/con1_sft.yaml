@@ -3,9 +3,10 @@
 # supervise = every_assistant, llm_finetune/rl_dataxp/conseq_format.py) mixed with the open-rules dx38 replay
 # policy rows (rationale then action). dx38's recipe (dataxp_sft_scr1.yaml) otherwise: lr 1e-4, cosine, 3% warm-up,
 # 64 rows per step, one epoch, loss temperature 1.0, LoRA r64 / alpha 128, dropout off.
-# A full checkpoint every step (preempt-safe: the launcher resumes from the newest complete one).
+# Checkpoints: a full one (adapter + optimizer, ~5.3 GB) every 10 steps, only the newest kept, no intermediate adapters
+# kept (/project/community had 13-19 GB free on 11-25). On preempt use OVERRIDES="sft.save_every=1".
 #
-#   sbatch --export=ALL,REPO=$HOME/con1/repo,RUN_DIR=<run>,CONFIG=configs/rl/con1_sft.yaml,ROWS=<train>,DEV=<dev> \
+#   sbatch -p advanced --qos=adv_4gpu_qos --export=ALL,RUN_DIR=<run>,CONFIG=configs/rl/con1_sft.yaml,ROWS=<train>,DEV=<dev> \
 #          slurm/con1_sft.sbatch
 seed: 0
 
@@ -29,6 +30,7 @@ sft:
   lora_dropout: 0.0
   temperature: 1.0
   seed: 42
-  save_every: 1
+  save_every: 10
+  keep_last: 1
   dev_every: 20
-  keep_adapter_every: 40
+  keep_adapter_every: 100000

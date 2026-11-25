@@ -1,9 +1,10 @@
 """con1: read a predicted result message and score it against the simulator (docs/consequence_round_con1.md §3).
 
 read_message(text, metrics0) -> {"kind": "refused" | "applied" | "unreadable", "metrics": predicted after-metrics}
-    refused     the text contains 'refused by the simulator'
-    applied     at least one metric line could be read: the after value of each EFFECT line ('name  before -> after'),
-                else its CONSTRAINT STATUS value, else the state's own value (unchanged)
+    refused     the text contains 'refused by the simulator', or no metric line can be read and the text says the
+                move is refused / rejected / not applied (an answer in prose is read fairly)
+    applied     at least one metric line could be read: the after value of each line 'name  before -> after' in a
+                section whose header names an EFFECT, else its CONSTRAINT STATUS value, else the state's own value
     unreadable  neither
 verdict_of(pred, ctx) -> refused | better | worse | unreadable, with ctx = PhiContext of the state: the predicted Phi
     is the problem's potential of the predicted metrics (PhiEvaluator._phi_one; every family is deterministic) and
@@ -33,13 +34,14 @@ def read_message(text: str, metrics0: dict) -> dict:
     text = text or ""
     if "refused by the simulator" in text:
         return {"kind": "refused", "metrics": None}
+    low = text.lower()
     status, effect = {}, {}
     sec = None
     for line in text.splitlines():
-        if line.startswith(STATUS_HDR):
+        if STATUS_HDR in line and not line.startswith(" "):
             sec = "status"
             continue
-        if line.startswith(EFFECT_HDR):
+        if "EFFECT" in line and not line.startswith(" "):           # EFFECT OF THIS MOVE / OBSERVED EFFECT OF ...
             sec = "effect"
             continue
         if not line.strip():
@@ -56,6 +58,9 @@ def read_message(text: str, metrics0: dict) -> dict:
             if m and _f(m.group(2)) is not None:
                 status[m.group(1)] = _f(m.group(2))
     if not status and not effect:
+        # an answer in prose that says the move is not applied counts as a refusal forecast
+        if any(w in low for w in ("refused", "rejected", "not applied", "would refuse")):
+            return {"kind": "refused", "metrics": None}
         return {"kind": "unreadable", "metrics": None}
     pred = dict(metrics0)
     pred.update({k: v for k, v in status.items() if k in pred})

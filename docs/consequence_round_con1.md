@@ -16,7 +16,13 @@ prediction.
 refused-move note), followed by a question:
 
 > QUESTION (no move is made now): if the move `MOVE` were played at the current design, what would the simulator
-> return? Answer with the simulator's result message exactly as a check of that move returns it.
+> return? Answer with the simulator's result message exactly as a check of that move returns it: either the line
+> 'CHECK RESULT for <move>: refused by the simulator: <reason>. ...', or the CHECK RESULT line followed by the block
+> CONSTRAINT STATUS (after this move), the block EFFECT OF THIS MOVE (before -> after) with one 'metric  before ->
+> after' line per metric, and 'Feasible after this move: yes.' / 'no.'
+
+(The format description was added on 11-25 before any result, so that pref1, which has never seen a check result,
+is asked a question it can answer in the right form; later questions of a row repeat only the first two sentences.)
 
 The target is the harness's own result message for that move, word for word: what a v3rc check returns
 (`CHECK RESULT for MOVE ...`, `CONSTRAINT STATUS (after this move)`, `EFFECT OF THIS MOVE (before -> after)`, the
@@ -108,8 +114,10 @@ by the same function).
 - Nearest probe (k-shot control): predict the verdict of the most similar earlier probe in the same conversation
   (same verb, then the closest arguments); majority when there is none.
 
-**Reading a predicted message.** Refusal if the answer contains `refused by the simulator`. Otherwise the predicted
-value of each metric is the `after` value of its EFFECT line (else its CONSTRAINT STATUS value, else unchanged), and
+**Reading a predicted message.** Refusal if the answer contains `refused by the simulator`, or if no metric line can
+be read and the answer says the move is refused / rejected / not applied (prose answers are read fairly; changed
+11-25 before any result). Otherwise the predicted
+value of each metric is the `after` value of its line in a section headed EFFECT (else its CONSTRAINT STATUS value, else unchanged), and
 the predicted Phi is the problem's own potential of those values (`PhiEvaluator._phi_one`, all families are
 deterministic); verdict better if predicted Phi > Phi of the state + 1e-9, else worse; photonics ranks by
 (fewer predicted rule-breaking pixels, then Phi), the open-rules rule. An answer that is neither (no readable
