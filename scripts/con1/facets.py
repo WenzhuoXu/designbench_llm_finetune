@@ -207,6 +207,9 @@ def move_counts(q, t, p, ctx=None):
     c["pred_refused"] += p["regime"] == "refused"
     c["unreadable"] += p["regime"] == "unreadable"
     c["moves"] += 1
+    if t["regime"] != "refused":                           # physics regime on truly applied moves
+        c["phys_true_" + t["regime"]] += 1
+        c["phys_hit_" + t["regime"]] += p["regime"] == t["regime"]
     if t["regime"] == "applied-feasible":
         c["feas_true"] += 1
         c["feas_hit"] += p["regime"] == "applied-feasible"
@@ -229,7 +232,9 @@ def move_counts(q, t, p, ctx=None):
             pd = (p.get("dir") or {}).get(k, "same")
             if p["regime"] in ("refused", "unreadable"):
                 pd = None                                   # no metric prediction: wrong on every line
-            pres = ("",) if k in direct else ("", "cpl_")
+            pres = ("", "bk_") if k in direct else ("", "cpl_")
+            if q["variant"] == "photonics" and k == "target_loss":
+                pres = pres + ("adj_",)                     # readable off the adjoint map in the observation
             for pre in pres:
                 c[pre + "dir_true_" + td] += 1
                 c[pre + "dir_hit_" + td] += pd == td
@@ -261,6 +266,9 @@ def move_counts(q, t, p, ctx=None):
         tv = t["verdict"]
         c["v_true_" + tv] += 1
         c["v_hit_" + tv] += pv == tv
+        if tv != "refused":                                # the verdict on truly applied moves (physics part)
+            c["va_true_" + tv] += 1
+            c["va_hit_" + tv] += pv == tv
         if tv != "refused" and pv in ("better", "worse"):
             c["disc_pred_" + pv] += 1
             c["disc_true_better_given_" + pv] += tv == "better"
@@ -272,14 +280,29 @@ def family_scores(cs: collections.Counter) -> dict:
         return cs[a] / cs[b] if cs[b] else float("nan")
     rec = [cs["regime_hit_" + r] / cs["regime_true_" + r] for r in REGIMES if cs["regime_true_" + r]]
     drec = [cs["dir_hit_" + d] / cs["dir_true_" + d] for d in ("up", "down", "same") if cs["dir_true_" + d]]
+    def ba(prefix, classes):
+        r = [cs[prefix + "hit_" + x] / cs[prefix + "true_" + x] for x in classes if cs[prefix + "true_" + x]]
+        return float(np.mean(r)) if r else float("nan")
     crec = [cs["cpl_dir_hit_" + d] / cs["cpl_dir_true_" + d] for d in ("up", "down", "same") if cs["cpl_dir_true_" + d]]
     vrec = [cs["v_hit_" + v] / cs["v_true_" + v] for v in VERDICTS if cs["v_true_" + v]]
+    cross_r, false_c = rate("cross_hit", "cross_true"), rate("false_cross", "nocross_true")
+    cross_ba = float(np.nanmean([cross_r, 1.0 - false_c])) if not (math.isnan(cross_r) and math.isnan(false_c)) else float("nan")
+    feas_ba = ba("phys_", ("applied-infeasible", "applied-feasible"))
+    phys = [x for x in (feas_ba, cross_ba) if not math.isnan(x)]
     out = {"regime_BA": float(np.mean(rec)) if rec else float("nan"),
            "dir_BA": float(np.mean(drec)) if drec else float("nan"),
            "size": rate("size_hit", "size_n"),
            "cpl_dir_BA": float(np.mean(crec)) if crec else float("nan"),
            "cpl_size": rate("cpl_size_hit", "cpl_size_n"),
            "V_bal": float(np.mean(vrec)) if vrec else float("nan"),
+           "V_bal_applied": ba("va_", ("worse", "better")),
+           "feas_BA": feas_ba,
+           "cross_BA": cross_ba,
+           "regime_phys": float(np.mean(phys)) if phys else float("nan"),
+           "bk_dir_BA": ba("bk_dir_", ("up", "down", "same")),
+           "bk_size": rate("bk_size_hit", "bk_size_n"),
+           "adj_dir_BA": ba("adj_dir_", ("up", "down", "same")),
+           "adj_size": rate("adj_size_hit", "adj_size_n"),
            "logratio_mean_abs": rate("logratio_abs_sum", "logratio_n"),
            "disc": (rate("disc_true_better_given_better", "disc_pred_better")
                     - rate("disc_true_better_given_worse", "disc_pred_worse")),
@@ -295,7 +318,7 @@ def family_scores(cs: collections.Counter) -> dict:
         out["recall_" + r] = rate("regime_hit_" + r, "regime_true_" + r)
     for v in VERDICTS:
         out["recall_v_" + v] = rate("v_hit_" + v, "v_true_" + v)
-    sel = [out["regime_BA"], out["dir_BA"], out["cpl_dir_BA"], out["size"]]
+    sel = [out["regime_phys"], out["cpl_dir_BA"], out["cpl_size"]]   # parent review 11-25: physics terms only
     sel = [x for x in sel if not math.isnan(x)]
     out["select"] = float(np.mean(sel)) if sel else float("nan")
     return out
@@ -383,16 +406,21 @@ def main(argv=None):
             c.update(per[pred].get(s, collections.Counter()))
         return c
 
-    def group(pred, key, b=None):
-        vals = [family_scores(fam_counter(pred, v, None if b is None else b[v]))[key] for v in fams]
+    def group(pred, key, b=None, fl=None):
+        vals = [family_scores(fam_counter(pred, v, None if b is None else b[v]))[key] for v in (fl or fams)]
         vals = [x for x in vals if not math.isnan(x)]
         return float(np.mean(vals)) if vals else float("nan")
 
+    # every rule and the selection with and without photonics (its observation carries an adjoint map; doc section 11)
+    fsets = [("all", fams)]
+    if "photonics" in fams and len(fams) > 1:
+        fsets.append(("no_photonics", [v for v in fams if v != "photonics"]))
+
     lines = ["facet profile, pass %s, groups %s, families %s, states %s" % (
         a.pass_, a.groups, fams, {v: len(sids[v]) for v in fams})]
-    keys = ["select", "regime_BA", "V_bal", "dir_BA", "cpl_dir_BA", "size", "cpl_size", "logratio_mean_abs",
-            "viol_exact", "cross_recall", "false_cross", "refused_recall", "refused_precision", "feas_recall",
-            "feas_precision", "disc", "unreadable"]
+    keys = ["select", "regime_phys", "feas_BA", "cross_BA", "V_bal_applied", "cpl_dir_BA", "cpl_size", "V_bal",
+            "regime_BA", "dir_BA", "size", "bk_dir_BA", "bk_size", "adj_dir_BA", "adj_size", "logratio_mean_abs",
+            "viol_exact", "refused_recall", "refused_precision", "feas_recall", "feas_precision", "disc", "unreadable"]
     preds = ["nochange"] + sorted(k for k in per if k != "nochange")
     lines.append("%-10s %-11s" % ("predictor", "family") + "".join("%10s" % k[:10] for k in keys))
     res = {}
@@ -401,27 +429,32 @@ def main(argv=None):
             f = family_scores(fam_counter(pr, v))
             res["%s/%s" % (pr, v)] = f
             lines.append("%-10s %-11s" % (pr, v) + "".join("%10.3f" % f[k] for k in keys))
-    lines.append("")
-    lines.append("group means (+- se, bootstrap over states)")
-    for pr in preds:
-        row = []
-        for k in ("select", "regime_BA", "V_bal", "dir_BA", "cpl_dir_BA", "size"):
-            pt = group(pr, k)
-            bs = [group(pr, k, b) for b in boots]
-            se = float(np.nanstd(bs, ddof=1))
-            res["group/%s/%s" % (pr, k)] = {"value": pt, "se": se}
-            row.append("%s %.3f +- %.3f" % (k, pt, se))
-        lines.append("%-10s %s  [%s]" % (pr, "  ".join(row), formats.get(pr, "-")))
-    lines.append("")
-    lines.append("paired differences of the selection score (+- se)")
+    gkeys = ("select", "regime_phys", "V_bal_applied", "cpl_dir_BA", "cpl_size", "bk_dir_BA", "V_bal")
+    rkeys = ("select", "V_bal_applied", "cpl_dir_BA", "regime_phys")
     arms = [p for p in preds if p != "nochange"]
-    for i, x in enumerate(arms):
-        for y in arms[i + 1:] + ["nochange"]:
-            pt = group(x, "select") - group(y, "select")
-            bs = [group(x, "select", b) - group(y, "select", b) for b in boots]
-            se = float(np.nanstd(bs, ddof=1))
-            lines.append("  %s - %s: %+.3f +- %.3f" % (x, y, pt, se))
-            res["diff/%s-%s" % (x, y)] = {"value": pt, "se": se}
+    for fname, fl in fsets:
+        lines.append("")
+        lines.append("group means over %s %s (+- se, bootstrap over states)" % (fname, fl))
+        for pr in preds:
+            row = []
+            for k in gkeys:
+                pt = group(pr, k, None, fl)
+                bs = [group(pr, k, b, fl) for b in boots]
+                se = float(np.nanstd(bs, ddof=1))
+                res["group/%s/%s/%s" % (fname, pr, k)] = {"value": pt, "se": se}
+                row.append("%s %.3f+-%.3f" % (k, pt, se))
+            lines.append("%-10s %s  [%s]" % (pr, " ".join(row), formats.get(pr, "-")))
+        lines.append("paired differences over %s (+- se): selection score and the rule metrics" % fname)
+        for i, x in enumerate(arms):
+            for y in arms[i + 1:] + ["nochange"]:
+                row = []
+                for k in rkeys:
+                    pt = group(x, k, None, fl) - group(y, k, None, fl)
+                    bs = [group(x, k, b, fl) - group(y, k, b, fl) for b in boots]
+                    se = float(np.nanstd(bs, ddof=1))
+                    res["diff/%s/%s-%s/%s" % (fname, x, y, k)] = {"value": pt, "se": se}
+                    row.append("%s %+.3f+-%.3f" % (k, pt, se))
+                lines.append("  %-22s %s" % ("%s - %s" % (x, y), " ".join(row)))
     txt = "\n".join(lines)
     print(txt)
     if a.out:

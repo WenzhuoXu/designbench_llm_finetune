@@ -343,3 +343,26 @@ I1 is judged on the k-shot gain in direction balanced accuracy and V_bal (same m
 engibench and photonics states come from about 15 episodes each, so the round compares formats, not final skill),
 150 training states per family, 12 questions per state, 16 rows per step, one epoch, lr 1e-4, LoRA from pref1, no
 policy rows. Orchard job 175877 (arms re-pointed to M / F / D / S before it started).
+
+**Note 2026-11-25, 15:10 — parent-session review of §11 (before any result).** Three scoring fixes; job 175877 is
+unaffected (it only produces predictions).
+1. Bookkeeping metrics (the "directly moved" table) are readable without physics and carry trivially to new families
+   ("radius up -> mass up"). Rules 1–3, I1 and the selection score use the **coupled** metrics only: coupled
+   direction balanced accuracy (`cpl_dir_BA`) and coupled size (`cpl_size`). Pooled and bookkeeping direction
+   (`dir_BA`, `bk_dir_BA`) are reported as a sanity check only.
+2. Refusal follows legality rules, not physics. The **physics regime** term is `regime_phys` = mean of (a) balanced
+   accuracy of applied-infeasible vs applied-feasible on truly applied moves (`feas_BA`) and (b) constraint-crossing
+   balanced accuracy (`cross_BA` = mean of crossing recall and 1 − false-crossing rate). The verdict in the rules is
+   **`V_bal_applied`**: worse vs better balanced accuracy on truly applied moves (a refusal predicted for an applied
+   move counts as wrong). Refusal precision / recall and the 3-way `V_bal` stay in the profile, out of selection and
+   rules (rule 2 still compares the 3-way `V_bal` with `V_bal_applied` and `cpl_dir_BA` to name a refusal predictor).
+3. Photonics' observation carries the adjoint map (first-order change of target_loss per pixel flip, block sums plus
+   the top-6 pixels each way), so target_loss's direction and size can be read off the map. Every rule and the
+   selection score are computed twice, over all families and without photonics (`facets.py` prints both);
+   photonics target_loss facets are reported separately as `adj_dir_BA` / `adj_size` under the label "adjoint map in
+   observation". The observation is not changed here (the owner decides on removing the map).
+Selection = mean of `regime_phys`, `cpl_dir_BA`, `cpl_size` (each family, then mean over families).
+Rule 1: con1 beats the facet trees on `V_bal_applied` and on `cpl_dir_BA` (held-out problems, 8 families, k = 0, 2 se
+each), with and without photonics. Rule 3: on the held-out families, con1 beats pref1 and the oracle majority on
+`cpl_dir_BA` and `V_bal_applied` (2 se each). Ceilings measured by scoring the true answers in each level:
+`V_bal_applied` 0.992 (masked) vs 0.956 (facet: Phi from bin midpoints); `cpl_dir_BA` and `regime_phys` 1.000 for both.
