@@ -156,7 +156,10 @@ def main(argv=None):
             continue
         for split, cap, out in (("train", a.per_family, rows), ("dev", None, dev)):
             sts = pools.get((split, v), [])
-            rng.shuffle(sts)
+            # the state selection has its own rng per (split, family): it does not depend on how many moves earlier
+            # states had (so a selection can be augmented with off-menu moves and rebuilt to the same states)
+            sts = sorted(sts, key=lambda s: s["sid"])
+            random.Random("%d-%s-%s" % (a.seed, split, v)).shuffle(sts)
             n = 0
             for st in sts:
                 if cap is not None and n >= cap:
