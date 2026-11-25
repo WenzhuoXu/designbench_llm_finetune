@@ -12,7 +12,7 @@
 set -u
 C=/project/community/wxu2/rl/chk1
 NAME=${NAME:-chk1_dx38mtR_20261124}
-RUN_DIR=/project/community/wxu2/rl/runs/$NAME
+RUN_DIR=${RUN_DIR:-/project/community/wxu2/rl/runs/$NAME}   # e.g. /home/wxu2/rl/runs/$NAME when /project/community is full
 REPLAY=/project/community/wxu2/rl/screen/open_round/replay_open.jsonl
 D=$C; [ -n "${DRY:-}" ] && { D=$C/dry; mkdir -p "$D"; }
 cd ~/rl/repo || exit 2
