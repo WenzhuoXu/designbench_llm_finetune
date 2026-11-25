@@ -17,7 +17,7 @@ _ENV = None
 
 
 def job(args):
-    code, harness, st, spec, k = args
+    code, harness, st, spec, k, replace = args
     global _ENV
     if _ENV is None:
         os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -28,6 +28,11 @@ def job(args):
     from transitions import move_args, offmenu_moves
     try:
         s = rebuild(_ENV, {"variant": st["variant"], "t": st["t"], "turn_log": st["turn_log"]}, spec)
+        if replace:                                    # regenerate: drop earlier off-menu moves first
+            st["moves"] = [m for m in st["moves"] if m["src"] != ["offmenu"]]
+            for m in st["moves"]:
+                if "offmenu" in m["src"]:
+                    m["src"] = [x for x in m["src"] if x != "offmenu"]
         have = {m["move"] for m in st["moves"]}
         rng = np.random.default_rng(seeded("con1-offmenu", st["sid"]))
         added = 0
@@ -59,6 +64,7 @@ def main(argv=None):
     ap.add_argument("--k", type=int, default=2)
     ap.add_argument("--sids", default=None, help="only these state ids (one per line)")
     ap.add_argument("--workers", type=int, default=12)
+    ap.add_argument("--replace", action="store_true", help="drop off-menu moves already in the states, then add new ones")
     a = ap.parse_args(argv)
     specs = {}
     for p in a.problems:
@@ -86,7 +92,7 @@ def main(argv=None):
                 seen.add(st["sid"])
                 if st["sid"] in done:
                     continue
-                jobs.append((a.code, a.harness, st, specs[st["problem_id"]], a.k))
+                jobs.append((a.code, a.harness, st, specs[st["problem_id"]], a.k, a.replace))
         except EOFError:
             pass
     print("states to augment %d (done %d)" % (len(jobs), len(done)), flush=True)

@@ -77,30 +77,66 @@ def move_args(s, mv) -> dict:
     return out
 
 
+RULE_TRIES = 40
+
+
+def _rule_refused(s, mv) -> bool:
+    """Does the state refuse the move by a RULE (bad arguments, cooldown, forced outage, ambiguous redispatch, a move
+    that changes nothing, ...)? A refusal that is a simulation outcome (the power flow diverges / the move would end the
+    episode) is physics and does not count (facets.refusal_kind)."""
+    from facets import refusal_kind
+    d = s.domain
+    child = d.clone(s.st)
+    try:
+        s.env.H.open_apply(d, s.variant, child, mv, s.opening)
+    except Exception as e:                                 # noqa: BLE001
+        return refusal_kind(str(e)) == "refused-rule"
+    if s.variant in ("photonics", "engibench"):            # a move that flips no cell is refused as 'changes nothing'
+        key = "pat" if s.variant == "photonics" else "rho"
+        try:
+            import numpy as np
+            if np.array_equal(child[key], s.st[key]):
+                return True
+        except Exception:                                  # noqa: BLE001
+            pass
+    return False
+
+
 def offmenu_moves(s, legal, k: int, rng) -> list:
-    """k native verb calls with random arguments (parent review 11-25: native families need moves from outside the
-    adjoint- / heuristic-ranked menu). Each argument is drawn from its range across the whole menu of this state, not
-    from the ranked list: numbers uniform over the menu's span (floats widened by a quarter of the span each way),
-    names uniformly from the names the menu uses, json lists as a random non-empty subset of the items the menu's lists
-    use; a rectangle's corner pairs are sorted. Some calls are refused (a rule or the physics), as arbitrary moves are."""
+    """k native verb calls with random arguments from outside the ranked menu (parent review 11-25), drawn within each
+    verb's validity rules. Proposal: a verb the menu uses; its first argument uniformly from the values the menu gives
+    it; every later name / json argument from the values the menu pairs with that first argument (an element that sits
+    on the chosen substation, a fragment site of the chosen atom, ...), json lists as a random non-empty subset of
+    those items; numbers uniform over the menu's span for that verb (floats widened by a quarter of the span each way);
+    rectangle corners sorted. A proposal the state refuses by a RULE is redrawn (up to RULE_TRIES): bad combinations,
+    cooldown, forced outage, out-of-ramp redispatch, a move that changes nothing. Refusals that are simulation outcomes
+    (a diverging power flow) are kept: they are physics."""
     import json as _json
     from dataxp.domain import Move
     pools = collections.defaultdict(lambda: collections.defaultdict(list))
+    co = collections.defaultdict(lambda: collections.defaultdict(list))   # (verb, first-arg value) -> arg -> values
     seen_verbs = set()
     for mv in legal:
         d = mv.as_dict()
         seen_verbs.add(d["verb"])
-        for a, v in (d.get("args") or {}).items():
+        args = d.get("args") or {}
+        first = None
+        for a, v in args.items():
             pools[d["verb"]][a].append(v)
+            if first is None:
+                first = _json.dumps(v, sort_keys=True)
+                continue
+            co[(d["verb"], first)][a].append(v)
     specs = [vs for vs in s.domain.verbs if vs.name in seen_verbs]
-    out = []
-    for _ in range(6 * k):
-        if len(out) >= k or not specs:
-            break
+    out, tries = [], 0
+    while len(out) < k and specs and tries < RULE_TRIES * k:
+        tries += 1
         vs = specs[int(rng.integers(len(specs)))]
-        args, ok = {}, True
-        for a in vs.args:
+        args, ok, first = {}, True, None
+        for n_a, a in enumerate(vs.args):
             vals = pools[vs.name].get(a.name)
+            if n_a > 0 and a.type in ("str", "json") and first is not None:
+                vals = co[(vs.name, first)].get(a.name) or vals
             if not vals:
                 ok = False
                 break
@@ -111,18 +147,31 @@ def offmenu_moves(s, legal, k: int, rng) -> list:
                     lo, hi = lo - 0.25 * (hi - lo), hi + 0.25 * (hi - lo)
                 x = float(rng.uniform(lo, hi)) if hi > lo else lo
                 args[a.name] = int(round(x)) if a.type == "int" else round(x, 3)
+                if n_a == 0 and a.type == "int":
+                    # the first argument (an index: substation, generator, component, atom) takes a value the menu uses
+                    args[a.name] = vals[int(rng.integers(len(vals)))]
             elif a.type == "json":
                 items = sorted({_json.dumps(it) for v in vals for it in (v if isinstance(v, list) else [v])})
                 n = int(rng.integers(1, len(items) + 1))
                 args[a.name] = [_json.loads(items[i]) for i in sorted(rng.choice(len(items), n, replace=False))]
             else:
                 args[a.name] = vals[int(rng.integers(len(vals)))]
+            if n_a == 0:
+                first = _json.dumps(args[a.name], sort_keys=True)
         if not ok:
             continue
         for lo_k, hi_k in (("x0", "x1"), ("y0", "y1")):
             if lo_k in args and hi_k in args and args[lo_k] > args[hi_k]:
                 args[lo_k], args[hi_k] = args[hi_k], args[lo_k]
-        out.append(Move(vs.name, args))
+        mv = Move(vs.name, args)
+        try:
+            text = s.fmt(mv)
+        except Exception:                                  # noqa: BLE001
+            continue
+        mv2 = s.parse(text)
+        if mv2 is None or text in {s.fmt(m) for m in out} or _rule_refused(s, mv2):
+            continue
+        out.append(mv2)
     return out
 
 
