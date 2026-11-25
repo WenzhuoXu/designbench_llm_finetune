@@ -416,3 +416,16 @@ format comparison on the same 750 states and moves). Two changes for the main-ru
    a predicted rule refusal counts as wrong) averaged with constraint-crossing balanced accuracy; the verdict in the
    rules becomes **`V_bal_phys`** = balanced accuracy over diverged (refused) / worse / better on moves that are not
    rule-refused. Refusal recall / precision (any reason) and per-kind recall stay in the profile.
+
+**Note 2026-11-25, 16:05 — off-menu moves drawn within each verb's validity rules (parent, before any result).** The
+first version drew grid2op / molopt / engibench arguments independently, so 63% / 46% / 21% of those questions were
+rule refusals (legality, not physics). Now (`transitions.offmenu_moves`): the first argument takes a value the menu
+uses; a later name / json argument half the time comes from the values the menu pairs with that first argument (an
+element on the chosen substation) and otherwise from all values the menu uses; numbers stay uniform over the menu's
+span; any proposal the state refuses by a RULE (bad combination, cooldown, forced outage, out-of-ramp redispatch,
+changes nothing) or that is already a menu move is redrawn (up to 40 tries per move). Physical refusals are kept.
+Measured on the 231 native test states (Orchard job 175904; better / worse / refused-physical / refused-rule):
+engibench off-menu 0.35 / 0.65 / 0 / 0 (menu 0.42 / 0.58 / 0 / 0); grid2op 0.22 / 0.51 / 0.28 / 0 (menu 0.18 / 0.56 /
+0.26 / 0); photonics 0.40 / 0.60 / 0 / 0 (menu 0.62 / 0.38 / 0 / 0); molopt 0.43 / 0.57 / 0 / 0 (menu 0.43 / 0.57). Yield
+2 per state except photonics (88 of 120: states whose design breaks the fabrication rule have tiny menus).
+The final skill test's question set (`queries_v2`) and the main-run states use these.
