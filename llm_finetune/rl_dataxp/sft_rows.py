@@ -29,14 +29,16 @@ was validated without dropout only; sft.lora_dropout > 0 is accepted but not val
       dev_every: 0
       lazy_rows: false              # true: index the rows file and read a row when its step draws it (large files)
       check_rows: true              # false: skip tokenising every row before training (the builder checked them)
-      resume_dir: null              # an exported checkpoint (adapter/ + state.json, no optimizer): used when it is
-                                    # newer than run_dir's newest full checkpoint; the optimizer restarts
-      rewarm_steps: 0               # after such a resume, the lr ramps up linearly over this many steps
+      resume_dir: null              # a checkpoint copied off the node (a ckpt/step_N directory, or adapter/ +
+                                    # state.json only): used when it is newer than run_dir's newest checkpoint
+      rewarm_steps: 0               # after an adapter-only resume, the lr ramps up linearly over this many steps
 
-Resuming from resume_dir (con1 full-set chains, docs/con1_full_rows.md): the adapter weights, the step (hence the
-data position and the scheduled lr) come from the copy; AdamW's moments restart at zero, so the first steps would
-move every weight by about the full lr (Adam's first update is lr * sign(g)); rewarm_steps scales the scheduled lr by
-(k + 1) / (rewarm_steps + 1) for the k-th step after the resume. The copy's fingerprint must match the run's.
+Resuming from resume_dir (con1 full-set chains, docs/con1_full_rows.md): a whole checkpoint directory (adapter,
+optimizer.pt, scheduler.pt, rng, state.json; what parent_check/guard_cycle.sh copies) resumes exactly as a checkpoint
+in run_dir does. An adapter-only copy gives the weights and the step (hence the data position and the scheduled lr);
+AdamW's moments then restart at zero, so the first steps would move every weight by about the full lr (Adam's first
+update is lr * sign(g)); rewarm_steps scales the scheduled lr by (k + 1) / (rewarm_steps + 1) for the k-th step after
+such a resume. The copy's fingerprint must match the run's.
 
 sft.temperature: 1.0 is the dx38 recipe. Rows that are the policy's own replies drawn at a
 temperature T < 1 share, under a loss at 1.0, a direction that has nothing to do with which reply
@@ -384,18 +386,35 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
                 raise SystemExit("config / rows fingerprint %s differs from the exported checkpoint's %s (%s)" % (
                     fp, ex.get("fingerprint"), s["resume_dir"]))
             start = int(ex["step"])
-            policy.load_adapter_weights(os.path.join(s["resume_dir"], "adapter"))
+            rd = s["resume_dir"]
+            policy.load_adapter_weights(os.path.join(rd, "adapter"))
             got = policy.checksum()
             if abs(got - ex["checksum"]) > 1e-6 * max(1.0, abs(ex["checksum"])):
-                raise RuntimeError("exported adapter %s: parameter checksum %.9g, saved %.9g" % (
-                    s["resume_dir"], got, ex["checksum"]))
-            rewarm["from"] = start
-            for g in opt.param_groups:
-                g["initial_lr"] = float(s["lr"])
-            # last_epoch = start - 1: the constructor's first step sets the lr of step `start`
-            sched = torch.optim.lr_scheduler.LambdaLR(opt, factor, last_epoch=start - 1)
-            log("resumed from the exported adapter of step %d (%s): optimizer restarted, lr re-warmed over %d steps, "
-                "lr now %.3e" % (start, s["resume_dir"], s["rewarm_steps"], sched.get_last_lr()[0]))
+                raise RuntimeError("exported adapter %s: parameter checksum %.9g, saved %.9g" % (rd, got, ex["checksum"]))
+            if os.path.exists(os.path.join(rd, "optimizer.pt")) and os.path.exists(os.path.join(rd, "scheduler.pt")):
+                # a whole checkpoint copied off the node (parent_check/guard_cycle.sh): resume exactly, as load_ckpt
+                sched = torch.optim.lr_scheduler.LambdaLR(opt, factor)
+                opt.load_state_dict(torch.load(os.path.join(rd, "optimizer.pt"), map_location=policy.device,
+                                               weights_only=False))
+                sched.load_state_dict(torch.load(os.path.join(rd, "scheduler.pt"), weights_only=False))
+                rewarm["from"] = ex.get("rewarm_from")
+                rp = os.path.join(rd, "rng_rank%d.pt" % dist.rank)
+                if os.path.exists(rp):
+                    rng = torch.load(rp, weights_only=False)
+                    random.setstate(rng["python"])
+                    torch.set_rng_state(rng["torch"])
+                    if rng.get("cuda") is not None and torch.cuda.is_available():
+                        torch.cuda.set_rng_state_all(rng["cuda"])
+                log("resumed from the checkpoint copy of step %d (%s): adapter, optimizer, scheduler and rng restored, "
+                    "lr %.3e" % (start, rd, sched.get_last_lr()[0]))
+            else:
+                rewarm["from"] = start
+                for g in opt.param_groups:
+                    g["initial_lr"] = float(s["lr"])
+                # last_epoch = start - 1: the constructor's first step sets the lr of step `start`
+                sched = torch.optim.lr_scheduler.LambdaLR(opt, factor, last_epoch=start - 1)
+                log("resumed from the exported adapter of step %d (%s): optimizer restarted, lr re-warmed over %d steps, "
+                    "lr now %.3e" % (start, rd, s["rewarm_steps"], sched.get_last_lr()[0]))
         else:
             sched = torch.optim.lr_scheduler.LambdaLR(opt, factor)
             if start is None:

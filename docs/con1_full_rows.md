@@ -37,9 +37,13 @@ unchanged: same system/user text, question wording, answer layout, informative s
 | `scripts/con1/full_estimate.py` | step-time fit on stage 1's measured steps, epoch time per candidate set |
 | `scripts/con1/full_prep.sh`, `slurm/con1_full_prep.sbatch` | CPU prep: off-menu moves, builds at Q = 12 and 36, checks |
 | `scripts/con1/orchard_full.sh`, `slurm/con1_full.sbatch` | the continuation job (one 24 h link of a chain) |
-| `scripts/con1/mon_full.py`, `scripts/con1/mon_full.sh` | live monitor of a running link (node /tmp via srun --overlap) |
-| `slurm/con1_full_test.sbatch` | 1-GPU mechanics test of the chain (fresh r8 LoRA, 42 rows) |
-| `llm_finetune/rl_dataxp/sft_rows.py` | `sft.lazy_rows`, `sft.check_rows`, `sft.resume_dir`, `sft.rewarm_steps` (all off by default) |
+| `scripts/con1/guard_cycle.sh` | the parent's `parent_check/guard_cycle.sh` with env `RES`, `STAGES`, `FORCE` (defaults: the original's behaviour) |
+| `slurm/con1_full_test.sbatch` | 1-GPU mechanics test of the chain (fresh r8 LoRA, small rows) |
+| `llm_finetune/rl_dataxp/sft_rows.py` | `sft.lazy_rows`, `sft.check_rows`, `sft.resume_dir` (a checkpoint copied off the node: exact resume), `sft.rewarm_steps` (all off by default) |
+
+Reused, not rebuilt (owner rule): the monitor `parent_check/mon.py` and the checkpoint guard `parent_check/guard_cycle.sh`
+(a copy with three env hooks, because the original hardcodes stage names `stage1 stage2`, which would have put this
+run's copies on top of stage 1's in `con1_reserve`).
 
 Deployed copy: Orchard `/project/community/wxu2/con1/repo2m` (job 176033 reads `con1/repo`, untouched).
 
@@ -122,62 +126,59 @@ proportional to the slowest rank's tokens (0.881 s per 1,000 tokens); the other 
 index) and up to 30 min at the hand-over, so ~23.2 h of training per link: **4 links (a 5th only if the attention
 fit is right and the queue gaps add up)**, about 4–5 days on 4 H100s if the links start back to back.
 
-**How a link runs** (`scripts/con1/orchard_full.sh`):
+**How a link runs** (`scripts/con1/orchard_full.sh`). The node layout is `orchard_main.sh`'s:
+`/tmp/con1_main_<job>/full/` with `metrics.jsonl`, `ckpt/step_N/COMPLETE`, `final/` (stage name `full`), so the
+parent's monitor and guard work on it.
 1. submits its successor (`-p advanced --qos=adv_4gpu_qos --dependency=afterany:<this job>`) unless `$M/DONE`,
-   `$M/STOP` or CHAIN_MAX (8) is reached; two failed links in a row at the same exported step stop the chain;
+   `$M/STOP` or CHAIN_MAX (8) is reached; two failed links in a row at the same copied step stop the chain;
 2. builds the Q = 36 rows on the node's /tmp and stops if the sha1 is not 955b00b1…;
 3. trains with `orchard_sft_rows.sh` + `con1_sft.yaml` + overrides `policy.init_adapter=$INIT sft.rows_per_step=28
    sft.save_every=5 sft.keep_last=1 sft.dev_every=50 sft.lazy_rows=true sft.check_rows=false
-   sft.resume_dir=$M/export sft.rewarm_steps=10`; full checkpoints (adapter + optimizer) every 5 steps on node /tmp;
-   dev = stage 1's 120 dev rows, so the dev curve continues stage 1's (dev_start = the stage-1 adapter);
-4. every 2 h copies the newest checkpoint's adapter (1.87 GB) + state.json + metrics to `$M/export`, replacing the
-   previous one; after a failed copy it retries every 10 min;
-5. at SIGUSR1 (30 min before the 24 h limit) waits for the next checkpoint (≤ 15 min), stops the trainer, exports,
-   exits 0; the successor resumes from `$M/export`: weights and step from the export, optimizer restarted, lr
-   re-warmed over 10 steps (Adam's first steps after a restart would move each weight by about the full lr);
-6. at the end of the epoch: final adapter to `$M/final`, `$M/DONE`, successor cancelled.
+   sft.resume_dir=<newest con1_reserve/full_ckpt_step_N>`; full checkpoints (adapter + optimizer) every 5 steps on node
+   /tmp; dev = stage 1's 120 dev rows, so the dev curve continues stage 1's (dev_start = the stage-1 adapter);
+4. runs the guard (`RES=con1_reserve STAGES=full`) every 10 min from inside the job (srun --overlap): the newest
+   whole checkpoint (adapter, optimizer, scheduler, rng; ~5.5 GB) to `con1_reserve/full_ckpt_step_N` every ~2 h (one
+   kept), the final adapter to `con1_reserve/full_final` as soon as it exists; space from the guard's placeholder
+   chunks in `con1_reserve/chunks` (the pool the parent's guard keeps); metrics and the trainer log to `$M`;
+5. at SIGUSR1 (30 min before the 24 h limit): waits for the next checkpoint (≤ 15 min), stops the trainer, runs the
+   guard with `FORCE=1` (copies that checkpoint now), retries until 5 min before the limit, exits 0; the successor
+   resumes **exactly** from the copy (optimizer, scheduler, rng restored; no re-warm needed);
+6. at the end of the epoch: the guard copies the final adapter to `con1_reserve/full_final`; `$M/DONE`; successor
+   cancelled. A run that has had a checkpoint copied refuses to restart from step 0 if the copy is gone.
 
-**Mechanics test** (Orchard preempt, 1 GPU, fresh r8 LoRA on 42 / 168 small rows; jobs 176038, 176043 → 176044):
-lazy rows and the skipped row check, periodic export (in place, 1.0 GB free), USR1 → wait for checkpoint 16 → stop →
-export → exit, successor started at once, resumed at step 17 with the export's adapter (checksum checked), lr
-3.13e-5 → 6.19e-5 → 9.18e-5 (re-warm over 2 steps, then the scheduled cosine), the 16 earlier metric lines restored,
-the dev curve continuing (0.184 → 0.180 → 0.171), DONE, final adapter copied, successor cancelled. The second link
-was then preempted (preempt queue; `advanced` is not preempted): it marked a failure at export step 30, Slurm
-requeued it, and it resumed from the step-30 export at step 31 (lr 2.5e-5 → 4.9e-5 → 7.2e-5, re-warm) and trained to
-step 84 (exports at 44, 62, 80). That requeued job was then ended by Slurm (COMPLETED 0:0) seconds after its trainer
-exited, before the end steps ran (its log shows slurmstepd cgroup errors on the requeued job from its start): no final
-adapter, no DONE; the step-80 export remained, so resubmitting would finish from it. Links on `advanced` are not
-requeued, and the first link (176038) ran its end steps; the end section now copies the final adapter first.
+**Mechanics tests** (Orchard, 1 GPU, fresh r8 LoRA on small rows):
+- First version, adapter-only exports (preempt; 176038, 176043 → 176044): export, hand-over, resume with re-warm,
+  DONE. The second link was preempted, requeued, and resumed from the step-30 export. Slurm then ended that requeued
+  job seconds after its trainer exited, before its end steps; the copy remained. The end section now copies the
+  final adapter before anything else.
+- Final version, guard copies (general; 176056 → 176057): the in-job guard copied step 5; USR1 at step 12 → waited
+  for checkpoint 16 → `FORCE` copy → exit; the successor resumed from `full_ckpt_step_00016` with optimizer,
+  scheduler and rng restored (lr 9.378e-5 = the schedule's), 16 metric lines restored, dev curve continuing (0.184 →
+  0.178 → 0.167); `parent_check/mon.py` read `/tmp/con1_main_<job>/full` unchanged.
 
-**Shared storage (the one hard limit).** `/project/community` had 0.95–1.1 GB free during this work. An export is
-1.87 GB:
-- the first export needs 1.87 GB free; later exports replace the previous one in place (net zero; state.json is
-  removed first and written last, so a half-written export is never resumed from, and a run that has exported
-  before refuses to restart from step 0);
-- with ≥ 2.5 GB free an export is written beside the old one and swapped in;
-- the final adapter needs another 1.87 GB, or takes the export's place after 30 min of failed copies.
-With 1 GB free the first export fails and is retried every 10 min; if it never succeeds, a link's 23 h are lost at
-its end. **Free at least ~2 GB (better 4 GB) before submitting.** The volume is also wiped every two weeks (Orchard
-wiki calendar); the chain reads `repo2m`, `full/`, `main/states_native_offmenu.jsonl.gz`, `main/rows/*_facet.jsonl`,
-`gen/out/*.gz`, `data/queries_v2.jsonl`, `gen/bench_problems.jsonl` and the INIT adapter for ~5 days.
+**Shared storage (the one hard limit).** `/project/community` had 0.85–1.1 GB free during this work. A checkpoint
+copy is ~5.5 GB (with the optimizer) and the final adapter 1.87 GB; both come out of the guard's placeholder pool in
+`con1_reserve/chunks` (9 GB on 11-26 00:05, kept at up to 16 GB while the volume has > 2.5 GB free). If the pool and
+the volume are both short, the copies fail (logged `guard: FAILED ...`, retried every 10 min); a link whose copy at
+the hand-over fails leaves the successor to resume from the previous copy (up to ~2 h back). The volume is also
+wiped every two weeks (Orchard wiki calendar); the chain reads `repo2m`, `full/`, `main/states_native_offmenu.jsonl.gz`,
+`main/rows/*_facet.jsonl`, `gen/out/*.gz`, `data/queries_v2.jsonl`, `gen/bench_problems.jsonl`, `con1_reserve` for
+~5 days. Off-Orchard copies of `con1_reserve/full_ckpt_step_*` / `full_final`: the RL session's sha1-checked
+`pull_ckpt.sh` / `finish_ckpt.sh` (an operator step from the login side; Orchard reaches neither drc nor trace).
 
-**Submit** (after stage 1's final adapter exists; job 176033 writes it to `main/run3/stage1/final`, its M; the brief
-named `main/run2`, whichever holds `adapter_config.json`):
+**Submit** (after stage 1's final adapter is in `con1_reserve/stage1_final`, where the parent's guard copies it):
 
-    sbatch -p advanced --qos=adv_4gpu_qos \
-      --export=ALL,INIT=/project/community/wxu2/con1/main/run3/stage1/final,M=/project/community/wxu2/con1/full/run1 \
-      /project/community/wxu2/con1/repo2m/slurm/con1_full.sbatch
+    sbatch -p advanced --qos=adv_4gpu_qos --export=ALL,INIT=/project/community/wxu2/con1_reserve/stage1_final,M=/project/community/wxu2/con1/full/run1 /project/community/wxu2/con1/repo2m/slurm/con1_full.sbatch
 
 Stop the chain: `touch /project/community/wxu2/con1/full/run1/STOP` (the running link finishes; no successor trains).
 
-**Monitor** (live, from the login node; reads node /tmp through `srun --jobid=<id> --overlap`):
+**Monitor** (the parent's tool, unchanged; from the login node through the job's own allocation):
 
-    bash /project/community/wxu2/con1/repo2m/scripts/con1/mon_full.sh <slurm job id>
+    srun --jobid=<id> --overlap -N1 -n1 python3 /project/community/wxu2/parent_check/mon.py /tmp/con1_main_<id>/full
 
-prints step / total, loss and informative-token nll (last 20 vs the 20 before), dev loss at each pass against the
-stage-1 adapter's (dev_start), grad norm (median, last-20 max), seconds per step and the epoch's ETA, peak memory
-with the step's longest row, lr, the newest node checkpoint and export, and FLAGS: non-finite loss or grad norm,
-grad norm > 5× median, training loss up > 10% over 20 steps, dev loss up at two passes in a row, peak memory > 76
-GiB, steps > 30% slower, no step for 20 min. Plan: run it every 2–3 h; on a flag read the trainer log
-(`srun --jobid=<id> --overlap -N1 -n1 tail -50 /tmp/con1_full_<id>/logs/train.log`). Expected per-step time
-~110–125 s at 28 rows (7 per GPU, ~130k tokens per GPU). Tested on stage 1's running job 176033.
+loss (first / last 10 steps), informative-token nll, grad norm (median, last-10 max), peak memory, lr, s/step, NaN,
+dev passes (stage 1's 120 dev rows) against dev_start (the stage-1 adapter), newest node checkpoint, final. The job's
+log (`full/logs/con1_full_<id>.out`) carries the guard's SAVED / FAILED lines; the chain's state is in
+`full/run1/chain/` (next_of_<job>, copied_step_N, fail_*). Plan: every 2–3 h; expected ~110–125 s per step at 28
+rows (7 per GPU, ~130k tokens per GPU); act on a non-finite loss, a grad-norm spike, rising dev loss, peak memory
+above ~76 GiB or FAILED guard lines.
