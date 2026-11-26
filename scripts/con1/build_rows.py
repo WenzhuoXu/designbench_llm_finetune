@@ -45,9 +45,11 @@ def rank_key(variant, m):
     return (0.0, m.get("phi") or -1e18)
 
 
-def pick_moves(st: dict, q: int, rng: random.Random) -> list:
-    moves = st["moves"]
-    by_text = {m["move"]: m for m in moves}
+def pick_moves(st: dict, q: int, rng: random.Random, exclude=frozenset()) -> list:
+    """The row's moves: own (up to 4), the 2 best legal applied, up to 2 off-menu (verb-surface 'offgrid' or native
+    'offmenu'), uniform legal for the rest; moves in `exclude` (an earlier row set's) are not drawn."""
+    by_text = {m["move"]: m for m in st["moves"]}
+    moves = [m for m in st["moves"] if m["move"] not in exclude]
     chosen, seen = [], set()
 
     def take(m):
@@ -62,7 +64,7 @@ def pick_moves(st: dict, q: int, rng: random.Random) -> list:
     applied = [m for m in moves if "legal" in m["src"] and m["verdict"] != "refused"]
     for m in sorted(applied, key=lambda m: rank_key(st["variant"], m), reverse=True)[:2]:
         take(m)
-    off = [m for m in moves if "offgrid" in m["src"]]
+    off = [m for m in moves if "offgrid" in m["src"] or "offmenu" in m["src"]]   # 'offmenu' was missing until 11-26
     for m in off[:2]:
         take(m)
     rest = [m for m in moves if "legal" in m["src"] and m["move"] not in seen]
@@ -121,9 +123,21 @@ def main(argv=None):
     ap.add_argument("--policy-ratio", type=float, default=0.33)
     ap.add_argument("--dev-max", type=int, default=120)
     ap.add_argument("--dev-policy", type=int, default=60)
-    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--seed", type=int, default=0, help="state selection (and moves unless --move-seed)")
+    ap.add_argument("--move-seed", type=int, default=None, help="the move draw's own seed (a second row set)")
+    ap.add_argument("--exclude-rows", nargs="*", default=None,
+                    help="rows files of an earlier set: only their states are used, and their moves are not drawn again")
     a = ap.parse_args(argv)
-    rng = random.Random(a.seed)
+    rng = random.Random(a.seed if a.move_seed is None else a.move_seed)
+    excl = None
+    if a.exclude_rows:
+        excl = collections.defaultdict(set)
+        for p in a.exclude_rows:
+            for line in opener(p):
+                r = json.loads(line)
+                if r.get("tier") == "con1_conseq":
+                    excl[r["sid"]].update(r["con1"]["moves"])
+        print("excluding the moves of %d states (%s)" % (len(excl), " ".join(a.exclude_rows)))
     c = collections.Counter()
     pools = collections.defaultdict(list)                  # (split, family) -> states (only what the rows need)
     def lines_of(path):
@@ -164,12 +178,17 @@ def main(argv=None):
             for st in sts:
                 if cap is not None and n >= cap:
                     break
+                if excl is not None and st["sid"] not in excl:
+                    continue                               # a second set keeps the earlier set's states
                 q = a.q
-                moves = pick_moves(st, q, rng)
+                moves = pick_moves(st, q, rng, excl[st["sid"]] if excl is not None else frozenset())
                 while est_tokens(st, moves) > a.max_tokens and len(moves) > a.min_q:
                     moves = moves[:-1]
                 if est_tokens(st, moves) > a.max_tokens:
                     c["dropped: too long (%s)" % v] += 1
+                    continue
+                if excl is not None and len(moves) < a.min_q:
+                    c["dropped: under %d moves left (%s)" % (a.min_q, v)] += 1
                     continue
                 out.append(conseq_row(st, moves, a.target))
                 n += 1
@@ -177,6 +196,7 @@ def main(argv=None):
                 c["%s questions %s" % (split, v)] += len(moves)
                 for m in moves:
                     c["%s %s verdict %s" % (split, v, m["verdict"])] += 1
+                    c["%s %s src %s" % (split, v, "+".join(m["src"]))] += 1
                 c["%s est tokens %s" % (split, v)] += est_tokens(st, moves)
             c["%s states available %s" % (split, v)] = len(sts)
     rng.shuffle(dev)
