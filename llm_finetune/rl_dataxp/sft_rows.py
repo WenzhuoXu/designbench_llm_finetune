@@ -27,6 +27,16 @@ was validated without dropout only; sft.lora_dropout > 0 is accepted but not val
       seed: 42
       save_every: 25                # a full checkpoint every this many steps (and at the end)
       dev_every: 0
+      lazy_rows: false              # true: index the rows file and read a row when its step draws it (large files)
+      check_rows: true              # false: skip tokenising every row before training (the builder checked them)
+      resume_dir: null              # an exported checkpoint (adapter/ + state.json, no optimizer): used when it is
+                                    # newer than run_dir's newest full checkpoint; the optimizer restarts
+      rewarm_steps: 0               # after such a resume, the lr ramps up linearly over this many steps
+
+Resuming from resume_dir (con1 full-set chains, docs/con1_full_rows.md): the adapter weights, the step (hence the
+data position and the scheduled lr) come from the copy; AdamW's moments restart at zero, so the first steps would
+move every weight by about the full lr (Adam's first update is lr * sign(g)); rewarm_steps scales the scheduled lr by
+(k + 1) / (rewarm_steps + 1) for the k-th step after the resume. The copy's fingerprint must match the run's.
 
 sft.temperature: 1.0 is the dx38 recipe. Rows that are the policy's own replies drawn at a
 temperature T < 1 share, under a loss at 1.0, a direction that has nothing to do with which reply
@@ -60,7 +70,58 @@ END = "<|im_end|>"
 SFT_DEFAULTS = {"rows_file": None, "dev_file": None, "epochs": 1.0, "rows_per_step": 64, "lr": 1.0e-4,
                 "warmup_ratio": 0.03, "weight_decay": 0.01, "betas": [0.9, 0.999], "eps": 1.0e-8,
                 "max_grad_norm": 1.0, "lora_dropout": 0.0, "seed": 42, "save_every": 25, "dev_every": 0,
-                "keep_adapter_every": 50, "temperature": 1.0, "keep_last": 2}
+                "keep_adapter_every": 50, "temperature": 1.0, "keep_last": 2, "lazy_rows": False,
+                "check_rows": True, "resume_dir": None, "rewarm_steps": 0}
+
+
+def _flag(x) -> bool:
+    return x if isinstance(x, bool) else str(x).strip().lower() in ("1", "true", "yes", "on")
+
+
+def file_sha1(path: str) -> str:
+    """sha1 of a file's bytes, read in blocks (the same digest as hashing the whole file at once)."""
+    h = hashlib.sha1()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1 << 24), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+class RowFile:
+    """A rows file indexed by line offsets: rows[i] reads and parses line i when asked (a full-set rows file is several
+    GB; four ranks holding it parsed would take tens of GB each)."""
+
+    def __init__(self, path: str):
+        import re
+        self.path = path
+        self.offsets = []
+        self.domains: dict = {}
+        pat = re.compile(rb'"domain":\s*"([^"\\]*)"')
+        with open(path, "rb") as f:
+            pos = 0
+            for line in f:
+                if line.strip():
+                    self.offsets.append(pos)
+                    m = None
+                    for m in pat.finditer(line):
+                        pass                               # the row's own key comes after its messages: the last match
+                    k = m.group(1).decode() if m else "None"
+                    self.domains[k] = self.domains.get(k, 0) + 1
+                pos += len(line)
+        self._f = None
+
+    def __len__(self) -> int:
+        return len(self.offsets)
+
+    def __getitem__(self, i: int) -> dict:
+        if self._f is None:
+            self._f = open(self.path, "rb")
+        self._f.seek(self.offsets[i])
+        return json.loads(self._f.readline().decode("utf-8"))
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
 
 
 def completion_text(message: dict) -> str:
@@ -222,6 +283,17 @@ def score_rows(policy, samples: list[dict], dist, temperature: float = 1.0) -> d
             "dev_nll_per_token": float(stats[3]) / max(1e-9, float(stats[2])), **_split_losses(stats, "dev_")}
 
 
+def exported_state(path) -> dict | None:
+    """state.json of an exported checkpoint (adapter/ + state.json, written by scripts/con1/orchard_full.sh), or None."""
+    if not path:
+        return None
+    sp, ap = os.path.join(path, "state.json"), os.path.join(path, "adapter", "adapter_model.safetensors")
+    if not (os.path.exists(sp) and os.path.exists(ap)):
+        return None
+    st = json.load(open(sp))
+    return st if "step" in st and "checksum" in st else None
+
+
 def sft_fingerprint(cfg: dict, rows_sha1: str) -> str:
     s = cfg["sft"]
     sub = {"rows_sha1": rows_sha1, "model": cfg["model"]["path"], "policy": cfg["policy"],
@@ -238,8 +310,12 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
     # a command-line override such as sft.lr=5e-5 arrives as a string (YAML reads 5e-5 as one)
     for k in ("epochs", "lr", "warmup_ratio", "weight_decay", "eps", "max_grad_norm", "lora_dropout", "temperature"):
         s[k] = float(s[k])
-    for k in ("rows_per_step", "seed", "save_every", "dev_every", "keep_adapter_every", "keep_last"):
+    for k in ("rows_per_step", "seed", "save_every", "dev_every", "keep_adapter_every", "keep_last", "rewarm_steps"):
         s[k] = int(s[k])
+    for k in ("lazy_rows", "check_rows"):
+        s[k] = _flag(s[k])
+    if s["resume_dir"] in ("", "null", "None"):
+        s["resume_dir"] = None
     s["betas"] = [float(b) for b in s["betas"]]
     cfg["sft"] = s
     run_dir = cfg["run_dir"]
@@ -258,19 +334,24 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
         if dist.rank == 0:
             retry_when_full(lambda: os.makedirs(run_dir, exist_ok=True), run_dir, wait_min, log)
         dist.barrier()
-        rows = read_rows(s["rows_file"])
+        rows = RowFile(s["rows_file"]) if s["lazy_rows"] else read_rows(s["rows_file"])
         dev = read_rows(s["dev_file"]) if s["dev_file"] else []
-        rows_sha1 = hashlib.sha1(open(s["rows_file"], "rb").read()).hexdigest()
+        rows_sha1 = file_sha1(s["rows_file"])
         fp = sft_fingerprint(cfg, rows_sha1)
         order = row_order(len(rows), s["epochs"], s["seed"])
         per = int(s["rows_per_step"])
         steps = int(math.ceil(len(order) / per))
         tok = AutoTokenizer.from_pretrained(cfg["model"]["path"], trust_remote_code=cfg["model"]["trust_remote_code"])
-        if dist.rank == 0:
+        if dist.rank == 0 and not s["check_rows"]:
+            for k, r in enumerate(dev):                    # the dev rows are still checked (they are few)
+                row_sample(r, tok)
+            log("rows check skipped (sft.check_rows false): %d training rows, sha1 %s" % (len(rows), rows_sha1))
+        if dist.rank == 0 and s["check_rows"]:
             # every row is tokenised once before the model is loaded: a row that cannot be trained on
             # stops the run here, not at the step that draws it
             longest, n_tok = 0, 0
-            for k, r in enumerate(rows + dev):
+            import itertools
+            for k, r in enumerate(itertools.chain(rows, dev)):
                 try:
                     smp = row_sample(r, tok)
                     if not smp["completion_ids"]:
@@ -288,19 +369,48 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
         dist.broadcast_params(policy.params)
         opt = torch.optim.AdamW(policy.params, lr=float(s["lr"]), betas=tuple(s["betas"]), eps=float(s["eps"]),
                                 weight_decay=float(s["weight_decay"]))
-        sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda n: lr_factor(n, steps, s["warmup_ratio"]))
+        rewarm = {"from": None}                            # the step of an optimizer-less resume (resume_dir)
+
+        def factor(n):
+            f = lr_factor(n, steps, s["warmup_ratio"])
+            if rewarm["from"] is not None and s["rewarm_steps"] > 0 and n >= rewarm["from"]:
+                f *= min(1.0, (n - rewarm["from"] + 1) / (s["rewarm_steps"] + 1))
+            return f
+
         start = TR.latest_ckpt(run_dir)
-        if start is None:
-            start = 0
-            TR.save_ckpt(run_dir, 0, policy, opt, sched, dist, {"fingerprint": fp}, wait_min, log)
+        ex = exported_state(s["resume_dir"])
+        if ex is not None and (start is None or int(ex["step"]) > start):
+            if ex.get("fingerprint") != fp and not cfg["allow_config_change"]:
+                raise SystemExit("config / rows fingerprint %s differs from the exported checkpoint's %s (%s)" % (
+                    fp, ex.get("fingerprint"), s["resume_dir"]))
+            start = int(ex["step"])
+            policy.load_adapter_weights(os.path.join(s["resume_dir"], "adapter"))
+            got = policy.checksum()
+            if abs(got - ex["checksum"]) > 1e-6 * max(1.0, abs(ex["checksum"])):
+                raise RuntimeError("exported adapter %s: parameter checksum %.9g, saved %.9g" % (
+                    s["resume_dir"], got, ex["checksum"]))
+            rewarm["from"] = start
+            for g in opt.param_groups:
+                g["initial_lr"] = float(s["lr"])
+            # last_epoch = start - 1: the constructor's first step sets the lr of step `start`
+            sched = torch.optim.lr_scheduler.LambdaLR(opt, factor, last_epoch=start - 1)
+            log("resumed from the exported adapter of step %d (%s): optimizer restarted, lr re-warmed over %d steps, "
+                "lr now %.3e" % (start, s["resume_dir"], s["rewarm_steps"], sched.get_last_lr()[0]))
         else:
-            st = TR.load_ckpt(run_dir, start, policy, opt, sched, dist)
-            if st.get("fingerprint") != fp and not cfg["allow_config_change"]:
-                raise SystemExit("config / rows fingerprint %s differs from the checkpoint's %s" % (fp, st.get("fingerprint")))
-            log("resumed from step %d" % start)
+            sched = torch.optim.lr_scheduler.LambdaLR(opt, factor)
+            if start is None:
+                start = 0
+                TR.save_ckpt(run_dir, 0, policy, opt, sched, dist, {"fingerprint": fp}, wait_min, log)
+            else:
+                st = TR.load_ckpt(run_dir, start, policy, opt, sched, dist)
+                if st.get("fingerprint") != fp and not cfg["allow_config_change"]:
+                    raise SystemExit("config / rows fingerprint %s differs from the checkpoint's %s" % (fp, st.get("fingerprint")))
+                rewarm["from"] = st.get("rewarm_from")
+                log("resumed from step %d" % start)
         log("rows %d (%s), dev rows %d, %g epoch(s) = %d rows in %d steps of %d; lr %g, warm-up %d steps, LoRA dropout %g "
             "on %d modules; adapter %s; fingerprint %s" % (
-                len(rows), " ".join("%s %d" % kv for kv in sorted(_count(rows, "domain").items())), len(dev), s["epochs"],
+                len(rows), " ".join("%s %d" % kv for kv in sorted(
+                    (rows.domains if isinstance(rows, RowFile) else _count(rows, "domain")).items())), len(dev), s["epochs"],
                 len(order), steps, per, s["lr"], int(math.ceil(steps * float(s["warmup_ratio"]))), s["lora_dropout"], n_drop,
                 cfg["policy"]["init_adapter"] or "fresh LoRA", fp))
         if dist.rank == 0:
@@ -328,7 +438,8 @@ def train(cfg: dict, log: Callable[[str], None] = print) -> dict:
             m["time"] = time.strftime("%F %T")
             history[step] = m
             if last or (step + 1) % int(s["save_every"]) == 0:
-                TR.save_ckpt(run_dir, step + 1, policy, opt, sched, dist, {"fingerprint": fp}, wait_min, log)
+                TR.save_ckpt(run_dir, step + 1, policy, opt, sched, dist, {"fingerprint": fp, "rewarm_from": rewarm["from"]},
+                             wait_min, log)
                 if dist.rank == 0:
                     retry_when_full(lambda: TR.prune_ckpts(run_dir, cfg, step + 1), "ckpt/ (removing old checkpoints)", wait_min, log)
             if dist.rank == 0:
