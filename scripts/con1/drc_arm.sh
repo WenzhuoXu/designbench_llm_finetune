@@ -12,14 +12,16 @@ PY=/storage/wenwenw/envs/vllm_drc/bin/python
 MODEL=/storage/wxu/huggingface/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
 FAM="engibench grid2op photonics circuit2 frame3d2"
 export PYTHONPATH=$C/pylib:$REPO HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false PYTHONUNBUFFERED=1
-export CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=${GPU:-4} PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS=4
+export CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=${GPU:-${CUDA_VISIBLE_DEVICES:-4}} PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS=4
 export TMPDIR=$C/tmp TRITON_CACHE_DIR=$C/cache/triton TORCHINDUCTOR_CACHE_DIR=$C/cache/inductor
 export HF_HOME=/storage/wxu/huggingface HF_HUB_CACHE=/storage/wxu/huggingface/hub HF_HUB_DISABLE_XET=1
 export VLLM_CACHE_ROOT=$C/cache/vllm CUDA_CACHE_PATH=$C/cache/nv VLLM_NO_USAGE_STATS=1 VLLM_USE_FLASHINFER_SAMPLER=0
 mkdir -p "$RUN/logs" "$TMPDIR"
 cd $REPO
 echo "=== $(date '+%F %T') host=$(hostname) arm=$LAB fmt=$FMT rows=$ROWS gpu=$CUDA_VISIBLE_DEVICES"
-nvidia-smi --query-gpu=index,name,memory.used --format=csv,noheader
+# only the 96 GB card, and only when nobody else holds it
+read -r TOT USED <<< "$(nvidia-smi -i "$CUDA_VISIBLE_DEVICES" --query-gpu=memory.total,memory.used --format=csv,noheader,nounits | tr -d ',')"
+[ "${TOT:-0}" -gt 90000 ] && [ "${USED:-99999}" -lt 2000 ] || { echo "ABORT: GPU $CUDA_VISIBLE_DEVICES has ${TOT} MiB, ${USED} MiB in use"; exit 4; }
 free -g | head -2
 if [ ! -e "$RUN/final/adapter_config.json" ]; then
   $PY -m torch.distributed.run --standalone --nproc_per_node 1 -m llm_finetune.rl_dataxp.sft_rows \
