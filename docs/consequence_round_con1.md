@@ -269,7 +269,7 @@ scorer replacing V / D / PO as the primary skill measures.
 **Round 1 (format ablation, 11-25, job 175961, scored 175962).** pref1 + 47 steps of consequence rows per arm (round 1's
 5 families), zero-shot, held-out problems (2,247 questions per arm), all families (primary); ± bootstrap se over states.
 
-| predictor | select | regime_phys | cpl_dir_BA | cpl_size | V_bal_phys |
+| predictor | select | regime_phys | cpl_dir_BA | cpl_size | V_bal_phys (diagnostic) |
 |---|---|---|---|---|---|
 | F facet | **0.554** ±0.008 | 0.601 ±0.014 | **0.668** ±0.014 | **0.393** ±0.008 | 0.660 ±0.012 |
 | D delta | 0.515 ±0.007 | 0.573 ±0.013 | 0.674 ±0.012 | 0.300 ±0.007 | 0.682 ±0.012 |
@@ -535,3 +535,5 @@ stage-2 control (175931) is dropped. The loop: train, measure the facets on held
 families, change data / format / method, repeat. Round 1's winning format goes straight into the two-stage main run
 (stage 1 consequence rows on 8 families, then stage 2 policy rows). Jobs: round 1 175928, its scoring 175933, stage-1
 data prep 175934 (2,000 states per family, off-menu moves, rows in every format, facet trees).
+
+**Note 2026-11-25, 23:45 — Φ verdict out of the rules (owner).** Whether a move improves the design (V_bal, V_bal_phys, V_bal_applied) is not a goal at this stage (choosing moves comes later): it stays a diagnostic column in the files only. Rule 1: con1 beats the trees on cpl_dir_BA and on regime_phys, each by 2 se, k = 0, held-out problems; rule 2 dropped (defined through V_bal); rule 3: cpl_dir_BA and regime_phys against no change on held-out families; I1: the k-shot gain in cpl_dir_BA (V_bal removed); selection stays mean(regime_phys, cpl_dir_BA, cpl_size).
