@@ -293,6 +293,29 @@ and has the better regime; whether margins carry that over to facet is untested 
 states (main/rows/train_facetm.jsonl, same states and order as facet). Trained as the next stage-1 variant if stage 1's
 regime_phys stays below M's 0.673.
 
+**facetm arm (11-26, drc GPU 4, round-1 scale: the same 750 rows, states and moves as F; only the margins differ).**
+Held-out problems, 5 families, zero-shot:
+
+| predictor | select | regime_phys | cpl_dir_BA | cpl_size |
+|---|---|---|---|---|
+| Fm facetm | **0.579** ±0.008 | **0.678** ±0.015 | **0.683** ±0.013 | 0.375 ±0.007 |
+| F facet | 0.554 ±0.008 | 0.601 ±0.014 | 0.668 ±0.014 | 0.393 ±0.008 |
+| M masked | 0.513 ±0.009 | 0.673 ±0.019 | 0.566 ±0.014 | 0.300 ±0.006 |
+| trees | 0.489 ±0.009 | 0.596 ±0.013 | 0.600 ±0.017 | 0.270 ±0.009 |
+
+- Fm − F: select +0.024 ±0.006, regime_phys +0.077 ±0.012, cpl_dir_BA +0.015 ±0.006. The margins close the regime gap to M (Fm − M regime +0.005 ±0.019) and keep facet's coupled-direction lead.
+- Fm − trees: regime_phys +0.082 ±0.013, cpl_dir_BA +0.083 ±0.010. That is more than 2 se on both at this scale, on 5 families; rule 1 itself is judged on the main run.
+- Without photonics: Fm select 0.633, regime 0.717, cpl_dir 0.767.
+- Per family, regime_phys (Fm / F / M / trees):
+  - circuit2 0.834 / 0.663 / 0.926 / 0.607
+  - engibench 0.702 / 0.595 / 0.747 / 0.659
+  - frame3d2 0.684 / 0.673 / 0.551 / 0.529
+  - grid2op 0.649 / 0.556 / 0.528 / 0.624
+  - photonics 0.522 / 0.520 / 0.612 / 0.562
+- Photonics stays the weak family: regime below the trees, feasibility recall 0, cpl_dir_BA 0.346, near the 0.333 chance level (trees 0.423).
+- Scoring ran on drc without the harness, because drc has no engibench env. The harness only serves the Φ verdict, now out of the rules. F, M and the trees reproduce Orchard's round-1 numbers exactly.
+- Training used flash-linear-attention 0.5.2 (checked against the reference kernel) and long-row activation offload to pageable host memory (`DATAXP_OFFLOAD_PAGEABLE=1`).
+
 ## 11. Addendum 2026-11-25, 14:45 — the owner's consolidated goal (before any con1 result)
 
 Relayed by the parent session. This merges and supersedes the earlier owner messages; where it differs from
