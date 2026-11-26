@@ -55,15 +55,18 @@ until curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null 2>&1; do
 done
 echo "=== $(date '+%F %T') server ready"
 $PY scripts/con1/skill_client.py --queries $A/queries.jsonl --tokenizer $MODEL --base-url "http://127.0.0.1:$PORT/v1" \
-  --model $LAB --label $LAB --target $FMT --out $A/preds_$LAB.jsonl --max-tokens 2048 --workers 48 --passes zero \
+  --model $LAB --label $LAB --target $FMT --out $A/preds_$LAB.jsonl --max-tokens 2048 --workers 48 --passes ${PASSES:-zero} \
   --groups heldout_problem --variants $FAM > "$RUN/logs/client.log" 2>&1
 tail -2 "$RUN/logs/client.log"
 kill -TERM -- -$SP 2>/dev/null; sleep 15
 echo "=== $(date '+%F %T') facets"
-export OMP_NUM_THREADS=1 DATAXP_SPELLING=multitool PYTHONWARNINGS=ignore
-P="$A/preds_$LAB.jsonl"; for x in F M trees; do [ -s $A/r1/preds_$x.jsonl ] && P="$P $A/r1/preds_$x.jsonl"; done
-CUDA_VISIBLE_DEVICES= $PY scripts/con1/facets.py --queries $A/queries.jsonl --preds $P --groups heldout_problem --variants $FAM \
-  --problems $C/gen/in/bench_problems.jsonl --code ${CODE:-$A/code_v3} \
-  --harness $C/gen/h/dataxp_policy_eval_v3rc.py --boot 1000 --out $A/facets_$LAB.txt --json $A/facets_$LAB.json > /dev/null
-grep -A7 "group means over all" $A/facets_$LAB.txt
+# no harness on drc (no engibench env): it only serves the Phi verdict, out of the rules since 11-25 23:45
+export OMP_NUM_THREADS=1 PYTHONWARNINGS=ignore
+for PS in ${PASSES:-zero}; do
+  P="$A/preds_$LAB.jsonl"
+  [ "$PS" = zero ] && for x in F M trees; do [ -s $A/r1/preds_$x.jsonl ] && P="$P $A/r1/preds_$x.jsonl"; done
+  CUDA_VISIBLE_DEVICES= /opt/anaconda3/bin/python scripts/con1/facets.py --queries $A/queries.jsonl --preds $P --pass $PS \
+    --groups heldout_problem --variants $FAM --boot 1000 --out $A/facets_${LAB}_$PS.txt --json $A/facets_${LAB}_$PS.json > /dev/null
+  echo "== pass $PS"; grep -A7 "group means over all" $A/facets_${LAB}_$PS.txt
+done
 echo "DRC_ARM_DONE $LAB $(date '+%F %T')"
