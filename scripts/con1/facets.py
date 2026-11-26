@@ -217,6 +217,46 @@ def nochange_facets(q: dict) -> dict:
             "bin": {k: "same" for k in m0}, "after": dict(m0)}
 
 
+def _as_binned(q: dict, f: dict) -> dict:
+    """A truth record as a facet-format answer would carry it: the size from the bin midpoint, not the exact change."""
+    if not is_applied(f["regime"]):
+        return {"regime": f["regime"]}
+    out = {"regime": f["regime"], "violated": set(f["violated"]), "dir": dict(f["dir"]), "bin": dict(f["bin"]),
+           "change": {}, "after": dict(q["metrics0"])}
+    for k, dr in f["dir"].items():
+        b0 = float(q["metrics0"][k])
+        v = _mid_value(b0, dr, f["bin"].get(k, "same"))
+        if v is not None:
+            out["change"][k], out["after"][k] = v - b0, v
+    return out
+
+
+def kshot_baselines(q: dict, seen: list) -> dict:
+    """Predictions for the next move from the outcomes already shown at this state (the sequential pass's context),
+    with no physics: copy_last = the last shown outcome; copy_mode = per facet the most common shown value (ties:
+    the most recent), the violated set of the most recent shown move with that regime."""
+    last = _as_binned(q, seen[-1])
+    regs = [f["regime"] for f in seen]
+    reg = max(reversed(regs), key=regs.count)               # reversed: ties go to the most recent
+    mode = {"regime": reg}
+    if is_applied(reg):
+        src = next(f for f in reversed(seen) if f["regime"] == reg)
+        app = [f for f in seen if is_applied(f["regime"])]
+        mode.update(violated=set(src["violated"]), dir={}, bin={}, change={}, after=dict(q["metrics0"]))
+        for k in q["metrics0"]:
+            ds = [f["dir"][k] for f in app if k in f["dir"]]
+            if not ds:
+                continue
+            dr = max(reversed(ds), key=ds.count)
+            bs = [f["bin"][k] for f in app if f["dir"].get(k) == dr]
+            bn = max(reversed(bs), key=bs.count)
+            mode["dir"][k], mode["bin"][k] = dr, bn
+            v = _mid_value(float(q["metrics0"][k]), dr, bn)
+            if v is not None:
+                mode["change"][k], mode["after"][k] = v - float(q["metrics0"][k]), v
+    return {"copy_last": last, "copy_mode": mode}
+
+
 def move_counts(q, t, p, ctx=None):
     """Per-move sufficient statistics."""
     c = collections.Counter()
@@ -357,6 +397,8 @@ def main(argv=None):
     ap.add_argument("--groups", nargs="*", default=["heldout_problem"])
     ap.add_argument("--variants", nargs="*", default=None)
     ap.add_argument("--pass", dest="pass_", default="zero")
+    ap.add_argument("--kshot-baselines", action="store_true", help="add copy_last / copy_mode: the next move's "
+                    "outcome copied from the outcomes shown before it at the same state (positions >= 1)")
     ap.add_argument("--min-qi", type=int, default=0, help="only questions at this position or later (1: the questions "
                     "the sequential pass asks, for a same-question zero vs sequential comparison)")
     ap.add_argument("--boot", type=int, default=1000)
@@ -408,6 +450,11 @@ def main(argv=None):
                 continue
             cs.update(move_counts(q, truth_facets(q, m), nochange_facets(q), ctx_of(q)))
         per["nochange"][q["sid"]] = cs
+        if a.kshot_baselines:                              # the sequential pass's context, copied without physics
+            T = [truth_facets(q, m) for m in q["moves"]]
+            for j in range(max(1, a.min_qi), len(T)):
+                for name, pf in kshot_baselines(q, T[:j]).items():
+                    per[name].setdefault(q["sid"], collections.Counter()).update(move_counts(q, T[j], pf, ctx_of(q)))
     formats = {}
     seen = set()
     for p in a.preds:
