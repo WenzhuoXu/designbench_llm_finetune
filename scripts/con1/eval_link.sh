@@ -42,14 +42,14 @@ for x in $CMP; do [ -s "$x" ] || echo "note: comparison $x not there yet (scored
 grep "holding\|server ready\|SKILL_CLIENT_DONE\|ABORT\|DRC_ARM_DONE" "$E/arm_$L.out" | tail -5
 [ -s "$E/facets_${LAB}_zero.txt" ] || { echo "ABORT: no facets ($E/arm_$L.out)"; exit 3; }
 grep -A10 "group means over all" "$E/facets_${LAB}_zero.txt"
-{ echo "# $(date '+%F %T') group means over all (held-out problems, queries_v2, all families, k = 0): one line per checkpoint"
+{ echo "# $(date '+%F %T') group means over all (primary: 8 families; held-out problems, queries_v2, k = 0): one line per checkpoint"
   newest=
   for f in $(ls "$E"/facets_c2m_*_zero.txt | sort); do
     l=$(basename "$f" _zero.txt); l=${l#facets_}; newest=$f
-    awk -v lab="$l" '/group means over all/{on=1; next} on && $1==lab {print; exit}' "$f"
+    awk -v lab="$l" '/group means over all \(primary\)/{on=1; next} on && $1==lab {print; exit}' "$f"
   done
   echo "# comparisons (from $(basename "$newest")):"
-  awk '/group means over all/{on=1; next} on && NF > 2 && $1 !~ /^c2m_/ && $2 == "select" {print}' "$newest"
+  awk '/group means over all \(primary\)/{on=1; next} on && NF > 2 && $2 != "select" {exit} on && $1 !~ /^c2m_/ && $2 == "select" {print}' "$newest"
 } > "$E/curve.txt.tmp" && mv "$E/curve.txt.tmp" "$E/curve.txt"
 cat "$E/curve.txt"
 echo "EVAL_LINK_DONE $L $(date '+%F %T')"
