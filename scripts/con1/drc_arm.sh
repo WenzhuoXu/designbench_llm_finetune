@@ -69,4 +69,10 @@ for PS in ${PASSES:-zero}; do
     --groups heldout_problem --variants $FAM --boot 1000 --out $A/facets_${LAB}_$PS.txt --json $A/facets_${LAB}_$PS.json > /dev/null
   echo "== pass $PS"; grep -A7 "group means over all" $A/facets_${LAB}_$PS.txt
 done
+if [[ " ${PASSES:-zero} " == *" seq "* ]]; then    # the same questions zero-shot (positions >= 1): the k-shot gain
+  CUDA_VISIBLE_DEVICES= /opt/anaconda3/bin/python scripts/con1/facets.py --queries $A/queries.jsonl --preds $A/preds_$LAB.jsonl \
+    --pass zero --min-qi 1 --groups heldout_problem --variants $FAM --boot 1000 \
+    --out $A/facets_${LAB}_zero_q1.txt --json $A/facets_${LAB}_zero_q1.json > /dev/null
+  echo "== pass zero, positions >= 1"; grep -A7 "group means over all" $A/facets_${LAB}_zero_q1.txt
+fi
 echo "DRC_ARM_DONE $LAB $(date '+%F %T')"

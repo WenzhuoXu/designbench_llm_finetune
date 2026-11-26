@@ -357,6 +357,8 @@ def main(argv=None):
     ap.add_argument("--groups", nargs="*", default=["heldout_problem"])
     ap.add_argument("--variants", nargs="*", default=None)
     ap.add_argument("--pass", dest="pass_", default="zero")
+    ap.add_argument("--min-qi", type=int, default=0, help="only questions at this position or later (1: the questions "
+                    "the sequential pass asks, for a same-question zero vs sequential comparison)")
     ap.add_argument("--boot", type=int, default=1000)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=None)
@@ -401,7 +403,9 @@ def main(argv=None):
     per = collections.defaultdict(dict)
     for q in qs.values():
         cs = collections.Counter()
-        for m in q["moves"]:
+        for i, m in enumerate(q["moves"]):
+            if i < a.min_qi:
+                continue
             cs.update(move_counts(q, truth_facets(q, m), nochange_facets(q), ctx_of(q)))
         per["nochange"][q["sid"]] = cs
     formats = {}
@@ -412,7 +416,8 @@ def main(argv=None):
                 r = json.loads(line)
             except ValueError:                             # a line torn by a failed write (the client rewrites it)
                 continue
-            if r.get("pass") != a.pass_ or r["sid"] not in qs or str(r.get("finish", "")).startswith("error"):
+            if (r.get("pass") != a.pass_ or r["sid"] not in qs or str(r.get("finish", "")).startswith("error")
+                    or r["qi"] < a.min_qi):
                 continue
             key = (r["predictor"], r["sid"], r["pass"], r["qi"])
             if key in seen:                                # a resumed client can repeat a question: first answer counts
