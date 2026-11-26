@@ -104,27 +104,50 @@ infeasible designs and most moves leave them infeasible. Off-menu moves added he
 
 ## 4. The continuation job
 
-**Choice: Q = 36, 28 rows per step** (mine, from the measurements). Q = 36 needs 713 tokens per outcome against
-1,073 at Q = 12 (the state prompt is paid once per 26 questions instead of 11) with the same longest row (24,000,
-the cap) and the same outcomes; 28 rows per step = 7 per GPU and ~727 outcomes per optimizer step, close to stage 1's
-744 (and to Q = 12's 702 at 64 rows), so the number and size of updates stay as in stage 1's recipe (lr 1e-4, 3%
-warm-up, cosine, one epoch). Rows of a state with few outcomes left hold fewer questions; as in stage 1, every row
-weighs the same, so their outcomes weigh more.
+**Format: facetm** (parent's decision 11-26, from con1's drc arm on round-1's 750 rows: facetm vs facet on held-out
+problems regime_phys 0.678 vs 0.601, +0.077 ± 0.012; coupled direction 0.683 vs 0.668, +0.015 ± 0.006). The target
+code is targets.py's `facetm` through `build_rows.conseq_row`, unchanged (`build_full_rows.py --target facetm`). The
+continuation starts from the facet-trained stage-1 final, so it switches format at step 0: facetm only adds the
+MARGINS AFTER block before FEASIBLE; its first ~20 steps' loss (logged per step) show the switch; dev = stage 1's dev
+states and moves in facetm (`main/rows/dev_facetm.jsonl`), dev_start = the stage-1 final on them. The margin block's
+loss is not logged on its own. **Row cap 22,000 tokens** (the ~22k memory limit; stage 1 measured 68.9 GiB on steps
+whose longest row was 25.0–25.7k).
 
-| | steps | outcomes / step | training hours (2 fits) | dev passes | outcomes per GPU-second |
+**facetm, Q = 12 vs Q = 36** (Orchard CPU job 176126; same 1,988,301 outcomes; exact tokens; checks as in §3: no pair
+twice, none of stage 1's, counts add up; the Q = 36 build repeated with 64 workers: identical bytes):
+
+| | facetm Q = 12 | **facetm Q = 36** | facet Q = 36 (cap 24k, §3) |
+|---|---:|---:|---:|
+| rows | 198,873 | **121,670** | 76,558 |
+| questions per row | 10.0 | **16.3** | 26.0 |
+| tokens per row mean / p95 / max | 14,763 / 21,716 / 22,000 | **20,073 / 21,860 / 22,000** | 18,517 / 23,669 / 24,000 |
+| prompt tokens per row | 8,949 | 10,300 | 8,544 |
+| training tokens | 2,935.9 M | **2,442.2 M** | 1,417.6 M |
+| tokens per outcome | 1,477 | **1,228** | 713 |
+| rows file | 7.8 GB | 6.6 GB | 4.2 GB |
+| build (30 CPUs) | 159 s | 98 s | 74 s |
+| sha1 | 181dc4e7… | **5f0c9acb07e4433b5b7975dd698d9b2ff9a50649** | 955b00b1… |
+
+facetm answers are longer (one margin line per constraint) and every question repeats the full facetm format text,
+so the 22,000 cap binds for most Q = 36 rows (p95 21,860): 16 questions per row on average, grid2op only 7.5 (its
+prompt is long). Per family (Q = 36): circuit2 18.1 questions/row, engibench 24.4, frame3d2 18.2, grid2 19.3, grid2op
+7.5, photonics 13.4, seir2 20.5, traffic2 28.2; grid2op's 34,015 rows are 28% of all rows for 13% of the outcomes.
+
+**Choice: Q = 36, 44 rows per step** (mine): Q = 36 needs 17% fewer tokens than Q = 12 for the same outcomes with the
+same longest row; 44 rows = 11 per GPU and ~719 outcomes per optimizer step (stage 1: 744), 2,766 steps, lr 1e-4,
+3% warm-up, cosine, one epoch.
+
+| facetm | steps | outcomes / step | training hours (2 fits) | dev passes | outcomes per GPU-second |
 |---|---:|---:|---:|---:|---:|
-| Q = 12, 64 rows/step | 2,834 | 702 | 131.2–131.5 | 0.9 h | 1.05 |
-| Q = 36, 64 rows/step | 1,197 | 1,661 | 87.3–91.9 | 0.4 h | 1.50–1.58 |
-| **Q = 36, 28 rows/step** | **2,735** | **727** | **87.8–92.5** | **0.9 h** | **1.49–1.57** |
+| Q = 12, 64 rows/step | 3,108 | 640 | 180.3–184.0 | 1.0 h | 0.75–0.77 |
+| **Q = 36, 44 rows/step** | **2,766** | **719** | **150.6–158.6** | **0.9 h** | **0.87–0.92** |
 
-Fits on job 176033's first 18 measured steps (161.5 s mean per step; residual sd 1.6 s): "tokens only" = time
-proportional to the slowest rank's tokens (0.881 s per 1,000 tokens); the other adds an attention term per rank
-(0.791 s/ktok + 0.0071 s/ktok²; the split between the two terms is weakly determined, so both are given). Dev pass
-(stage 1's 120 dev rows): 59.6 s, every 50 steps.
+Fits on 176033's first 182 measured steps (tokens only: 0.882 s per 1,000 tokens on the slowest rank; with an
+attention term 0.806 s/ktok + 0.0060 s/ktok²; dev pass 59 s).
 
-**Wall-clock:** 89–93 h of training; each 24 h link loses ~10 min at start (rows built in ~75 s, model load, row
-index) and up to 30 min at the hand-over, so ~23.2 h of training per link: **4 links (a 5th only if the attention
-fit is right and the queue gaps add up)**, about 4–5 days on 4 H100s if the links start back to back.
+**Wall-clock:** 151–160 h of training; each 24 h link loses ~12 min at start (rows built in ~100 s, slot restore,
+model load, row index) and up to 30 min at the hand-over, so ~23.2 h of training per link: **7 links**, about
+6.5–7 days on 4 H100s if the links start back to back (CHAIN_MAX 10).
 
 **How a link runs** (`scripts/con1/orchard_full.sh`). Node layout as `orchard_main.sh`'s
 (`/tmp/con1_main_<job>/full/` with `metrics.jsonl`, `ckpt/step_N/COMPLETE`, `final/`), so `parent_check/mon.py`
@@ -141,11 +164,12 @@ after a sha1 read-back); `F1–F3.bin` + `F.meta` hold a stage's final adapter. 
    weight); the first link (`INIT=F`, default) restores the stage-1 final from F1–F3 per `F.meta`, which must read
    `stage1 final ...` (else the link stops); `INIT=<dir>` copies an adapter directory instead; a run that has
    copied a checkpoint before never restarts from step 0;
-3. builds the Q = 36 rows on the node's /tmp and stops if the sha1 is not 955b00b1…;
+3. builds the facetm Q = 36 rows (cap 22,000) on the node's /tmp and stops if the sha1 is not 5f0c9acb…;
 4. trains with `orchard_sft_rows.sh` + `con1_sft.yaml` + overrides `policy.init_adapter=/tmp/con1_init
-   sft.rows_per_step=28 sft.save_every=5 sft.keep_last=1 sft.dev_every=50 sft.lazy_rows=true sft.check_rows=false
+   sft.rows_per_step=44 sft.save_every=5 sft.keep_last=1 sft.dev_every=50 sft.lazy_rows=true sft.check_rows=false
    sft.resume_dir=/tmp/con1_resume|null sft.rewarm_steps=10`: a resume restarts AdamW, re-warms the lr over 10 steps
-   and takes the schedule position from state.json; dev = stage 1's 120 dev rows (dev_start = the start adapter);
+   and takes the schedule position from state.json; dev = stage 1's 120 dev states / moves in facetm (dev_start =
+   the start adapter);
 5. runs the guard (`scripts/con1/guard_v3.sh` = the parent's 11-26 06:2x version + env `RES`, `STAGES`, `FORCE`,
    `NO_FINAL`, `REUSE_SLOT`; here `STAGES=full NO_FINAL=1 REUSE_SLOT=1`) every 10 min from inside the job: the newest
    checkpoint into the older slot every ~2 h; metrics and the trainer log to `$M`. The parent's guard keeps the
@@ -194,6 +218,6 @@ Stop the chain: `touch /project/community/wxu2/con1/full/run1/STOP` (the running
 loss (first / last 10 steps), informative-token nll, grad norm (median, last-10 max), peak memory, lr, s/step, NaN,
 dev passes (stage 1's 120 dev rows) against dev_start (the stage-1 adapter), newest node checkpoint, final. The job's
 log (`full/logs/con1_full_<id>.out`) carries the guard's SAVED / FAILED lines; the chain's state is in
-`full/run1/chain/` (next_of_<job>, copied_step_N, fail_*). Plan: every 2–3 h; expected ~110–125 s per step at 28
-rows (7 per GPU, ~130k tokens per GPU); act on a non-finite loss, a grad-norm spike, rising dev loss, peak memory
+`full/run1/chain/` (next_of_<job>, copied_step_N, fail_*). Plan: every 2–3 h; expected ~190–210 s per step at 44
+rows (11 per GPU, ~220k tokens per GPU); act on a non-finite loss, a grad-norm spike, rising dev loss, peak memory
 above ~76 GiB or FAILED guard lines.

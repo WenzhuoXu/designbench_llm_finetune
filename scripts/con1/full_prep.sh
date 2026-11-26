@@ -84,38 +84,39 @@ for k in sorted(c):
 EOF
 
 ST="$B/main/states_native_offmenu.jsonl.gz $F/states_native_offmenu_rest.jsonl.gz $G/out/states_native_orch.jsonl.gz $G/out/states_scripted.jsonl.gz"
-EX="$B/main/rows/train_facet.jsonl $B/main/rows/dev_facet.jsonl"
+EX="$B/main/rows/train_facet.jsonl $B/main/rows/dev_facet.jsonl $B/main/rows/dev_facetm.jsonl"
+TGT=${TARGET:-facetm}; CAP=${MAX_TOKENS:-22000}
 FORBID="$D/queries_v2.jsonl $G/bench_problems.jsonl"
 for Q in ${QS:-12 36}; do
-  echo "=== $(date '+%F %T') 2. full build Q=$Q (workers $WORKERS)"
+  echo "=== $(date '+%F %T') 2. full build $TGT Q=$Q cap $CAP (workers $WORKERS)"
   T0=$(date +%s)
   $TRPY "$R/scripts/con1/build_full_rows.py" --states $ST --exclude-rows $EX --forbid-problems $FORBID \
-    --tokenizer "$MODEL" --target facet --q "$Q" --max-tokens "${MAX_TOKENS:-24000}" --seed 0 --workers "$WORKERS" \
-    --out-train "$T/train_q$Q.jsonl" --out-dev "$T/dev_q$Q.jsonl" --stats "$T/stats_q$Q.json" --lens "$T/lens_q$Q.txt" \
-    > "$T/build_q$Q.log" 2>&1
-  echo "build wall $(( $(date +%s) - T0 )) s"; tail -3 "$T/build_q$Q.log"
-  ls -la "$T/train_q$Q.jsonl" "$T/dev_q$Q.jsonl"
-  for f in stats_q$Q.json lens_q$Q.txt build_q$Q.log; do keep "$T/$f" "$F/$f"; done
+    --tokenizer "$MODEL" --target "$TGT" --q "$Q" --max-tokens "$CAP" --seed 0 --workers "$WORKERS" \
+    --out-train "$T/train_${TGT}_q$Q.jsonl" --out-dev "$T/dev_${TGT}_q$Q.jsonl" --stats "$T/stats_${TGT}_q$Q.json" --lens "$T/lens_${TGT}_q$Q.txt" \
+    > "$T/build_${TGT}_q$Q.log" 2>&1
+  echo "build wall $(( $(date +%s) - T0 )) s"; tail -3 "$T/build_${TGT}_q$Q.log"
+  ls -la "$T/train_${TGT}_q$Q.jsonl" "$T/dev_${TGT}_q$Q.jsonl"
+  for f in stats_${TGT}_q$Q.json lens_${TGT}_q$Q.txt build_${TGT}_q$Q.log; do keep "$T/$f" "$F/$f"; done
   T0=$(date +%s)
-  sha1sum "$T/train_q$Q.jsonl" | tee "$T/sha1_q$Q.txt"
+  sha1sum "$T/train_${TGT}_q$Q.jsonl" | tee "$T/sha1_${TGT}_q$Q.txt"
   echo "sha1 of the rows file $(( $(date +%s) - T0 )) s"
-  $TRPY "$R/scripts/con1/full_check.py" --rows "$T/train_q$Q.jsonl" "$T/dev_q$Q.jsonl" --stats "$T/stats_q$Q.json" \
-    --stage1 $EX --q "$Q" --like "$B/main/rows/train_facet.jsonl" | tee "$T/check_q$Q.log"
-  keep "$T/check_q$Q.log" "$F/logs/check_q$Q.log"
-  # the same build twice must give the same bytes (the trainer's fingerprint holds the file's sha1): rebuild Q=12
+  $TRPY "$R/scripts/con1/full_check.py" --rows "$T/train_${TGT}_q$Q.jsonl" "$T/dev_${TGT}_q$Q.jsonl" --stats "$T/stats_${TGT}_q$Q.json" \
+    --stage1 $EX --q "$Q" --like "$B/main/rows/train_facet.jsonl" | tee "$T/check_${TGT}_q$Q.log"
+  keep "$T/check_${TGT}_q$Q.log" "$F/logs/check_${TGT}_q$Q.log"
+  # the same build twice must give the same bytes (the trainer's fingerprint holds the file's sha1): rebuild Q=$REBUILD_Q
   # with another worker count and compare
-  if [ "$Q" = 12 ] && [ -z "${NO_REBUILD:-}" ]; then
+  if [ "$Q" = "${REBUILD_Q:-36}" ] && [ -z "${NO_REBUILD:-}" ]; then
     $TRPY "$R/scripts/con1/build_full_rows.py" --states $ST --exclude-rows $EX --forbid-problems $FORBID \
-      --tokenizer "$MODEL" --target facet --q "$Q" --max-tokens "${MAX_TOKENS:-24000}" --seed 0 --workers 64 \
-      --out-train "$T/train_q${Q}_again.jsonl" --out-dev "$T/dev_q${Q}_again.jsonl" --stats "$T/stats_q${Q}_again.json" \
-      > "$T/build_q${Q}_again.log" 2>&1
-    tail -2 "$T/build_q${Q}_again.log"
-    if cmp -s "$T/train_q$Q.jsonl" "$T/train_q${Q}_again.jsonl" && cmp -s "$T/dev_q$Q.jsonl" "$T/dev_q${Q}_again.jsonl"; then
+      --tokenizer "$MODEL" --target "$TGT" --q "$Q" --max-tokens "$CAP" --seed 0 --workers 64 \
+      --out-train "$T/train_${TGT}_q${Q}_again.jsonl" --out-dev "$T/dev_${TGT}_q${Q}_again.jsonl" --stats "$T/stats_${TGT}_q${Q}_again.json" \
+      > "$T/build_${TGT}_q${Q}_again.log" 2>&1
+    tail -2 "$T/build_${TGT}_q${Q}_again.log"
+    if cmp -s "$T/train_${TGT}_q$Q.jsonl" "$T/train_${TGT}_q${Q}_again.jsonl" && cmp -s "$T/dev_${TGT}_q$Q.jsonl" "$T/dev_${TGT}_q${Q}_again.jsonl"; then
       echo "REBUILD IDENTICAL (64 workers vs $WORKERS)"
     else
       echo "!!! REBUILD DIFFERS"
     fi
-    rm -f "$T/train_q${Q}_again.jsonl" "$T/dev_q${Q}_again.jsonl"
+    rm -f "$T/train_${TGT}_q${Q}_again.jsonl" "$T/dev_${TGT}_q${Q}_again.jsonl"
   fi
 done
 

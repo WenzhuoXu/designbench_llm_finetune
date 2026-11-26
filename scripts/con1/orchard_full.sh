@@ -9,7 +9,8 @@
 # every resume (24 h limit or crash) restarts AdamW with the lr re-warmed over REWARM = 10 steps and the schedule
 # position from state.json.
 #  1. submits its successor (afterany), unless the run is DONE, STOPped or the chain is at CHAIN_MAX;
-#  2. builds the rows on node /tmp (build_full_rows.py; the sha1 must equal the first build's, else it stops);
+#  2. builds the rows on node /tmp (build_full_rows.py: facetm, Q 36, cap 22,000 tokens; the sha1 must equal the
+#     first build's in $F/stats_facetm_q36.json, else it stops);
 #  3. the start adapter, always at the fixed node path /tmp/con1_init (the trainer's fingerprint holds the path):
 #     - a link that resumes: the newest "full" slot (A or B), restored and sha1-checked into /tmp/con1_resume; its
 #       adapter is also /tmp/con1_init (only its LoRA config matters there: the resume overwrites every weight);
@@ -34,16 +35,17 @@ REPO="${REPO:-$C1/repo2m}"
 INIT="${INIT:-F}"
 M="${M:?run dir on shared storage (e.g. $C1/full/run1)}"
 Q="${Q:-36}"
-PER="${PER:-28}"
-MAX_TOKENS="${MAX_TOKENS:-24000}"
+PER="${PER:-44}"
+MAX_TOKENS="${MAX_TOKENS:-22000}"
+TARGET="${TARGET:-facetm}"                       # answer format (targets.py; facetm chosen 11-26 from the drc arm)
 F="${F:-$C1/full}"
-DEV="${DEV:-$C1/main/rows/dev_facet.jsonl}"      # stage 1's dev rows: the dev curve continues stage 1's
+DEV="${DEV:-$C1/main/rows/dev_$TARGET.jsonl}"    # stage 1's dev states and moves, in the training format
 STAGE="${STAGE:-full}"
 RES="${RES:-$B/con1_reserve}"
 SL=$RES/slots
 GUARD="$REPO/scripts/con1/guard_v3.sh"
 GUARD_EVERY="${GUARD_EVERY:-600}"
-CHAIN_MAX="${CHAIN_MAX:-8}"
+CHAIN_MAX="${CHAIN_MAX:-10}"
 CHAIN_I="${CHAIN_I:-1}"
 JOB="${SLURM_JOB_ID:-x}"
 NTRAIN="${NTRAIN:-4}"
@@ -59,10 +61,10 @@ G=$C1/gen
 D=$C1/data
 mkdir -p "$M/logs" "$M/chain" "$T/logs" "$RUN"
 log() { echo "=== $(date '+%F %T') $*"; }
-log "host=$(hostname) job=$JOB chain=$CHAIN_I/$CHAIN_MAX repo=$REPO q=$Q rows/step=$PER init=$INIT m=$M slots=$SL stage=$STAGE"
+log "host=$(hostname) job=$JOB chain=$CHAIN_I/$CHAIN_MAX repo=$REPO target=$TARGET q=$Q cap=$MAX_TOKENS rows/step=$PER init=$INIT m=$M slots=$SL stage=$STAGE"
 [ -e "$M/DONE" ] && { log "run DONE already"; exit 0; }
 [ -e "$M/STOP" ] && { log "STOP file: not training"; exit 0; }
-for f in "$DEV" "${ROWS_FILE:-$F/stats_q$Q.json}" "$TRAIN_PY" "$GUARD"; do
+for f in "$DEV" "${ROWS_FILE:-$F/stats_${TARGET}_q$Q.json}" "$TRAIN_PY" "$GUARD"; do
   [ -e "$f" ] || { log "ABORT: missing $f"; exit 2; }
 done
 best_slot() {   # "X step length sha1" of the slot holding this stage's newest copy, or nothing
@@ -95,7 +97,7 @@ fail() { log "FAILED: $*"; touch "$M/chain/fail_${JOB}_step$(copy_step)"; }
 NEXT=
 if [ "$CHAIN_I" -lt "$CHAIN_MAX" ]; then
   NEXT=$(sbatch --parsable $NEXT_ARGS --dependency=afterany:$JOB \
-    --export=ALL,INIT="$INIT",M="$M",Q="$Q",PER="$PER",REPO="$REPO",CHAIN_I=$((CHAIN_I+1)),CHAIN_MAX="$CHAIN_MAX",DEV="$DEV",MAX_TOKENS="$MAX_TOKENS",RES="$RES",STAGE="$STAGE" \
+    --export=ALL,INIT="$INIT",M="$M",Q="$Q",PER="$PER",REPO="$REPO",CHAIN_I=$((CHAIN_I+1)),CHAIN_MAX="$CHAIN_MAX",DEV="$DEV",MAX_TOKENS="$MAX_TOKENS",TARGET="$TARGET",RES="$RES",STAGE="$STAGE" \
     "${SBATCH_FILE:-$REPO/slurm/con1_full.sbatch}") && echo "$NEXT" > "$M/chain/next_of_$JOB" && log "successor $NEXT submitted" \
     || log "!!! successor not submitted"
 fi
@@ -130,14 +132,14 @@ export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false PYTH
 if [ -n "$ROWS_FILE" ]; then
   ROWS=$ROWS_FILE; log "TEST: rows $ROWS (no build)"
 else
-  WANT=$("$TRAIN_PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["train_sha1"])' "$F/stats_q$Q.json")
-  log "building the rows (Q=$Q, cap $MAX_TOKENS tokens)"
+  WANT=$("$TRAIN_PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["train_sha1"])' "$F/stats_${TARGET}_q$Q.json")
+  log "building the rows ($TARGET, Q=$Q, cap $MAX_TOKENS tokens)"
   T0=$(date +%s)
   "$TRAIN_PY" "$REPO/scripts/con1/build_full_rows.py" \
     --states "$C1/main/states_native_offmenu.jsonl.gz" "$F/states_native_offmenu_rest.jsonl.gz" \
              "$G/out/states_native_orch.jsonl.gz" "$G/out/states_scripted.jsonl.gz" \
-    --exclude-rows "$C1/main/rows/train_facet.jsonl" "$C1/main/rows/dev_facet.jsonl" \
-    --forbid-problems "$D/queries_v2.jsonl" "$G/bench_problems.jsonl" --tokenizer "$MODEL" --target facet \
+    --exclude-rows "$C1/main/rows/train_facet.jsonl" "$C1/main/rows/dev_facet.jsonl" "$C1/main/rows/dev_facetm.jsonl" \
+    --forbid-problems "$D/queries_v2.jsonl" "$G/bench_problems.jsonl" --tokenizer "$MODEL" --target "$TARGET" \
     --q "$Q" --max-tokens "$MAX_TOKENS" --seed 0 --workers "${BUILD_WORKERS:-30}" \
     --out-train "$ROWS" --out-dev "$T/dev_full_q$Q.jsonl" --stats "$T/stats.json" > "$T/logs/build.log" 2>&1
   tail -3 "$T/logs/build.log"
