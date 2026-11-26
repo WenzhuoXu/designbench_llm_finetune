@@ -40,6 +40,8 @@ MAX_TOKENS="${MAX_TOKENS:-22000}"
 TARGET="${TARGET:-facetm}"                       # answer format (targets.py; facetm chosen 11-26 from the drc arm)
 FOLLOW="${FOLLOW:-short}"                        # later questions of a row: "Same answer form." (full text in the 1st)
 TAG=$TARGET; [ "$FOLLOW" = short ] && TAG=${TARGET}_short
+PREFIX_WEIGHT="${PREFIX_WEIGHT-0}"              # loss weight of each answer's think-closing piece (owner 11-26: 0)
+PWARG=; [ -n "$PREFIX_WEIGHT" ] && PWARG="--prefix-weight $PREFIX_WEIGHT" && TAG=${TAG}_pw$PREFIX_WEIGHT
 F="${F:-$C1/full}"
 DEV="${DEV:-$C1/main/rows/dev_$TARGET.jsonl}"    # stage 1's dev states and moves, in the training format
 STAGE="${STAGE:-full}"
@@ -63,7 +65,7 @@ G=$C1/gen
 D=$C1/data
 mkdir -p "$M/logs" "$M/chain" "$T/logs" "$RUN"
 log() { echo "=== $(date '+%F %T') $*"; }
-log "host=$(hostname) job=$JOB chain=$CHAIN_I/$CHAIN_MAX repo=$REPO target=$TARGET follow=$FOLLOW q=$Q cap=$MAX_TOKENS rows/step=$PER init=$INIT m=$M slots=$SL stage=$STAGE"
+log "host=$(hostname) job=$JOB chain=$CHAIN_I/$CHAIN_MAX repo=$REPO target=$TARGET follow=$FOLLOW prefix_weight=${PREFIX_WEIGHT:-default} q=$Q cap=$MAX_TOKENS rows/step=$PER init=$INIT m=$M slots=$SL stage=$STAGE"
 [ -e "$M/DONE" ] && { log "run DONE already"; exit 0; }
 [ -e "$M/STOP" ] && { log "STOP file: not training"; exit 0; }
 for f in "$DEV" "${ROWS_FILE:-$F/stats_${TAG}_q$Q.json}" "$TRAIN_PY" "$GUARD"; do
@@ -99,7 +101,7 @@ fail() { log "FAILED: $*"; touch "$M/chain/fail_${JOB}_step$(copy_step)"; }
 NEXT=
 if [ "$CHAIN_I" -lt "$CHAIN_MAX" ]; then
   NEXT=$(sbatch --parsable $NEXT_ARGS --dependency=afterany:$JOB \
-    --export=ALL,INIT="$INIT",M="$M",Q="$Q",PER="$PER",REPO="$REPO",CHAIN_I=$((CHAIN_I+1)),CHAIN_MAX="$CHAIN_MAX",DEV="$DEV",MAX_TOKENS="$MAX_TOKENS",TARGET="$TARGET",FOLLOW="$FOLLOW",RES="$RES",STAGE="$STAGE" \
+    --export=ALL,INIT="$INIT",M="$M",Q="$Q",PER="$PER",REPO="$REPO",CHAIN_I=$((CHAIN_I+1)),CHAIN_MAX="$CHAIN_MAX",DEV="$DEV",MAX_TOKENS="$MAX_TOKENS",TARGET="$TARGET",FOLLOW="$FOLLOW",PREFIX_WEIGHT="$PREFIX_WEIGHT",RES="$RES",STAGE="$STAGE" \
     "${SBATCH_FILE:-$REPO/slurm/con1_full.sbatch}") && echo "$NEXT" > "$M/chain/next_of_$JOB" && log "successor $NEXT submitted" \
     || log "!!! successor not submitted"
 fi
@@ -141,7 +143,7 @@ else
     --states "$C1/main/states_native_offmenu.jsonl.gz" "$F/states_native_offmenu_rest.jsonl.gz" \
              "$G/out/states_native_orch.jsonl.gz" "$G/out/states_scripted.jsonl.gz" \
     --exclude-rows "$C1/main/rows/train_facet.jsonl" "$C1/main/rows/dev_facet.jsonl" "$C1/main/rows/dev_facetm.jsonl" \
-    --forbid-problems "$D/queries_v2.jsonl" "$G/bench_problems.jsonl" --tokenizer "$MODEL" --target "$TARGET" --follow "$FOLLOW" \
+    --forbid-problems "$D/queries_v2.jsonl" "$G/bench_problems.jsonl" --tokenizer "$MODEL" --target "$TARGET" --follow "$FOLLOW" $PWARG \
     --q "$Q" --max-tokens "$MAX_TOKENS" --seed 0 --workers "${BUILD_WORKERS:-30}" \
     --out-train "$ROWS" --out-dev "$T/dev_full_q$Q.jsonl" --stats "$T/stats.json" > "$T/logs/build.log" 2>&1
   tail -3 "$T/logs/build.log"
@@ -174,25 +176,30 @@ EOF
   [ -e "$M/dev_start.json" ] && cp "$M/dev_start.json" "$RUN/"
 fi
 DEV_USED=$DEV
-if [ "$FOLLOW" = short ]; then
-  # the dev rows in the training layout: their later questions as build_full_rows.py --follow short writes them (the
-  # states, moves and answers unchanged); on node /tmp only
-  DEV_USED=$T/dev_short.jsonl
-  PYTHONPATH="$REPO/scripts/con1:$REPO" "$TRAIN_PY" - "$DEV" "$DEV_USED" <<'EOF' || { fail "dev rows not converted"; exit 2; }
-import json, sys
+if [ "$FOLLOW" = short ] || [ -n "$PREFIX_WEIGHT" ]; then
+  # the dev rows in the training layout: later questions and think-closing weight as build_full_rows.py writes them
+  # (states, moves and answer texts unchanged); on node /tmp only
+  DEV_USED=$T/dev_train_layout.jsonl
+  PYTHONPATH="$REPO/scripts/con1:$REPO" FOLLOW="$FOLLOW" PREFIX_WEIGHT="$PREFIX_WEIGHT" "$TRAIN_PY" - "$DEV" "$DEV_USED" <<'EOF' || { fail "dev rows not converted"; exit 2; }
+import json, os, sys
 from targets import FOLLOW_HEAD, question
-n = 0
+short, pw = os.environ["FOLLOW"] == "short", os.environ["PREFIX_WEIGHT"]
+n = na = 0
 with open(sys.argv[2], "w", encoding="utf-8") as fo:
     for line in open(sys.argv[1], encoding="utf-8"):
         r = json.loads(line)
         if r.get("supervise") == "every_assistant":
             msgs, fmt = r["messages"], r["format"]
-            for k, mv in zip(range(3, len(msgs), 2), r["con1"]["moves"][1:]):
+            for k, mv in zip(range(3, len(msgs), 2), r["con1"]["moves"][1:]) if short else ():
                 assert msgs[k]["role"] == "user" and msgs[k]["content"] == question(fmt, mv, False)
                 msgs[k]["content"] = FOLLOW_HEAD.format(move=mv) + "Same answer form."
                 n += 1
+            for m in msgs[2::2] if pw != "" else ():
+                assert m["role"] == "assistant" and m.get("supervise_spans") is not None
+                m["prefix_weight"] = float(pw)
+                na += 1
         fo.write(json.dumps(r, ensure_ascii=False) + "\n")
-print("dev rows: %d later questions shortened" % n)
+print("dev rows: %d later questions shortened, %d answers given prefix weight %s" % (n, na, pw or "default"))
 EOF
 fi
 if [ "$INIT" = none ]; then IOV="policy.init_adapter=null policy.require_init_adapter=false"; else IOV="policy.init_adapter=$INIT_DIR"; fi

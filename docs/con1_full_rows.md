@@ -154,6 +154,18 @@ the node at job start (1,192 later questions; answers and first questions unchan
 questions: circuit2 27.1, engibench 24.8, frame3d2 31.3, grid2 30.3, grid2op 15.0, photonics 17.8, seir2 30.4, traffic2
 30.3.
 
+**Think-closing piece not supervised (owner-approved, 11-26 09:00).** Every answer of the continuation's rows carries
+`"prefix_weight": 0.0` (`build_full_rows.py --prefix-weight 0`; conseq_format._span_mask's existing key, as the P rows
+used): the empty reasoning + `\n</think>\n\n` before each answer weighs 0; the answer content keeps 1 on informative
+tokens and 0.05 (`fixed_weight`) on fixed wording, the end token 1. Reason: stage 1 trains the model to close its
+think block at once, and answer-only world-model SFT hurt the agent in RWML (arXiv 2602.05842); RL with thinking comes
+later. Stage 1 (176033) is unchanged. The dev rows get the same weight on the node. Checked on built row 0 (engibench,
+27 questions) with the trainer's own `conseq_format.encode` (`scripts/con1/dump_weights.py`): `\n`, `</think>`, `\n\n`
+weight 0; "VERDICT:", metric names, padding 0.05; " applied", " satisfied 20-50%", " no", " volume", " same" 1;
+`<|im_end|>` 1; over the row 4,113 completion tokens = 1,425 at 0 (user turns + the 27 think-closing pieces), 1,512 at
+0.05, 1,176 at 1; all 27 `</think>` tokens 0. Rows file sha1 47edac9b76e8ec40074aa25990e3d9726728120c (CPU job 176148;
+checks pass; rebuild byte-identical); tokens and hours unchanged (weights only).
+
 **Choice: Q = 36, short later questions, 28 rows per step** (mine): 7 rows per GPU, ~711 outcomes per optimizer step
 (stage 1: 744), 2,795 steps, lr 1e-4, 3% warm-up, cosine, one epoch.
 
@@ -184,8 +196,8 @@ after a sha1 read-back); `F1–F3.bin` + `F.meta` hold a stage's final adapter. 
    weight); the first link (`INIT=F`, default) restores the stage-1 final from F1–F3 per `F.meta`, which must read
    `stage1 final ...` (else the link stops); `INIT=<dir>` copies an adapter directory instead; a run that has
    copied a checkpoint before never restarts from step 0;
-3. builds the facetm Q = 36 rows (short later questions, cap 22,000) on the node's /tmp and stops if the sha1 is
-   not cb197f29…;
+3. builds the facetm Q = 36 rows (short later questions, think-closing weight 0, cap 22,000) on the node's /tmp and
+   stops if the sha1 is not 47edac9b…;
 4. trains with `orchard_sft_rows.sh` + `con1_sft.yaml` + overrides `policy.init_adapter=/tmp/con1_init
    sft.rows_per_step=28 sft.save_every=5 sft.keep_last=1 sft.dev_every=50 sft.lazy_rows=true sft.check_rows=false
    sft.resume_dir=/tmp/con1_resume|null sft.rewarm_steps=10`: a resume restarts AdamW, re-warms the lr over 10 steps
@@ -256,14 +268,19 @@ it: "resuming from slot X (full step_N ...)"). One pass per link, while the next
    beside it (≤ 2 GB per call; one part each), then on drc the RL session's
    `bash /storage/wxu/rl_open/orchard_xfer/join_ckpt.sh con1_full <label>` → "1 files DRC_SHA_MATCH",
    `/storage/wxu/rl_open/orchard_runs/con1_full/ckpt/<label>/slot.tar`. No MCP download from drc.
-3. **drc eval**: `bash /storage/wxu/con1/full_eval/eval_link.sh <label>` (`scripts/con1/eval_link.sh`): the adapter
-   to `con1/arm/run_full_<label>/final`; con1's `drc_arm.sh` unchanged (`LAB=full_<label> FMT=facetm ROWS=none
-   WAIT=1`: final exists, so no training; vLLM on GPU 4 once it is free; round 1's held-out-problem questions, zero
-   pass, 5 families; ~45 min of GPU 4 by the facetm arm's 07:12–07:53); facets as con1's `score_Fm.sh` (drc has no
-   simulator env: V_bal_phys n/a; regime_phys, cpl_dir_BA, cpl_size unaffected) next to Fm, round-1 F, M and the
-   trees; `con1/full_eval/curve.txt` rewritten with one line per checkpoint.
+3. **drc eval** (con1's OK, 11-26 09:00): `bash /storage/wxu/con1/full_eval/eval_link.sh <label>`
+   (`scripts/con1/eval_link.sh`): the adapter to `con1/arm/run_c2m_<label>/final`, slot.tar deleted; con1's
+   generalised `drc_arm.sh` (`drc_arm_next.sh` until it replaces drc_arm.sh) with `LAB=c2m_<label> FMT=facetm
+   ROWS=none WAIT=1 QUERIES=arm/main/queries_v2.jsonl FAM=all MAXTOK=4096 OUTDIR=full_eval PASSES=zero`: final exists,
+   so no training; GPU 4 under con1's flock `arm/gpu4.lock`; the main-run test set (held-out problems, 8 families,
+   3,687 questions with native off-menu moves); facets without the harness next to stage 1's answers
+   (`full_eval/preds_stage1.jsonl`, from 176033's slot P) and the main-run trees (`arm/main/preds_trees.jsonl`);
+   ~60–75 min of GPU 4 plus the server start; `full_eval/curve.txt` rewritten with one line per checkpoint and the
+   comparison lines.
 4. The curve's first point: the stage-1 final from the F slots (`pull_slot.sh F`, label stage1_final), asked the same
    facetm questions.
 
-The adapters stay on drc (`con1/arm/run_full_*/final`, 1.9 GB each; /storage had 46 GB free on 11-26), so they are
-also the off-Orchard copies of each link. The local parts can go after DRC_SHA_MATCH.
+The adapters stay on drc (`con1/arm/run_c2m_*/final`, 1.9 GB each; /storage had 45 GB free on 11-26), so they are
+also the off-Orchard copies of each link; slot.tar and the local parts go after the extraction / DRC_SHA_MATCH.
+Transfer checked on 11-26 with the real slot A (stage-1 step 120, 1,867,816,960 bytes): pull 1 min, upload 54 s,
+"1 files DRC_SHA_MATCH", tar = adapter/ + state.json with stage 1's fingerprint; test copies removed.

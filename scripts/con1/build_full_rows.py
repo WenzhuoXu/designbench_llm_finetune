@@ -85,13 +85,19 @@ def follow_text(fmt: str, move: str) -> str:
 
 
 def shorten(row: dict, fmt: str) -> dict:
-    """build_rows.conseq_row's row with its later questions in follow_text's wording (the first question unchanged)."""
-    if not (_ARGS and _ARGS.get("follow") == "short"):
-        return row
+    """build_rows.conseq_row's row with its later questions in follow_text's wording (the first question unchanged),
+    and with --prefix-weight, that loss weight on every answer's think-closing piece (conseq_format._span_mask's
+    prefix_weight: the empty reasoning + '\\n</think>\\n\\n'; 11-26 owner: 0, so the rows stop teaching 'close the
+    think block at once'; the answer's content and end token keep their weights)."""
     msgs = row["messages"]
-    for k, mv in zip(range(3, len(msgs), 2), row["con1"]["moves"][1:]):
-        assert msgs[k]["role"] == "user" and msgs[k]["content"] == question(fmt, mv, False)
-        msgs[k]["content"] = follow_text(fmt, mv)
+    if _ARGS and _ARGS.get("follow") == "short":
+        for k, mv in zip(range(3, len(msgs), 2), row["con1"]["moves"][1:]):
+            assert msgs[k]["role"] == "user" and msgs[k]["content"] == question(fmt, mv, False)
+            msgs[k]["content"] = follow_text(fmt, mv)
+    if _ARGS and _ARGS.get("prefix_weight") is not None:
+        for m in msgs[2::2]:
+            assert m["role"] == "assistant" and m.get("supervise_spans") is not None   # weights apply via the spans path
+            m["prefix_weight"] = float(_ARGS["prefix_weight"])
     return row
 
 
@@ -301,6 +307,8 @@ def main(argv=None):
     ap.add_argument("--forbid-problems", nargs="*", default=[], help="jsonl files of held-out problems (problem_id)")
     ap.add_argument("--tokenizer", required=True)
     ap.add_argument("--target", default="facet")
+    ap.add_argument("--prefix-weight", type=float, default=None,
+                    help="loss weight of each answer's think-closing piece (unset: conseq_format's default, 1)")
     ap.add_argument("--follow", choices=("full", "short"), default="full",
                     help="later questions of a row: the full format text (targets.question) or 'Same answer form.'")
     ap.add_argument("--q", type=int, default=12)
@@ -333,7 +341,7 @@ def main(argv=None):
     print("excluding %d (state, move) pairs of %d states; %d forbidden problems; %.0f s" % (
         n_ex, len(excl), len(forbid), time.time() - t0), flush=True)
     args = {"tokenizer": a.tokenizer, "target": a.target, "q": a.q, "max_tokens": a.max_tokens, "seed": a.seed,
-            "follow": a.follow,
+            "follow": a.follow, "prefix_weight": a.prefix_weight,
             "forbid": forbid, "check_every": a.check_every}
     c = collections.Counter()
     sid_src: dict = {}
@@ -384,7 +392,7 @@ def main(argv=None):
                 "src": {k: g("src " + k) for k in ("own", "off", "uni")},
                 "regime": {k[len("%s %s regime " % (sp, v)):]: n for k, n in c.items()
                            if k.startswith("%s %s regime " % (sp, v))}}
-    res = {"q": a.q, "max_tokens": a.max_tokens, "target": a.target, "follow": a.follow, "seed": a.seed, "train_rows": n_rows,
+    res = {"q": a.q, "max_tokens": a.max_tokens, "target": a.target, "follow": a.follow, "prefix_weight": a.prefix_weight, "seed": a.seed, "train_rows": n_rows,
            "train_sha1": sha.hexdigest(), "longest": {"tokens": longest[0], "family": longest[1]},
            "states_from_file": sid_src, "excluded_pairs": n_ex, "seconds": round(time.time() - t0, 1),
            "workers": a.workers, "families": summary,

@@ -87,18 +87,18 @@ ST="$B/main/states_native_offmenu.jsonl.gz $F/states_native_offmenu_rest.jsonl.g
 EX="$B/main/rows/train_facet.jsonl $B/main/rows/dev_facet.jsonl $B/main/rows/dev_facetm.jsonl"
 FOLLOW=${FOLLOW:-short}; CAP=${MAX_TOKENS:-22000}
 TGT=${TARGET:-facetm}; TAG=$TGT; [ "$FOLLOW" = short ] && TAG=${TGT}_short
+PW=${PREFIX_WEIGHT-0}; PWARG=; [ -n "$PW" ] && PWARG="--prefix-weight $PW" && TAG=${TAG}_pw$PW   # PREFIX_WEIGHT= : unset
 FORBID="$D/queries_v2.jsonl $G/bench_problems.jsonl"
 for Q in ${QS:-12 36}; do
-  echo "=== $(date '+%F %T') 2. full build $TGT (later questions: $FOLLOW) Q=$Q cap $CAP (workers $WORKERS)"
+  echo "=== $(date '+%F %T') 2. full build $TGT (later questions: $FOLLOW, prefix weight ${PW:-default}) Q=$Q cap $CAP (workers $WORKERS)"
   T0=$(date +%s)
   $TRPY "$R/scripts/con1/build_full_rows.py" --states $ST --exclude-rows $EX --forbid-problems $FORBID \
-    --tokenizer "$MODEL" --target "$TGT" --follow "$FOLLOW" --q "$Q" --max-tokens "$CAP" --seed 0 --workers "$WORKERS" \
+    --tokenizer "$MODEL" --target "$TGT" --follow "$FOLLOW" $PWARG --q "$Q" --max-tokens "$CAP" --seed 0 --workers "$WORKERS" \
     --out-train "$T/train_${TAG}_q$Q.jsonl" --out-dev "$T/dev_${TAG}_q$Q.jsonl" --stats "$T/stats_${TAG}_q$Q.json" --lens "$T/lens_${TAG}_q$Q.txt" \
     > "$T/build_${TAG}_q$Q.log" 2>&1
   echo "build wall $(( $(date +%s) - T0 )) s"; tail -3 "$T/build_${TAG}_q$Q.log"
   ls -la "$T/train_${TAG}_q$Q.jsonl" "$T/dev_${TAG}_q$Q.jsonl"
-  head -1 "$T/train_${TAG}_q$Q.jsonl" | $TRPY -c 'import json,sys; m=json.loads(sys.stdin.read())["messages"]
-print("first question ends:", repr(m[1]["content"][-160:])); print("second question:", repr(m[3]["content"]) if len(m) > 3 else "-")'
+  $TRPY "$R/scripts/con1/dump_weights.py" "$T/train_${TAG}_q$Q.jsonl" "$MODEL" --line 0
   for f in stats_${TAG}_q$Q.json lens_${TAG}_q$Q.txt build_${TAG}_q$Q.log; do keep "$T/$f" "$F/$f"; done
   T0=$(date +%s)
   sha1sum "$T/train_${TAG}_q$Q.jsonl" | tee "$T/sha1_${TAG}_q$Q.txt"
@@ -110,7 +110,7 @@ print("first question ends:", repr(m[1]["content"][-160:])); print("second quest
   # with another worker count and compare
   if [ "$Q" = "${REBUILD_Q:-36}" ] && [ -z "${NO_REBUILD:-}" ]; then
     $TRPY "$R/scripts/con1/build_full_rows.py" --states $ST --exclude-rows $EX --forbid-problems $FORBID \
-      --tokenizer "$MODEL" --target "$TGT" --follow "$FOLLOW" --q "$Q" --max-tokens "$CAP" --seed 0 --workers 64 \
+      --tokenizer "$MODEL" --target "$TGT" --follow "$FOLLOW" $PWARG --q "$Q" --max-tokens "$CAP" --seed 0 --workers 64 \
       --out-train "$T/train_${TAG}_q${Q}_again.jsonl" --out-dev "$T/dev_${TAG}_q${Q}_again.jsonl" --stats "$T/stats_${TAG}_q${Q}_again.json" \
       > "$T/build_${TAG}_q${Q}_again.log" 2>&1
     tail -2 "$T/build_${TAG}_q${Q}_again.log"
