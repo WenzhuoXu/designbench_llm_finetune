@@ -33,12 +33,14 @@ def opener(path):
 
 def read_states(paths, keep=None, fams=None, cap=0):
     out = collections.defaultdict(list)
+    seen = set()                                           # a state in several files (machines, off-menu copy): first wins
     for p in paths:
         try:
             for line in opener(p):
                 st = json.loads(line)
-                if st["split"] != "train" or not st["moves"]:
+                if st["split"] != "train" or not st["moves"] or st["sid"] in seen:
                     continue
+                seen.add(st["sid"])
                 if keep is not None and st["sid"] not in keep:
                     continue
                 if fams and st["variant"] not in fams:

@@ -417,6 +417,14 @@ def main(argv=None):
             if r.get("facets") is not None:                # a predictor that outputs facets directly (trees)
                 pf = dict(r["facets"])
                 pf["violated"] = set(pf.get("violated") or [])
+                if "change" not in pf:                     # size from the predicted bin's midpoint, as for the facet format
+                    pf["change"], pf["after"] = {}, dict(q["metrics0"])
+                    for k, dr in (pf.get("dir") or {}).items():
+                        if k in q["metrics0"]:
+                            b0 = float(q["metrics0"][k])
+                            v = _mid_value(b0, dr, (pf.get("bin") or {}).get(k, "same"))
+                            if v is not None:
+                                pf["change"][k], pf["after"][k] = v - b0, v
             else:
                 pf = pred_facets(r.get("text"), fmt, q)
             per[r["predictor"]].setdefault(r["sid"], collections.Counter()).update(move_counts(q, t, pf, ctx_of(q)))
