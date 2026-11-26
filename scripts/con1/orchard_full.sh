@@ -17,7 +17,8 @@
 #       "stage1 final ..."), sha1-checked; INIT=<dir> copies an adapter directory; INIT=none (tests) = a fresh LoRA;
 #  4. trains (scripts/rl/orchard_sft_rows.sh, configs/rl/con1_sft.yaml); full checkpoints every 5 steps on node /tmp;
 #  5. runs the guard every 10 min from inside the job (srun --overlap): the newest checkpoint into the older slot
-#     every ~2 h (NO_FINAL: the continuation never writes F, which holds the stage-1 final);
+#     every ~2 h (NO_FINAL: the continuation never writes a final; REUSE_SLOT: when stage 2's final holds one of A/B,
+#     the other slot is rewritten each time, so the only copy is invalid during a ~1 min write);
 #  6. at SIGUSR1 (30 min before the limit): waits for the next checkpoint, stops the trainer, FORCE-copies it into a
 #     slot, exits 0. At the end of the epoch the last checkpoint (= the final adapter) is FORCE-copied the same way;
 #     $M/DONE names the slot that holds it; successor cancelled.
@@ -188,7 +189,7 @@ newest_ckpt() {   # newest complete checkpoint step on the node, 0 if none
   echo $best
 }
 guard() {   # one guard cycle for this job's stage (FORCE=1: copy the newest checkpoint whatever the last copy's age)
-  RES="$RES" STAGES="$STAGE" FORCE="${1:-}" NO_FINAL=1 bash "$GUARD" "$JOB" 2>&1 | sed "s/^/guard: /"
+  RES="$RES" STAGES="$STAGE" FORCE="${1:-}" NO_FINAL=1 REUSE_SLOT=1 bash "$GUARD" "$JOB" 2>&1 | sed "s/^/guard: /"
   local s; s=$(copy_step); [ "$s" -gt 0 ] && touch "$M/chain/copied_step_$s"
 }
 keep_logs() {   # small files, written as new files by this node only

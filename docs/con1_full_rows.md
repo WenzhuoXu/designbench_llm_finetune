@@ -37,7 +37,7 @@ unchanged: same system/user text, question wording, answer layout, informative s
 | `scripts/con1/full_estimate.py` | step-time fit on stage 1's measured steps, epoch time per candidate set |
 | `scripts/con1/full_prep.sh`, `slurm/con1_full_prep.sbatch` | CPU prep: off-menu moves, builds at Q = 12 and 36, checks |
 | `scripts/con1/orchard_full.sh`, `slurm/con1_full.sbatch` | the continuation job (one 24 h link of a chain) |
-| `scripts/con1/guard_v3.sh` | the parent's `parent_check/guard_v3.sh` (in-place slots) with env `RES`, `STAGES`, `FORCE`, `NO_FINAL` (unset: the original) |
+| `scripts/con1/guard_v3.sh` | the parent's `parent_check/guard_v3.sh` (in-place slots) with env `RES`, `STAGES`, `FORCE`, `NO_FINAL`, `REUSE_SLOT` (unset: the original) |
 | `slurm/con1_full_test.sbatch` | 1-GPU mechanics test of the chain (fresh r8 LoRA, small rows) |
 | `llm_finetune/rl_dataxp/sft_rows.py` | `sft.lazy_rows`, `sft.check_rows`, `sft.resume_dir` (a checkpoint copied off the node: exact resume when it has the optimizer, else fresh optimizer + `sft.rewarm_steps`) (all off by default) |
 
@@ -146,9 +146,14 @@ after a sha1 read-back); `F1–F3.bin` + `F.meta` hold a stage's final adapter. 
    sft.rows_per_step=28 sft.save_every=5 sft.keep_last=1 sft.dev_every=50 sft.lazy_rows=true sft.check_rows=false
    sft.resume_dir=/tmp/con1_resume|null sft.rewarm_steps=10`: a resume restarts AdamW, re-warms the lr over 10 steps
    and takes the schedule position from state.json; dev = stage 1's 120 dev rows (dev_start = the start adapter);
-5. runs the guard (`scripts/con1/guard_v3.sh` = the parent's + env `RES`, `STAGES`, `FORCE`, `NO_FINAL`; here
-   `STAGES=full NO_FINAL=1`, so it never writes F) every 10 min from inside the job: the newest checkpoint into the
-   older slot every ~2 h; metrics and the trainer log to `$M`;
+5. runs the guard (`scripts/con1/guard_v3.sh` = the parent's 11-26 06:2x version + env `RES`, `STAGES`, `FORCE`,
+   `NO_FINAL`, `REUSE_SLOT`; here `STAGES=full NO_FINAL=1 REUSE_SLOT=1`) every 10 min from inside the job: the newest
+   checkpoint into the older slot every ~2 h; metrics and the trainer log to `$M`. The parent's guard keeps the
+   stage-1 final in F1–F3 and puts stage 2's final into the older of A/B, which rolling writes never overwrite;
+   alternating targets would then skip every write after the first, so `REUSE_SLOT=1` rewrites the one remaining
+   slot (checked on fake checkpoints, CPU job 176095: original skips step 10, REUSE_SLOT writes it into A, B's final
+   untouched, A restores to the step-10 adapter byte for byte). While stage 2's final holds a slot, the continuation
+   has one rolling slot: its only copy is invalid during each ~1 min write;
 6. at SIGUSR1 (30 min before the 24 h limit): waits for the next checkpoint (≤ 15 min), stops the trainer,
    FORCE-writes it into a slot (retrying until 5 min before the limit), exits 0; the successor resumes from it. At the
    end of the epoch the last checkpoint (its adapter = the final adapter) is FORCE-written the same way and `$M/DONE`
@@ -168,10 +173,10 @@ after a sha1 read-back); `F1–F3.bin` + `F.meta` hold a stage's final adapter. 
 
 **Shared storage.** The volume sat at 0.1–0.2 GB free on 11-26 morning; the slot method writes only into files
 already held. Two points for the parent: (a) `B.bin` is 1,867,797,544 bytes and an adapter tar 1,867,816,960, so
-a write into B extends it by 19,416 bytes (needs that much free space); (b) `guard_v3.sh` writes each stage's final
-into the same F1–F3, so stage 2's final (job 176033) will replace the stage-1 final there; the continuation's
-`INIT=F` then stops (its F.meta check) unless the stage-1 final is kept: in F (stage 2's final elsewhere), or as a
-directory given as `INIT=<dir>`. The continuation's own final ends in A or B (named in `$M/DONE`) and should be
+a write into B extends it by 19,416 bytes (needs that much free space); (b) `guard_v3.sh` wrote each stage's final
+into the same F1–F3 (fixed by the parent on 11-26: F holds only the stage-1 final; stage 2's final goes into the
+older of A/B, which leaves the continuation one rolling slot until that final is taken off Orchard and its slot
+released). The continuation's own final ends in A or B (named in `$M/DONE`) and should be
 taken off Orchard (RL session's sha1-checked `pull_ckpt.sh` / `finish_ckpt.sh`) before anything writes those slots
 again. The chain also reads `repo2m`, `full/`, `main/states_native_offmenu.jsonl.gz`, `main/rows/*_facet.jsonl`,
 `gen/out/*.gz`, `data/queries_v2.jsonl`, `gen/bench_problems.jsonl` for ~5 days; the volume is wiped every two weeks.
