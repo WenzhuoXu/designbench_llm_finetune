@@ -65,6 +65,13 @@ def _kind(m: dict) -> str:
     return "uni"
 
 
+def _regime(m: dict) -> str:
+    """The outcome's regime as the facet answer states it: refused, or applied and feasible / infeasible after."""
+    if m["verdict"] == "refused":
+        return "refused"
+    return "applied-feasible" if m.get("feasible") else "applied-infeasible"
+
+
 def _pieces(tok, st: dict, m: dict, fmt: str) -> tuple:
     """(user-turn tokens, answer tokens) of a move asked as a later question: conseq_format.encode tokenises each piece
     on its own and concatenates, so a row's length is the sum of its pieces' lengths."""
@@ -208,7 +215,7 @@ def do_state(st: dict, c: collections.Counter):
         c["%s %s rows with q=%d" % (sp, v, len(g))] += 1
         for m in g:
             c["%s %s src %s" % (sp, v, _kind(m))] += 1
-            c["%s %s verdict %s" % (sp, v, m["verdict"])] += 1
+            c["%s %s regime %s" % (sp, v, _regime(m))] += 1
     return out
 
 
@@ -349,8 +356,8 @@ def main(argv=None):
                 "dropped_too_long": g("outcomes dropped: too long even alone"), "rows": g("rows"),
                 "questions": g("questions"), "tokens": g("tokens"), "prompt_tokens": g("prompt tokens"),
                 "src": {k: g("src " + k) for k in ("own", "off", "uni")},
-                "verdict": {k[len("%s %s verdict " % (sp, v)):]: n for k, n in c.items()
-                            if k.startswith("%s %s verdict " % (sp, v))}}
+                "regime": {k[len("%s %s regime " % (sp, v)):]: n for k, n in c.items()
+                           if k.startswith("%s %s regime " % (sp, v))}}
     res = {"q": a.q, "max_tokens": a.max_tokens, "target": a.target, "seed": a.seed, "train_rows": n_rows,
            "train_sha1": sha.hexdigest(), "longest": {"tokens": longest[0], "family": longest[1]},
            "states_from_file": sid_src, "excluded_pairs": n_ex, "seconds": round(time.time() - t0, 1),

@@ -9,7 +9,7 @@
 #     full checkpoints stay on the node's /tmp;
 #  4. exports the newest checkpoint's adapter (~1.9 GB) + state.json + metrics.jsonl to $M/export every EXPORT_EVERY s,
 #     replacing the previous export only after the new one is complete;
-#  5. 45 min before the time limit (SIGUSR1): waits for the next checkpoint, stops the trainer, exports, exits 0; the
+#  5. 30 min before the time limit (SIGUSR1): waits for the next checkpoint, stops the trainer, exports, exits 0; the
 #     successor resumes from the export. At the end of the epoch: final adapter to $M/final, $M/DONE, successor cancelled.
 #
 #   sbatch -p advanced --qos=adv_4gpu_qos \
@@ -24,12 +24,12 @@ REPO="${REPO:-$C1/repo2m}"
 INIT="${INIT:?the stage-1 final adapter (e.g. $C1/main/run2/stage1/final)}"
 M="${M:?run dir on shared storage (e.g. $C1/full/run1)}"
 Q="${Q:-36}"
-PER="${PER:-24}"
+PER="${PER:-28}"
 MAX_TOKENS="${MAX_TOKENS:-24000}"
 F="${F:-$C1/full}"
 DEV="${DEV:-$C1/main/rows/dev_facet.jsonl}"      # stage 1's dev rows: the dev curve continues stage 1's
 EXPORT_EVERY="${EXPORT_EVERY:-7200}"
-CHAIN_MAX="${CHAIN_MAX:-10}"
+CHAIN_MAX="${CHAIN_MAX:-8}"
 CHAIN_I="${CHAIN_I:-1}"
 JOB="${SLURM_JOB_ID:-x}"
 NTRAIN="${NTRAIN:-4}"
@@ -194,8 +194,8 @@ while kill -0 "$TP" 2>/dev/null; do
   sleep 60
   if [ "$STOPPING" = 1 ]; then
     S0=$(newest_ckpt); W0=$(date +%s)
-    log "waiting (at most 30 min) for a checkpoint after step $S0"
-    while kill -0 "$TP" 2>/dev/null && [ "$(newest_ckpt)" -le "$S0" ] && [ $(( $(date +%s) - W0 )) -lt 1800 ]; do sleep 20; done
+    log "waiting (at most 15 min) for a checkpoint after step $S0"
+    while kill -0 "$TP" 2>/dev/null && [ "$(newest_ckpt)" -le "$S0" ] && [ $(( $(date +%s) - W0 )) -lt 900 ]; do sleep 20; done
     stop_trainer
     until export_newest; do
       [ "$(left_s)" -gt 300 ] || { log "!!! no export of the last checkpoint before the time limit"; break; }

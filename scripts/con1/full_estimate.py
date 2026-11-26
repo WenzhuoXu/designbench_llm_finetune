@@ -124,9 +124,16 @@ def fit_time(steps, lens, per, world):
         c, a3, b6 = lstsq(X, y)
         a, bq = a3 / 1e3, b6 / 1e6
         if bq < 0:                                         # a negative attention term is noise: refit without it
-            X2 = [[x[0], x[1]] for x in X]
-            c, a3 = lstsq(X2, y)
+            c, a3 = lstsq([[x[0], x[1]] for x in X], y)
             a, bq = a3 / 1e3, 0.0
+        if c < 0:                                          # a negative per-step overhead is noise too (loads that
+            a3, b6 = lstsq([[x[1], x[2]] for x in X], y)   # barely vary between steps): through the origin
+            a, bq, c = a3 / 1e3, b6 / 1e6, 0.0
+            if bq < 0:
+                (a3,) = lstsq([[x[1]] for x in X], y)
+                a, bq = a3 / 1e3, 0.0
+    (a0,) = lstsq([[max(r[0] for r in ranks) / 1e3] for ranks, _ in feats], [t for _, t in feats])
+    fit_time.tokens_only = a0 / 1e3
     pred = [c + max(a * r[0] + bq * r[1] for r in ranks) for ranks, _ in feats]
     res = [p - t for p, (_, t) in zip(pred, feats)]
     sd = math.sqrt(sum(r * r for r in res) / max(1, len(res) - 3))
@@ -152,6 +159,7 @@ def main(argv=None):
     ap.add_argument("--lens", nargs="+", required=True, help="name=lens file of build_full_rows.py")
     ap.add_argument("--per", nargs="*", default=[], help="name=rows per step[,rows per step]; default 64")
     ap.add_argument("--ranks", type=int, default=4)
+    ap.add_argument("--dev-every", type=int, default=50)
     ap.add_argument("--workers", type=int, default=48)
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
@@ -164,18 +172,15 @@ def main(argv=None):
     order = row_order(len(L1), 1.0, 42)
     mism = sum(1 for m in ms if max(L1[i] for i in order[m["step"] * 64:(m["step"] + 1) * 64]) != m.get("max_row_tokens"))
     mem = [(m["max_row_tokens"], m["peak_mem_gib"]) for m in ms if m.get("peak_mem_gib")]
-    if len(mem) >= 3:
-        mc, ma = lstsq([[1.0, x / 1e3] for x, _ in mem], [y for _, y in mem])
-    else:
-        mc, ma = float("nan"), float("nan")
     rep = {"stage1": {"rows": len(L1), "tokens_M": round(sum(L1) / 1e6, 1), "longest": max(L1),
                       "outcomes": sum(r[2] for r in s1), "steps_fitted": len(steps),
                       "steps_whose_longest_row_mismatches_the_log": mism,
+                      "tokens_only_s_per_ktok_slowest_rank": round(fit_time.tokens_only * 1e3, 4),
                       "fit_seconds_per_step": {"c": round(c, 2), "a_per_ktok": round(ta * 1e3, 4),
                                                "b_per_ktok2": round(tb * 1e6, 6), "residual_sd": round(sd, 1)},
                       "mean_step_s": round(stt.mean(t for _, t in steps), 1) if steps else None,
-                      "mem_fit_gib": {"c": round(mc, 2), "per_ktok": round(ma, 3), "points": len(mem),
-                                      "max_seen": max(mem) if mem else None}},
+                      "peak_mem": {"steps": len(mem), "max_gib": max(y for _, y in mem) if mem else None,
+                                   "longest_row_seen": max(x for x, _ in mem) if mem else None}},
            "candidates": {}}
     s1_steps, s1_sec = simulate(L1, 64, a.ranks, c, ta, tb)
     rep["stage1"]["simulated_epoch_h"] = round(s1_sec / 3600, 1)
@@ -209,14 +214,20 @@ def main(argv=None):
                                    "p95": Ls[int(0.95 * (len(Ls) - 1))], "max": Ls[-1]},
                 "prompt_tokens_mean": round(stt.mean(P)), "questions_per_row_mean": round(stt.mean(Q), 2),
                 "tokens_per_outcome": round(sum(L) / max(1, sum(Q)), 1),
-                "predicted_peak_gib_longest": round(mc + ma * Ls[-1] / 1e3, 1) if mem else None,
+                # memory grows with the longest row of a rank's share: bounded by stage 1's peak over the steps
+                # whose longest row is at least this set's longest
+                "peak_gib_bound": max((y for x, y in mem if x >= Ls[-1]), default=None),
                 "families": fam, "runs": {}}
         for pr in per.get(name, [64]):
             n_steps, sec = simulate(L, pr, a.ranks, c, ta, tb)
+            _, sec0 = simulate(L, pr, a.ranks, 0.0, fit_time.tokens_only, 0.0)
+            dev_h = (n_steps // a.dev_every) * (rep["stage1"]["dev_pass_s"] or 0) / 3600
             cand["runs"]["rows_per_step=%d" % pr] = {
                 "steps": n_steps, "outcomes_per_step": round(sum(Q) / n_steps), "hours": round(sec / 3600, 1),
+                "hours_tokens_only_model": round(sec0 / 3600, 1), "dev_passes_h": round(dev_h, 1),
                 "days": round(sec / 86400, 2), "gpu_hours": round(sec * a.ranks / 3600),
-                "outcomes_per_gpu_second": round(sum(Q) / (sec * a.ranks), 3)}
+                "outcomes_per_gpu_second": round(sum(Q) / (sec * a.ranks), 3),
+                "outcomes_per_gpu_second_tokens_only_model": round(sum(Q) / (sec0 * a.ranks), 3)}
         rep["candidates"][name] = cand
     with open(a.out + ".tmp", "w") as fo:
         json.dump(rep, fo, indent=1)

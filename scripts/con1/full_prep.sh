@@ -65,20 +65,23 @@ EOF
   else
     echo "ABORT: add_offmenu did not finish"; exit 3
   fi
-  "$SIMPY" - "$F/states_native_offmenu_rest.jsonl.gz" <<'EOF'
+fi
+
+echo "off-menu moves added (regime as the facet answer states it):"
+"$SIMPY" - "$F/states_native_offmenu_rest.jsonl.gz" <<'EOF'
 import collections, gzip, json, sys
 c = collections.Counter()
 for line in gzip.open(sys.argv[1], "rt", encoding="utf-8"):
-    st = json.loads(line)
-    om = [m for m in st["moves"] if "offmenu" in m["src"]]
-    c[(st["variant"], st["split"], "states")] += 1
-    c[(st["variant"], st["split"], "offmenu moves")] += len(om)
-    for m in om:
-        c[(st["variant"], st["split"], "offmenu " + m["verdict"])] += 1
+  st = json.loads(line)
+  om = [m for m in st["moves"] if "offmenu" in m["src"]]
+  c[(st["variant"], st["split"], "states")] += 1
+  c[(st["variant"], st["split"], "offmenu moves")] += len(om)
+  for m in om:
+      reg = "refused" if m["verdict"] == "refused" else ("applied-feasible" if m.get("feasible") else "applied-infeasible")
+      c[(st["variant"], st["split"], "offmenu " + reg)] += 1
 for k in sorted(c):
-    print("  %-10s %-5s %-22s %d" % (k + (c[k],)))
+  print("  %-10s %-5s %-22s %d" % (k + (c[k],)))
 EOF
-fi
 
 ST="$B/main/states_native_offmenu.jsonl.gz $F/states_native_offmenu_rest.jsonl.gz $G/out/states_native_orch.jsonl.gz $G/out/states_scripted.jsonl.gz"
 EX="$B/main/rows/train_facet.jsonl $B/main/rows/dev_facet.jsonl"
