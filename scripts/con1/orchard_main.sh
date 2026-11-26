@@ -21,11 +21,19 @@ TRAIN_PY=$B/rl/envs/train/bin/python
 MODEL_PATH=$B/rl/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
 C=$B/rl/cache
 Q=$B/con1/data/queries_v2.jsonl
-mkdir -p "$M/logs" "$TMPRUN"
+mkdir -p "$M/logs" "$TMPRUN/logs"
+# /project/community is a shared volume that runs full for minutes at a time: everything a long phase writes goes to
+# the node's /tmp, and keep() copies it to $M afterwards, retrying for up to an hour
+keep() {   # src dst
+  local i; for i in $(seq 1 120); do cp -r "$1" "$2" 2>/dev/null && return 0; sleep 30; done
+  echo "!!! could not copy $1 to $2"; return 1
+}
+R1="$TMPRUN/train_stage1.jsonl"
+D1="$TMPRUN/dev_stage1.jsonl"
 echo "=== $(date '+%F %T %Z') host=$(hostname) job=${SLURM_JOB_ID:-none} fmt=$FMT per_family=$PER_FAMILY"
 # rows: the first PER_FAMILY rows of each family (the prep rows are already in a seeded random order)
-if [ ! -s "$M/train_stage1.jsonl" ]; then
-  "$TRAIN_PY" - "$ROWS_SRC/train_$FMT.jsonl" "$M/train_stage1.jsonl" "$PER_FAMILY" <<'EOF'
+if [ ! -s "$R1" ]; then
+  "$TRAIN_PY" - "$ROWS_SRC/train_$FMT.jsonl" "$R1" "$PER_FAMILY" <<'EOF'
 import collections, json, sys
 src, dst, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
 c = collections.Counter()
@@ -40,7 +48,7 @@ os.replace(dst + ".tmp", dst)
 print("stage-1 rows", sum(c.values()), dict(c))
 EOF
 fi
-cp -n "$ROWS_SRC/dev_$FMT.jsonl" "$M/dev_stage1.jsonl"
+cp -n "$ROWS_SRC/dev_$FMT.jsonl" "$D1"
 IFS=, read -r -a DEVS <<< "${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
 NG=${#DEVS[@]}
 
@@ -50,10 +58,11 @@ train() {   # name rows dev init
   CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${DEVS[*]}") NTRAIN=$NG REPO="$REPO" RUN_DIR="$TMPRUN/$name" \
     CONFIG=configs/rl/con1_sft.yaml ROWS="$rows" DEV="$dev" \
     OVERRIDES="sft.save_every=10 sft.keep_last=1 sft.dev_every=20 sft.keep_adapter_every=100000 policy.init_adapter=$init" \
-    bash "$REPO/scripts/rl/orchard_sft_rows.sh" > "$M/logs/train_$name.log" 2>&1
-  [ -e "$TMPRUN/$name/final/adapter_config.json" ] || { echo "ABORT: $name has no final adapter"; tail -30 "$M/logs/train_$name.log"; exit 3; }
+    bash "$REPO/scripts/rl/orchard_sft_rows.sh" > "$TMPRUN/logs/train_$name.log" 2>&1
+  keep "$TMPRUN/logs/train_$name.log" "$M/logs/"
+  [ -e "$TMPRUN/$name/final/adapter_config.json" ] || { echo "ABORT: $name has no final adapter"; tail -30 "$TMPRUN/logs/train_$name.log"; exit 3; }
   FINAL=$TMPRUN/$name/final                      # what the rest of the job uses; the shared copy is best effort
-  cp "$TMPRUN/$name/metrics.jsonl" "$M/${name}_metrics.jsonl" 2>/dev/null
+  keep "$TMPRUN/$name/metrics.jsonl" "$M/${name}_metrics.jsonl"
   if [ "$(df -BG --output=avail "$B" | tail -1 | tr -dc 0-9)" -gt 3 ]; then
     mkdir -p "$M/$name/final" && cp -r "$TMPRUN/$name/final/." "$M/$name/final/" && echo "$name adapter kept in $M/$name/final"       || { rm -rf "$M/$name/final"; echo "!!! $name adapter NOT kept (copy failed)"; }
   else
@@ -86,7 +95,7 @@ for s in ss: print(s.getsockname()[1])' "$NG")
       setsid "$VENV/bin/vllm" serve "$MODEL_PATH" --served-model-name base --host 127.0.0.1 --port "${PORTS[k]}" \
       --dtype bfloat16 --max-model-len 65536 --gpu-memory-utilization 0.95 --max-num-seqs 64 --enable-prefix-caching \
       --limit-mm-per-prompt '{"image":0,"video":0}' --enable-lora --max-lora-rank 64 --max-loras 1 \
-      --lora-modules "$lab=$ad" > "$M/logs/vllm_${lab}_$k.log" 2>&1 &
+      --lora-modules "$lab=$ad" > "$TMPRUN/logs/vllm_${lab}_$k.log" 2>&1 &
     SP[k]=$!
     URLS+=("http://127.0.0.1:${PORTS[k]}/v1")
   done
@@ -94,7 +103,7 @@ for s in ss: print(s.getsockname()[1])' "$NG")
   while :; do
     UP=0
     for k in $(seq 0 $((NG-1))); do
-      kill -0 "${SP[k]}" 2>/dev/null || { echo "ABORT: vLLM server $k exited"; tail -30 "$M/logs/vllm_${lab}_$k.log"; exit 7; }
+      kill -0 "${SP[k]}" 2>/dev/null || { echo "ABORT: vLLM server $k exited"; tail -30 "$TMPRUN/logs/vllm_${lab}_$k.log"; exit 7; }
       curl -sf "${URLS[k]}/models" >/dev/null 2>&1 && UP=$((UP+1))
     done
     [ "$UP" -eq "$NG" ] && break
@@ -102,13 +111,15 @@ for s in ss: print(s.getsockname()[1])' "$NG")
     sleep 10
   done
   ( cd "$REPO" && PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/skill_client.py --queries "$Q" --tokenizer "$MODEL_PATH" \
-      --base-url "${URLS[@]}" --model "$lab" --label "$lab" --target "$FMT" --out "$out" --max-tokens 4096 \
-      --workers 128 --passes $passes --groups heldout_problem >> "$M/logs/client_$lab.log" 2>&1 )
+      --base-url "${URLS[@]}" --model "$lab" --label "$lab" --target "$FMT" --out "$TMPRUN/$(basename "$out")" --max-tokens 4096 \
+      --workers 128 --passes $passes --groups heldout_problem >> "$TMPRUN/logs/client_$lab.log" 2>&1 )
   stop_servers
+  keep "$TMPRUN/$(basename "$out")" "$out"
+  for f in "$TMPRUN"/logs/client_$lab.log "$TMPRUN"/logs/vllm_${lab}_*.log; do keep "$f" "$M/logs/"; done
   echo "=== $(date '+%F %T') $lab answered ($passes)"
 }
 
-train stage1 "$M/train_stage1.jsonl" "$M/dev_stage1.jsonl" "$PREF1"
+train stage1 "$R1" "$D1" "$PREF1"
 S1=$FINAL
 ask stage1 "$S1" "zero seq" "$M/preds_stage1.jsonl"
 sbatch --export=ALL,STAGE=stage1,M="$M" "$REPO/slurm/con1_main_score.sbatch" || echo "!!! stage-1 scoring not submitted"

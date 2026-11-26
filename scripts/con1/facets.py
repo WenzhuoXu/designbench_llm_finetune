@@ -405,11 +405,19 @@ def main(argv=None):
             cs.update(move_counts(q, truth_facets(q, m), nochange_facets(q), ctx_of(q)))
         per["nochange"][q["sid"]] = cs
     formats = {}
+    seen = set()
     for p in a.preds:
         for line in open(p, encoding="utf-8"):
-            r = json.loads(line)
-            if r.get("pass") != a.pass_ or r["sid"] not in qs:
+            try:
+                r = json.loads(line)
+            except ValueError:                             # a line torn by a failed write (the client rewrites it)
                 continue
+            if r.get("pass") != a.pass_ or r["sid"] not in qs or str(r.get("finish", "")).startswith("error"):
+                continue
+            key = (r["predictor"], r["sid"], r["pass"], r["qi"])
+            if key in seen:                                # a resumed client can repeat a question: first answer counts
+                continue
+            seen.add(key)
             q = qs[r["sid"]]
             fmt = r.get("target", "verbatim")
             formats[r["predictor"]] = fmt

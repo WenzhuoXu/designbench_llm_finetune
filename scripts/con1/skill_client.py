@@ -111,7 +111,7 @@ def main(argv=None):
     label = a.label or a.model
     t0 = time.time()
     n = 0
-    with open(a.out, "a", encoding="utf-8") as fo, ThreadPoolExecutor(a.workers) as ex:
+    with open(a.out, "ab", buffering=0) as fo, ThreadPoolExecutor(a.workers) as ex:   # unbuffered: nothing stays queued
         def one(job):
             q, p, j = job
             ids = prompt_ids(tok, messages_for(q, j, p == "seq", a.target))
@@ -121,11 +121,26 @@ def main(argv=None):
                     "move": q["moves"][j]["move"], "text": answer_of(gen), "raw_tail": (gen or "")[-300:],
                     "finish": fin, "n_tokens": ntok, "prompt_tokens": len(ids)}
         futs = [ex.submit(one, jb) for jb in jobs]
+        torn = False
         for fu in as_completed(futs):
             r = fu.result()
-            with LOCK:
-                fo.write(json.dumps(r, ensure_ascii=False) + "\n")
-                fo.flush()
+            line = json.dumps(r, ensure_ascii=False) + "\n"
+            # /project/community is a shared volume that runs full for minutes at a time (EDQUOT / ENOSPC): retry
+            # for up to an hour; after a failed write start on a fresh line (a torn line is skipped on resume)
+            for attempt in range(120):
+                try:
+                    with LOCK:
+                        data = (("\n" if torn else "") + line).encode("utf-8")
+                        if fo.write(data) != len(data):
+                            raise OSError("short write")
+                    torn = False
+                    break
+                except OSError as e:
+                    torn = True
+                    print("write failed (%s), retry %d" % (e, attempt + 1), file=sys.stderr, flush=True)
+                    time.sleep(30)
+            else:
+                raise SystemExit("could not write %s for an hour" % a.out)
             n += 1
             if n % 200 == 0:
                 print("%d/%d in %.0f s" % (n, len(jobs), time.time() - t0), flush=True)

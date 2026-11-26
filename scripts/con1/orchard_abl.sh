@@ -94,8 +94,9 @@ for arm in "${ARR[@]}"; do
     --base-url "${URLS[@]}" --model "$lab" --label "$lab" --target "$fmt" --out "$OUT/preds_$lab.jsonl" \
     --max-tokens 2048 --workers 96 --passes zero --groups heldout_problem --variants $VARIANTS \
     >> "$OUT/logs/client_$lab.log" 2>&1 &
+  CPIDS+=($!)
 done
-wait
+for p in "${CPIDS[@]}"; do wait "$p"; done     # the clients only: a bare wait would also wait on the vLLM servers
 # keep the arms' final adapters (adapter files only, ~1.9 GB each; the optimizer state stays in /tmp), one at a time
 # while /project/community has more than KEEP_IF_FREE_GB free
 for arm in "${ARR[@]}"; do
