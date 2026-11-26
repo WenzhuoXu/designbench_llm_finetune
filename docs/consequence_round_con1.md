@@ -266,7 +266,32 @@ scorer replacing V / D / PO as the primary skill measures.
 
 ## 10. Results
 
-(none yet)
+**Round 1 (format ablation, 11-25, job 175961, scored 175962).** pref1 + 47 steps of consequence rows per arm (round 1's
+5 families), zero-shot, held-out problems (2,247 questions per arm), all families (primary); ± bootstrap se over states.
+
+| predictor | select | regime_phys | cpl_dir_BA | cpl_size | V_bal_phys |
+|---|---|---|---|---|---|
+| F facet | **0.554** ±0.008 | 0.601 ±0.014 | **0.668** ±0.014 | **0.393** ±0.008 | 0.660 ±0.012 |
+| D delta | 0.515 ±0.007 | 0.573 ±0.013 | 0.674 ±0.012 | 0.300 ±0.007 | 0.682 ±0.012 |
+| M masked | 0.513 ±0.009 | **0.673** ±0.019 | 0.566 ±0.014 | 0.300 ±0.006 | 0.622 ±0.012 |
+| S absolute | 0.492 ±0.008 | 0.551 ±0.012 | 0.608 ±0.017 | 0.318 ±0.006 | 0.697 ±0.013 |
+| trees | 0.489 ±0.009 | 0.596 ±0.013 | 0.600 ±0.017 | 0.270 ±0.009 | 0.693 ±0.013 |
+| no change | 0.272 | 0.483 | 0.333 | 0 | 0.467 |
+
+Rule (section 11): facet wins (F − D +0.039 ±0.005, beyond 1 se). F − trees: select +0.065 ±0.008, cpl_dir_BA +0.068
+±0.010, regime_phys +0.005 ±0.014, V_bal_phys −0.033 ±0.016. Without photonics the order is the same (F 0.598).
+Weak spot: regime (F 0.601 vs M 0.673; circuit2 feasibility recall F 0.325 vs M 0.875). Native families are at or
+below tree level on coupled direction (F vs trees: engibench 0.712 / 0.731, grid2op 0.580 / 0.569, photonics 0.371 /
+0.423); the scripted ones are well above (circuit2 0.952 / 0.681, frame3d2 0.722 / 0.597). Round 1 had ~15 native
+episodes; stage 1 has 5,902 native states.
+Ops: the shared /project/community volume ran full (EDQUOT) and killed one client; fixed (section 11, ops notes in git log).
+
+**Next variant, facetm (11-25, from the round-1 numbers above, not a guess about the cause):** facet plus a MARGINS AFTER
+block before FEASIBLE: per constrained metric, the side of its limit (satisfied / violated / at limit) and the binned
+size of its distance to the limit relative to the limit, no digits. M writes each constraint's value against its limit
+and has the better regime; whether margins carry that over to facet is untested (guess). Rows built on the stage-1
+states (main/rows/train_facetm.jsonl, same states and order as facet). Trained as the next stage-1 variant if stage 1's
+regime_phys stays below M's 0.673.
 
 ## 11. Addendum 2026-11-25, 14:45 — the owner's consolidated goal (before any con1 result)
 
