@@ -1,0 +1,33 @@
+# con1 one-GPU arm on drc GPU 4 (RTX PRO 6000, 96 GB; host 93 GB RAM): con1_sft.yaml's recipe at round 1's scale
+# (16 rows per step, one epoch, no dev), from pref1 (same adapter as Orchard's, sha1 0131a8ba). Activations stay on the
+# GPU (offload_min_tokens null): the default pins checkpointed layer inputs of rows >= 8,192 tokens in host memory,
+# ~13 GB for a 20k-token row, which ran the host out of RAM on 11-25 (SIGKILL after the model had loaded).
+seed: 0
+
+model:
+  path: /storage/wxu/huggingface/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  gradient_checkpointing: true
+
+policy:
+  init_adapter: /storage/wxu/rl_open/inputs/pref1_final
+  require_init_adapter: true
+
+grpo:
+  offload_min_tokens: null
+
+sft:
+  epochs: 1.0
+  rows_per_step: 16
+  lr: 1.0e-4
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  lora_dropout: 0.0
+  temperature: 1.0
+  seed: 42
+  save_every: 5
+  keep_last: 1
+  dev_every: 0
+  keep_adapter_every: 100000
