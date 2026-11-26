@@ -211,10 +211,9 @@ while kill -0 "$TP" 2>/dev/null; do
   fi
 done
 wait "$TP"; rc=$?
-cp "$T/logs/train.log" "$M/logs/train_$JOB.log" 2>/dev/null
-grep "DX_SFT_ROWS_DONE\|trainer rc" "$T/logs/train.log" | tail -2
 
-# ---- 5. end
+# ---- 5. end (the final adapter is copied before anything else: a requeued preempt test job, 176044, was ended by
+# Slurm seconds after its trainer exited, before its log copy and end steps; the export stays the fallback)
 if [ "$rc" = 0 ] && [ -e "$RUN/final/adapter_config.json" ]; then
   for i in $(seq 1 10000); do
     rm -rf "$M/final.new"
@@ -222,14 +221,16 @@ if [ "$rc" = 0 ] && [ -e "$RUN/final/adapter_config.json" ]; then
     if [ "$i" -gt 60 ] && [ "$(free_mb)" -lt $(( $(du -sm "$RUN/final" | cut -f1) + 600 )) ] && [ -e "$EXPORT" ]; then
       log "shared volume short for 30 min: the export is dropped to make room for the final adapter"; rm -rf "$EXPORT"
     fi
-    mkdir -p "$M/final.new" && cp -r "$RUN/final/." "$M/final.new/"       && cmp -s "$RUN/final/adapter_model.safetensors" "$M/final.new/adapter_model.safetensors"       && mv "$M/final.new" "$M/final" && break
+    mkdir -p "$M/final.new" && cp -r "$RUN/final/." "$M/final.new/"       && cmp -s "$RUN/final/adapter_model.safetensors" "$M/final.new/adapter_model.safetensors"       && rm -rf "$M/final" && mv "$M/final.new" "$M/final" && break
     rm -rf "$M/final.new"; log "!!! final adapter copy failed (shared free $(free_mb) MB), retrying"
     [ "$(left_s)" -gt 300 ] || break
     sleep 30
   done
   [ -e "$M/final/adapter_config.json" ] || { fail "final adapter not copied; it is on $(hostname):$RUN/final"; exit 5; }
-  cp "$RUN/metrics.jsonl" "$M/metrics.jsonl" 2>/dev/null
   date '+%F %T' > "$M/DONE"
+  cp "$RUN/metrics.jsonl" "$M/metrics.jsonl" 2>/dev/null
+  cp "$T/logs/train.log" "$M/logs/train_$JOB.log" 2>/dev/null
+  grep "DX_SFT_ROWS_DONE\|trainer rc" "$T/logs/train.log" | tail -2
   [ -n "$NEXT" ] && scancel "$NEXT" && log "successor $NEXT cancelled"
   log "CON1_FULL_DONE: final adapter $M/final"
   exit 0

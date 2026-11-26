@@ -141,7 +141,13 @@ fit is right and the queue gaps add up)**, about 4–5 days on 4 H100s if the li
 lazy rows and the skipped row check, periodic export (in place, 1.0 GB free), USR1 → wait for checkpoint 16 → stop →
 export → exit, successor started at once, resumed at step 17 with the export's adapter (checksum checked), lr
 3.13e-5 → 6.19e-5 → 9.18e-5 (re-warm over 2 steps, then the scheduled cosine), the 16 earlier metric lines restored,
-the dev curve continuing (0.184 → 0.180 → 0.171), DONE, final adapter copied, successor cancelled.
+the dev curve continuing (0.184 → 0.180 → 0.171), DONE, final adapter copied, successor cancelled. The second link
+was then preempted (preempt queue; `advanced` is not preempted): it marked a failure at export step 30, Slurm
+requeued it, and it resumed from the step-30 export at step 31 (lr 2.5e-5 → 4.9e-5 → 7.2e-5, re-warm) and trained to
+step 84 (exports at 44, 62, 80). That requeued job was then ended by Slurm (COMPLETED 0:0) seconds after its trainer
+exited, before the end steps ran (its log shows slurmstepd cgroup errors on the requeued job from its start): no final
+adapter, no DONE; the step-80 export remained, so resubmitting would finish from it. Links on `advanced` are not
+requeued, and the first link (176038) ran its end steps; the end section now copies the final adapter first.
 
 **Shared storage (the one hard limit).** `/project/community` had 0.95–1.1 GB free during this work. An export is
 1.87 GB:
