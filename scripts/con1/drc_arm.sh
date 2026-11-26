@@ -19,9 +19,15 @@ export VLLM_CACHE_ROOT=$C/cache/vllm CUDA_CACHE_PATH=$C/cache/nv VLLM_NO_USAGE_S
 mkdir -p "$RUN/logs" "$TMPDIR"
 cd $REPO
 echo "=== $(date '+%F %T') host=$(hostname) arm=$LAB fmt=$FMT rows=$ROWS gpu=$CUDA_VISIBLE_DEVICES"
-# only the 96 GB card, and only when nobody else holds it
-read -r TOT USED <<< "$(nvidia-smi -i "$CUDA_VISIBLE_DEVICES" --query-gpu=memory.total,memory.used --format=csv,noheader,nounits | tr -d ',')"
-[ "${TOT:-0}" -gt 90000 ] && [ "${USED:-99999}" -lt 2000 ] || { echo "ABORT: GPU $CUDA_VISIBLE_DEVICES has ${TOT} MiB, ${USED} MiB in use"; exit 4; }
+# only the 96 GB card; wait (WAIT=1) until nothing but its small resident service (legal_helper, ~3 GB) holds it
+gpu_mem() { nvidia-smi -i "$CUDA_VISIBLE_DEVICES" --query-gpu=memory.total,memory.used --format=csv,noheader,nounits | tr -d ','; }
+read -r TOT USED <<< "$(gpu_mem)"
+[ "${TOT:-0}" -gt 90000 ] || { echo "ABORT: GPU $CUDA_VISIBLE_DEVICES has ${TOT} MiB"; exit 4; }
+while [ "${USED:-99999}" -ge 5000 ]; do
+  [ "${WAIT:-0}" = 1 ] || { echo "ABORT: GPU $CUDA_VISIBLE_DEVICES has ${USED} MiB in use"; exit 4; }
+  sleep 120; read -r TOT USED <<< "$(gpu_mem)"
+done
+echo "=== $(date '+%F %T') GPU $CUDA_VISIBLE_DEVICES free enough (${USED} MiB in use)"
 free -g | head -2
 if [ ! -e "$RUN/final/adapter_config.json" ]; then
   $PY -m torch.distributed.run --standalone --nproc_per_node 1 -m llm_finetune.rl_dataxp.sft_rows \
