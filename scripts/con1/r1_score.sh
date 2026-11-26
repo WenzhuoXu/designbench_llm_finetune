@@ -18,7 +18,7 @@ FAM="engibench grid2op photonics circuit2 frame3d2"
 echo "=== $(date) observation estimates"
 [ -s $O/obs_test.jsonl ] || $PY $R/obs_features.py --code $CODE --harness $HV --problems $G/bench_problems.jsonl --states $Q \
   --out $O/obs_test.jsonl --workers 30 | tail -2
-[ -s $O/obs_train.done ] || { $PY $R/obs_features.py --code $CODE --harness $HV --problems $G/train_p2_datav4.jsonl --states $ST \
+[ -e $O/obs_train.done ] || { $PY $R/obs_features.py --code $CODE --harness $HV --problems $G/train_p2_datav4.jsonl --states $ST \
   --rows $B/abl1/rows/rows_masked.jsonl --out $O/obs_train.jsonl --workers 30 | tail -2 && touch $O/obs_train.done; }
 echo "=== $(date) trees"
 [ -s $O/preds_trees.jsonl ] || $PY $R/trees_facets.py --train $ST --rows $B/abl1/rows/rows_masked.jsonl --queries $Q \

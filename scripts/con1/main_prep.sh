@@ -15,7 +15,7 @@ export PYTHONPATH=/project/community/wxu2/con1/pylib OMP_NUM_THREADS=1 OPENBLAS_
 mkdir -p $O/rows
 ST="$G/out/states_native_orch.jsonl.gz $D/states_native.jsonl.gz $D/states_native_drc_snap.jsonl.gz $G/out/states_scripted.jsonl.gz"
 echo "=== $(date) selection"
-[ -s $O/sel.done ] || { $PY $R/build_rows.py --states $ST --out-train $O/sel_rows.jsonl --out-dev $O/sel_dev.jsonl \
+[ -e $O/sel.done ] || { $PY $R/build_rows.py --states $ST --out-train $O/sel_rows.jsonl --out-dev $O/sel_dev.jsonl \
   --per-family 2000 --target masked --max-tokens 24000 | grep "rows\|available\|DONE" && \
   $PY -c "
 import json
@@ -25,7 +25,7 @@ for p in ['$O/sel_rows.jsonl','$O/sel_dev.jsonl']:
 open('$O/sel_native_sids.txt','w').write('\n'.join(sorted(s))+'\n'); print('native selected', len(s))
 " && touch $O/sel.done; }
 echo "=== $(date) off-menu moves for the selected native states"
-[ -s $O/offmenu.done ] || { $PY $R/add_offmenu.py --code $CODE --harness $HV --problems $G/train_p2_datav4.jsonl --states $ST \
+[ -e $O/offmenu.done ] || { $PY $R/add_offmenu.py --code $CODE --harness $HV --problems $G/train_p2_datav4.jsonl --states $ST \
   --sids $O/sel_native_sids.txt --out $O/states_native_offmenu.jsonl.gz --workers 46 | tail -2 && touch $O/offmenu.done; }
 for F in masked facet delta absolute; do
   echo "=== $(date) rows $F"
@@ -39,7 +39,7 @@ echo "=== $(date) trees on the main-run states"
 Q=$D/queries_v2.jsonl
 [ -s $O/obs_test.jsonl ] || $PY $R/obs_features.py --code $CODE --harness $HV --problems $G/bench_problems.jsonl --states $Q \
   --out $O/obs_test.jsonl --workers 46 | tail -1
-[ -s $O/obs_train.done ] || { $PY $R/obs_features.py --code $CODE --harness $HV --problems $G/train_p2_datav4.jsonl \
+[ -e $O/obs_train.done ] || { $PY $R/obs_features.py --code $CODE --harness $HV --problems $G/train_p2_datav4.jsonl \
   --states $O/states_native_offmenu.jsonl.gz $ST --rows $O/rows/train_masked.jsonl --out $O/obs_train.jsonl --workers 46 \
   | tail -1 && touch $O/obs_train.done; }
 [ -s $O/preds_trees.jsonl ] || $PY $R/trees_facets.py --train $O/states_native_offmenu.jsonl.gz $ST --rows $O/rows/train_masked.jsonl \
