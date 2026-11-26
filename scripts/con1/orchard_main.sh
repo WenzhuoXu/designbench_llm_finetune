@@ -111,6 +111,8 @@ for s in ss: print(s.getsockname()[1])' "$NG")
 train stage1 "$M/train_stage1.jsonl" "$M/dev_stage1.jsonl" "$PREF1"
 S1=$FINAL
 ask stage1 "$S1" "zero seq" "$M/preds_stage1.jsonl"
+sbatch --export=ALL,STAGE=stage1,M="$M" "$REPO/slurm/con1_main_score.sbatch" || echo "!!! stage-1 scoring not submitted"
 train stage2 "$B/con1/stage2/policy_train.jsonl" "$B/con1/stage2/policy_dev.jsonl" "$S1"
 ask stage2 "$FINAL" "zero" "$M/preds_stage2.jsonl"
+sbatch --export=ALL,STAGE=stage2,M="$M" "$REPO/slurm/con1_main_score.sbatch" || echo "!!! stage-2 scoring not submitted"
 echo "CON1_MAIN_DONE $(date '+%F %T %Z')"
