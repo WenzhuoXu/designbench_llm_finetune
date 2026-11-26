@@ -28,4 +28,6 @@ P=""
 for a in M F D S; do [ -s $B/abl1/out/preds_$a.jsonl ] && P="$P $B/abl1/out/preds_$a.jsonl"; done
 $PY $R/facets.py --queries $Q --preds $P $O/preds_trees.jsonl --groups heldout_problem --variants $FAM \
   --problems $G/bench_problems.jsonl --code $CODE --harness $HV --boot 1000 --out $O/facets_r1.txt --json $O/facets_r1.json
+echo "=== $(date) format rule"
+$PY $R/select_format.py $O/facets_r1.json $B/abl1/rows $B/main/FORMAT
 echo "R1_SCORE_DONE $(date)"

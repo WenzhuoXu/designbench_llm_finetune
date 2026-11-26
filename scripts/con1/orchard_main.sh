@@ -9,7 +9,8 @@
 set -uo pipefail
 B=/project/community/wxu2
 REPO="${REPO:-$B/con1/repo}"
-FMT="${FMT:?answer format}"
+FMT="${FMT:-$(cat $B/con1/main/FORMAT 2>/dev/null)}"    # round 1's winner (select_format.py) unless given
+[ -n "$FMT" ] || { echo "ABORT: no answer format (FMT or $B/con1/main/FORMAT)"; exit 2; }
 PER_FAMILY="${PER_FAMILY:-1000}"
 M="${M:?run dir on /project/community}"
 ROWS_SRC="${ROWS_SRC:-$B/con1/main/rows}"
