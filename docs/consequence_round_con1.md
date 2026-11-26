@@ -316,6 +316,34 @@ Held-out problems, 5 families, zero-shot:
 - Scoring ran on drc without the harness, because drc has no engibench env. The harness only serves the Φ verdict, now out of the rules. F, M and the trees reproduce Orchard's round-1 numbers exactly.
 - Training used flash-linear-attention 0.5.2 (checked against the reference kernel) and long-row activation offload to pageable host memory (`DATAXP_OFFLOAD_PAGEABLE=1`).
 
+**facetm k-shot pass (11-26).** The same adapter, the same held-out questions at positions ≥ 1. In the sequential pass the model has seen the true facetm answers for the earlier moves at the state.
+- Two controls predict the next outcome by copying what was shown, with no physics, at bin resolution like the model's context:
+  - copy_last: the last shown outcome;
+  - copy_mode: per facet, the most common shown value.
+  facets.py `--kshot-baselines`, `--min-qi 1`.
+
+| predictor | select | regime_phys | cpl_dir_BA | cpl_size |
+|---|---|---|---|---|
+| Fm sequential | **0.701** ±0.009 | **0.794** ±0.013 | **0.783** ±0.016 | **0.525** ±0.009 |
+| Fm zero-shot, same questions | 0.580 ±0.008 | 0.679 ±0.016 | 0.684 ±0.013 | 0.376 ±0.008 |
+| copy_last | 0.472 | 0.627 | 0.565 | 0.225 |
+| copy_mode | 0.477 | 0.621 | 0.567 | 0.245 |
+
+- Fm sequential − copy_last: select +0.229 ±0.008, regime_phys +0.168 ±0.016, cpl_dir_BA +0.218 ±0.008. The k-shot gain is not explained by copying the shown outcomes.
+- Per family, regime / cpl_dir_BA / cpl_size as zero → sequential (best copy):
+
+| family | regime | cpl_dir_BA | cpl_size |
+|---|---|---|---|
+| circuit2 | .838 → .906 (.579) | .946 → .964 (.486) | .771 → .836 (.114) |
+| engibench | .698 → .778 (.593) | .743 → .772 (.566) | .367 → .439 (.152) |
+| frame3d2 | .683 → .709 (.583) | .727 → .785 (.568) | .286 → .381 (.149) |
+| grid2op | .654 → .748 (.685) | .658 → .806 (.771) | .241 → .592 (.527) |
+| photonics | .522 → .831 (.728) | .344 → .589 (.538) | .216 → .377 (.281) |
+
+- In grid2op and photonics, outcomes repeat within a state: copying alone already beats zero-shot there. Most of their sequential gain is what copying gives, and the model adds 0.04–0.10 on top.
+- In circuit2, frame3d2 and engibench, copying is far below the model, and the sequential gain comes on top of zero-shot physics.
+- Caveat: only these two simple controls were run. A smarter copier, for example one keyed on the same element, is not controlled (not measured).
+
 ## 11. Addendum 2026-11-25, 14:45 — the owner's consolidated goal (before any con1 result)
 
 Relayed by the parent session. This merges and supersedes the earlier owner messages; where it differs from
