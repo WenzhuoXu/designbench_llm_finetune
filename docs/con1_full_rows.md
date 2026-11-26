@@ -37,7 +37,7 @@ unchanged: same system/user text, question wording, answer layout, informative s
 | `scripts/con1/full_estimate.py` | step-time fit on stage 1's measured steps, epoch time per candidate set |
 | `scripts/con1/full_prep.sh`, `slurm/con1_full_prep.sbatch` | CPU prep: off-menu moves, builds at Q = 12 and 36, checks |
 | `scripts/con1/orchard_full.sh`, `slurm/con1_full.sbatch` | the continuation job (one 24 h link of a chain) |
-| `scripts/con1/guard_cycle.sh` | the parent's `parent_check/guard_cycle.sh` with env `RES`, `STAGES`, `FORCE` (defaults: the original's behaviour) |
+| `scripts/con1/guard_cycle.sh` | the parent's `parent_check/guard_cycle.sh` (11-26 03:50 version: f/c chunks, adapter-only fallback) with env `RES`, `STAGES`, `FORCE`, and `latest` empty when a stage has no copy yet (defaults otherwise the original's behaviour) |
 | `slurm/con1_full_test.sbatch` | 1-GPU mechanics test of the chain (fresh r8 LoRA, small rows) |
 | `llm_finetune/rl_dataxp/sft_rows.py` | `sft.lazy_rows`, `sft.check_rows`, `sft.resume_dir` (a checkpoint copied off the node: exact resume), `sft.rewarm_steps` (all off by default) |
 
@@ -134,15 +134,21 @@ parent's monitor and guard work on it.
 2. builds the Q = 36 rows on the node's /tmp and stops if the sha1 is not 955b00b1…;
 3. trains with `orchard_sft_rows.sh` + `con1_sft.yaml` + overrides `policy.init_adapter=$INIT sft.rows_per_step=28
    sft.save_every=5 sft.keep_last=1 sft.dev_every=50 sft.lazy_rows=true sft.check_rows=false
-   sft.resume_dir=<newest con1_reserve/full_ckpt_step_N>`; full checkpoints (adapter + optimizer) every 5 steps on node
-   /tmp; dev = stage 1's 120 dev rows, so the dev curve continues stage 1's (dev_start = the stage-1 adapter);
-4. runs the guard (`RES=con1_reserve STAGES=full`) every 10 min from inside the job (srun --overlap): the newest
-   whole checkpoint (adapter, optimizer, scheduler, rng; ~5.5 GB) to `con1_reserve/full_ckpt_step_N` every ~2 h (one
-   kept), the final adapter to `con1_reserve/full_final` as soon as it exists; space from the guard's placeholder
-   chunks in `con1_reserve/chunks` (the pool the parent's guard keeps); metrics and the trainer log to `$M`;
+   sft.resume_dir=<newest copy> sft.rewarm_steps=10`; full checkpoints (adapter + optimizer) every 5 steps on node
+   /tmp; dev = stage 1's 120 dev rows, so the dev curve continues stage 1's (dev_start = the stage-1 adapter). The
+   newest copy is the higher step of the guard's whole copy (`full_ckpt_step_N`: exact resume) and its adapter-only
+   copy (`full_adapter_step_N`: fresh optimizer, lr re-warmed over 10 steps, schedule position from state.json); a
+   whole copy wins a tie;
+4. runs the guard (`RES=con1_reserve STAGES=full`; the parent's 11-26 03:50 version) every 10 min from inside the
+   job (srun --overlap): every ~2 h the newest checkpoint whole (~5.5 GB, while the previous whole copy is kept) or,
+   without room for that, its adapter and state.json only (1.8 GB) to `full_adapter_step_N`; the newest of each kind
+   kept. The final adapter goes to `con1_reserve/full_final` at once, paid by the reserved f-chunks; metrics and the
+   trainer log go to `$M`;
 5. at SIGUSR1 (30 min before the 24 h limit): waits for the next checkpoint (≤ 15 min), stops the trainer, runs the
-   guard with `FORCE=1` (copies that checkpoint now), retries until 5 min before the limit, exits 0; the successor
-   resumes **exactly** from the copy (optimizer, scheduler, rng restored; no re-warm needed);
+   guard with `FORCE=1` (copies that checkpoint now, whole or adapter-only), retries until 5 min before the limit,
+   exits 0; the successor resumes from the newer copy (exactly from a whole one; from an adapter-only one with a
+   fresh optimizer and a 10-step re-warm). With the volume as full as on 11-26 (0.15–1 GB free, c-chunks 0), expect
+   adapter-only hand-overs: an optimizer restart per link (3–4 over the run);
 6. at the end of the epoch: the guard copies the final adapter to `con1_reserve/full_final`; `$M/DONE`; successor
    cancelled. A run that has had a checkpoint copied refuses to restart from step 0 if the copy is gone.
 
@@ -151,16 +157,22 @@ parent's monitor and guard work on it.
   DONE. The second link was preempted, requeued, and resumed from the step-30 export. Slurm then ended that requeued
   job seconds after its trainer exited, before its end steps; the copy remained. The end section now copies the
   final adapter before anything else.
-- Final version, guard copies (general; 176056 → 176057): the in-job guard copied step 5; USR1 at step 12 → waited
+- Adapter-only fallback (general; 176079 → 176080, 11-26 04:00, guard of 03:50): the volume had 166 MB free and the
+  test reserve no chunks, so every guard copy failed (logged FAILED, retried); the adapter-only copy of step 17 was
+  then made by hand as the guard's fallback branch makes it; the successor chose it (no whole copy), resumed at step
+  18 with a fresh optimizer, lr 8.4e-6 → 1.7e-5 → 2.5e-5 … (10-step re-warm), dev curve continuing. The choice between
+  whole and adapter-only copies was also checked on mock directories (6 cases).
+- Guard-copy version (general; 176056 → 176057): the in-job guard copied step 5; USR1 at step 12 → waited
   for checkpoint 16 → `FORCE` copy → exit; the successor resumed from `full_ckpt_step_00016` with optimizer,
   scheduler and rng restored (lr 9.378e-5 = the schedule's), 16 metric lines restored, dev curve continuing (0.184 →
   0.178 → 0.167); `parent_check/mon.py` read `/tmp/con1_main_<job>/full` unchanged.
 
-**Shared storage (the one hard limit).** `/project/community` had 0.85–1.1 GB free during this work. A checkpoint
-copy is ~5.5 GB (with the optimizer) and the final adapter 1.87 GB; both come out of the guard's placeholder pool in
-`con1_reserve/chunks` (9 GB on 11-26 00:05, kept at up to 16 GB while the volume has > 2.5 GB free). If the pool and
-the volume are both short, the copies fail (logged `guard: FAILED ...`, retried every 10 min); a link whose copy at
-the hand-over fails leaves the successor to resume from the previous copy (up to ~2 h back). The volume is also
+**Shared storage (the one hard limit).** `/project/community` had 0.15–1.1 GB free during this work; space released
+there is taken by other users within seconds. A whole checkpoint copy is ~5.5 GB, an adapter-only copy and the final
+adapter 1.8–1.9 GB. The guard pays for them from its placeholder chunks in `con1_reserve/chunks`: f-chunks (3 GB)
+reserved for final adapters (an adapter-only copy may borrow them down to 1), c-chunks (up to 8 GB, refilled only
+while the volume has > 2.5 GB free) for rolling copies. If even the adapter-only copy fails, the successor resumes
+from the previous copy (up to ~2 h back) and the guard logs `FAILED`. The volume is also
 wiped every two weeks (Orchard wiki calendar); the chain reads `repo2m`, `full/`, `main/states_native_offmenu.jsonl.gz`,
 `main/rows/*_facet.jsonl`, `gen/out/*.gz`, `data/queries_v2.jsonl`, `gen/bench_problems.jsonl`, `con1_reserve` for
 ~5 days. Off-Orchard copies of `con1_reserve/full_ckpt_step_*` / `full_final`: the RL session's sha1-checked

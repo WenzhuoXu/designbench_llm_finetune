@@ -7,9 +7,12 @@
 #  1. submits its successor (afterany), unless the run is DONE, STOPped or the chain is at CHAIN_MAX;
 #  2. builds the rows on node /tmp from the gz states (build_full_rows.py; the sha1 must equal the first build's,
 #     $F/stats_q$Q.json, else the job stops before training);
-#  3. trains (scripts/rl/orchard_sft_rows.sh, configs/rl/con1_sft.yaml) from INIT, or from the newest checkpoint copy
-#     $RES/full_ckpt_step_N (adapter, optimizer, scheduler, rng: an exact resume);
-#  4. runs the guard every 10 min (copies the final adapter at once, the newest checkpoint every ~2 h);
+#  3. trains (scripts/rl/orchard_sft_rows.sh, configs/rl/con1_sft.yaml) from INIT, or from the newest checkpoint copy:
+#     $RES/full_ckpt_step_N (adapter, optimizer, scheduler, rng: an exact resume) or, when newer, the adapter-only
+#     copy $RES/full_adapter_step_N the guard makes when there is no room for a second whole copy (fresh optimizer,
+#     lr re-warmed over REWARM = 10 steps, schedule position from its state.json);
+#  4. runs the guard every 10 min (the final adapter at once, from reserved f-chunks; the newest checkpoint every
+#     ~2 h, whole or adapter-only as the volume allows);
 #  5. at SIGUSR1 (30 min before the limit): waits for the next checkpoint, stops the trainer, runs the guard with
 #     FORCE=1 (copies that checkpoint now), exits 0; the successor resumes from it.
 #  At the end of the epoch: the guard copies the final adapter to $RES/full_final; $M/DONE; successor cancelled.
@@ -55,11 +58,21 @@ for f in "$( [ "$INIT" = none ] && echo "$TRAIN_PY" || echo "$INIT/adapter_confi
          "${ROWS_FILE:-$F/stats_q$Q.json}" "$TRAIN_PY" "$GUARD"; do
   [ -e "$f" ] || { log "ABORT: missing $f"; exit 2; }
 done
-newest_copy() {   # the newest complete checkpoint copy in $RES, or nothing
-  local d
+newest_copy() {   # the checkpoint copy to resume from: the guard keeps one whole copy (<stage>_ckpt_step_N: adapter,
+  # optimizer, scheduler, rng -> exact resume) and one adapter-only copy (<stage>_adapter_step_N, made when the volume
+  # had no room for a second whole copy -> fresh optimizer, lr re-warmed); the higher step wins, a whole copy on a tie
+  local d f=0 fd= a=0 ad= s
   for d in $(ls -d "$RES/${STAGE}_ckpt_step_"* 2>/dev/null | sort -r); do
-    [ -e "$d/COMPLETE" ] && [ -e "$d/state.json" ] && [ -e "$d/adapter/adapter_model.safetensors" ] && { echo "$d"; return; }
+    if [ -e "$d/COMPLETE" ] && [ -e "$d/state.json" ] && [ -e "$d/optimizer.pt" ] && [ -e "$d/adapter/adapter_model.safetensors" ]; then
+      fd=$d; f=$((10#${d##*step_})); break
+    fi
   done
+  for d in $(ls -d "$RES/${STAGE}_adapter_step_"* 2>/dev/null | sort -r); do
+    if [ -e "$d/state.json" ] && [ -e "$d/adapter/adapter_model.safetensors" ]; then
+      ad=$d; a=$((10#${d##*step_})); break
+    fi
+  done
+  if [ -n "$ad" ] && [ "$a" -gt "$f" ]; then echo "$ad"; elif [ -n "$fd" ]; then echo "$fd"; fi
 }
 copy_step() { local d; d=$(newest_copy); [ -n "$d" ] && echo $((10#${d##*step_})) || echo 0; }
 # two failed links in a row without progress: no more successors
@@ -131,7 +144,8 @@ EOF
 fi
 if [ "$INIT" = none ]; then IOV="policy.init_adapter=null policy.require_init_adapter=false"; else IOV="policy.init_adapter=$INIT"; fi
 OVR="$IOV sft.rows_per_step=$PER sft.save_every=${SAVE_EVERY:-5} sft.keep_last=1 sft.dev_every=${DEV_EVERY:-50}"
-OVR="$OVR sft.keep_adapter_every=100000 sft.lazy_rows=true sft.check_rows=false sft.resume_dir=${RD:-null} ${TEST_OVR:-}"
+OVR="$OVR sft.keep_adapter_every=100000 sft.lazy_rows=true sft.check_rows=false sft.resume_dir=${RD:-null}"
+OVR="$OVR sft.rewarm_steps=${REWARM:-10} ${TEST_OVR:-}"   # the re-warm applies only to an adapter-only resume
 log "trainer: $OVR"
 setsid env CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}" NTRAIN="$NTRAIN" REPO="$REPO" RUN_DIR="$RUN" \
   CONFIG=configs/rl/con1_sft.yaml ROWS="$ROWS" DEV="$DEV" OVERRIDES="$OVR" \
