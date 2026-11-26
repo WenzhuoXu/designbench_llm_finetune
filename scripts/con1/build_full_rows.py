@@ -40,7 +40,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))        # the repo root (llm_finetune.rl_dataxp)
 from build_rows import HELD_OUT, TRAIN_FAMILIES, answer, conseq_row, opener  # noqa: E402
-from targets import question  # noqa: E402
+from targets import FOLLOW_HEAD, question  # noqa: E402
 
 SID_RE = re.compile(r'"sid":\s*"((?:[^"\\]|\\.)*)"')
 
@@ -72,11 +72,34 @@ def _regime(m: dict) -> str:
     return "applied-feasible" if m.get("feasible") else "applied-infeasible"
 
 
+SHORT_TAIL = "Same answer form."
+
+
+def follow_text(fmt: str, move: str) -> str:
+    """A later question of a row: targets.question's wording (the full answer-format text), or with --follow short its
+    first two sentences and 'Same answer form.' (the full text is in the row's first question; it is masked from the
+    loss either way, so repeating it ~200 tokens per question only costs compute; 11-26, parent's change)."""
+    if _ARGS and _ARGS.get("follow") == "short":
+        return FOLLOW_HEAD.format(move=move) + SHORT_TAIL
+    return question(fmt, move, False)
+
+
+def shorten(row: dict, fmt: str) -> dict:
+    """build_rows.conseq_row's row with its later questions in follow_text's wording (the first question unchanged)."""
+    if not (_ARGS and _ARGS.get("follow") == "short"):
+        return row
+    msgs = row["messages"]
+    for k, mv in zip(range(3, len(msgs), 2), row["con1"]["moves"][1:]):
+        assert msgs[k]["role"] == "user" and msgs[k]["content"] == question(fmt, mv, False)
+        msgs[k]["content"] = follow_text(fmt, mv)
+    return row
+
+
 def _pieces(tok, st: dict, m: dict, fmt: str) -> tuple:
     """(user-turn tokens, answer tokens) of a move asked as a later question: conseq_format.encode tokenises each piece
     on its own and concatenates, so a row's length is the sum of its pieces' lengths."""
     from llm_finetune.rl_dataxp.conseq_format import GLUE, answer_text
-    return (len(tok.encode(GLUE % question(fmt, m["move"], False), add_special_tokens=False)),
+    return (len(tok.encode(GLUE % follow_text(fmt, m["move"]), add_special_tokens=False)),
             len(tok.encode(answer_text(answer(fmt, st, m)), add_special_tokens=False)))
 
 
@@ -198,7 +221,7 @@ def do_state(st: dict, c: collections.Counter):
         n_rows += 1
     if n_rows > int(math.ceil(n / q)):
         c["%s %s states split finer for the token cap" % (sp, v)] += 1
-    built = [(g, conseq_row(st, g, fmt), L[0], L[1]) for g, L in zip(groups, lens)]
+    built = [(g, shorten(conseq_row(st, g, fmt), fmt), L[0], L[1]) for g, L in zip(groups, lens)]
     # every 50th state (by sid): its rows tokenised whole, as the trainer does, must give the same counts
     if int(hashlib.sha1(st["sid"].encode()).hexdigest()[:8], 16) % a["check_every"] == 0:
         for g, row, tot, pr in built:
@@ -278,6 +301,8 @@ def main(argv=None):
     ap.add_argument("--forbid-problems", nargs="*", default=[], help="jsonl files of held-out problems (problem_id)")
     ap.add_argument("--tokenizer", required=True)
     ap.add_argument("--target", default="facet")
+    ap.add_argument("--follow", choices=("full", "short"), default="full",
+                    help="later questions of a row: the full format text (targets.question) or 'Same answer form.'")
     ap.add_argument("--q", type=int, default=12)
     ap.add_argument("--max-tokens", type=int, default=24000, help="exact tokens per row (prompt + completion)")
     ap.add_argument("--seed", type=int, default=0)
@@ -308,6 +333,7 @@ def main(argv=None):
     print("excluding %d (state, move) pairs of %d states; %d forbidden problems; %.0f s" % (
         n_ex, len(excl), len(forbid), time.time() - t0), flush=True)
     args = {"tokenizer": a.tokenizer, "target": a.target, "q": a.q, "max_tokens": a.max_tokens, "seed": a.seed,
+            "follow": a.follow,
             "forbid": forbid, "check_every": a.check_every}
     c = collections.Counter()
     sid_src: dict = {}
@@ -358,7 +384,7 @@ def main(argv=None):
                 "src": {k: g("src " + k) for k in ("own", "off", "uni")},
                 "regime": {k[len("%s %s regime " % (sp, v)):]: n for k, n in c.items()
                            if k.startswith("%s %s regime " % (sp, v))}}
-    res = {"q": a.q, "max_tokens": a.max_tokens, "target": a.target, "seed": a.seed, "train_rows": n_rows,
+    res = {"q": a.q, "max_tokens": a.max_tokens, "target": a.target, "follow": a.follow, "seed": a.seed, "train_rows": n_rows,
            "train_sha1": sha.hexdigest(), "longest": {"tokens": longest[0], "family": longest[1]},
            "states_from_file": sid_src, "excluded_pairs": n_ex, "seconds": round(time.time() - t0, 1),
            "workers": a.workers, "families": summary,

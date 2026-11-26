@@ -9,8 +9,8 @@
 # every resume (24 h limit or crash) restarts AdamW with the lr re-warmed over REWARM = 10 steps and the schedule
 # position from state.json.
 #  1. submits its successor (afterany), unless the run is DONE, STOPped or the chain is at CHAIN_MAX;
-#  2. builds the rows on node /tmp (build_full_rows.py: facetm, Q 36, cap 22,000 tokens; the sha1 must equal the
-#     first build's in $F/stats_facetm_q36.json, else it stops);
+#  2. builds the rows on node /tmp (build_full_rows.py: facetm, later questions short, Q 36, cap 22,000 tokens; the
+#     sha1 must equal the first build's in $F/stats_facetm_short_q36.json, else it stops);
 #  3. the start adapter, always at the fixed node path /tmp/con1_init (the trainer's fingerprint holds the path):
 #     - a link that resumes: the newest "full" slot (A or B), restored and sha1-checked into /tmp/con1_resume; its
 #       adapter is also /tmp/con1_init (only its LoRA config matters there: the resume overwrites every weight);
@@ -35,9 +35,11 @@ REPO="${REPO:-$C1/repo2m}"
 INIT="${INIT:-F}"
 M="${M:?run dir on shared storage (e.g. $C1/full/run1)}"
 Q="${Q:-36}"
-PER="${PER:-44}"
+PER="${PER:-28}"
 MAX_TOKENS="${MAX_TOKENS:-22000}"
 TARGET="${TARGET:-facetm}"                       # answer format (targets.py; facetm chosen 11-26 from the drc arm)
+FOLLOW="${FOLLOW:-short}"                        # later questions of a row: "Same answer form." (full text in the 1st)
+TAG=$TARGET; [ "$FOLLOW" = short ] && TAG=${TARGET}_short
 F="${F:-$C1/full}"
 DEV="${DEV:-$C1/main/rows/dev_$TARGET.jsonl}"    # stage 1's dev states and moves, in the training format
 STAGE="${STAGE:-full}"
@@ -61,10 +63,10 @@ G=$C1/gen
 D=$C1/data
 mkdir -p "$M/logs" "$M/chain" "$T/logs" "$RUN"
 log() { echo "=== $(date '+%F %T') $*"; }
-log "host=$(hostname) job=$JOB chain=$CHAIN_I/$CHAIN_MAX repo=$REPO target=$TARGET q=$Q cap=$MAX_TOKENS rows/step=$PER init=$INIT m=$M slots=$SL stage=$STAGE"
+log "host=$(hostname) job=$JOB chain=$CHAIN_I/$CHAIN_MAX repo=$REPO target=$TARGET follow=$FOLLOW q=$Q cap=$MAX_TOKENS rows/step=$PER init=$INIT m=$M slots=$SL stage=$STAGE"
 [ -e "$M/DONE" ] && { log "run DONE already"; exit 0; }
 [ -e "$M/STOP" ] && { log "STOP file: not training"; exit 0; }
-for f in "$DEV" "${ROWS_FILE:-$F/stats_${TARGET}_q$Q.json}" "$TRAIN_PY" "$GUARD"; do
+for f in "$DEV" "${ROWS_FILE:-$F/stats_${TAG}_q$Q.json}" "$TRAIN_PY" "$GUARD"; do
   [ -e "$f" ] || { log "ABORT: missing $f"; exit 2; }
 done
 best_slot() {   # "X step length sha1" of the slot holding this stage's newest copy, or nothing
@@ -97,7 +99,7 @@ fail() { log "FAILED: $*"; touch "$M/chain/fail_${JOB}_step$(copy_step)"; }
 NEXT=
 if [ "$CHAIN_I" -lt "$CHAIN_MAX" ]; then
   NEXT=$(sbatch --parsable $NEXT_ARGS --dependency=afterany:$JOB \
-    --export=ALL,INIT="$INIT",M="$M",Q="$Q",PER="$PER",REPO="$REPO",CHAIN_I=$((CHAIN_I+1)),CHAIN_MAX="$CHAIN_MAX",DEV="$DEV",MAX_TOKENS="$MAX_TOKENS",TARGET="$TARGET",RES="$RES",STAGE="$STAGE" \
+    --export=ALL,INIT="$INIT",M="$M",Q="$Q",PER="$PER",REPO="$REPO",CHAIN_I=$((CHAIN_I+1)),CHAIN_MAX="$CHAIN_MAX",DEV="$DEV",MAX_TOKENS="$MAX_TOKENS",TARGET="$TARGET",FOLLOW="$FOLLOW",RES="$RES",STAGE="$STAGE" \
     "${SBATCH_FILE:-$REPO/slurm/con1_full.sbatch}") && echo "$NEXT" > "$M/chain/next_of_$JOB" && log "successor $NEXT submitted" \
     || log "!!! successor not submitted"
 fi
@@ -132,14 +134,14 @@ export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false PYTH
 if [ -n "$ROWS_FILE" ]; then
   ROWS=$ROWS_FILE; log "TEST: rows $ROWS (no build)"
 else
-  WANT=$("$TRAIN_PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["train_sha1"])' "$F/stats_${TARGET}_q$Q.json")
-  log "building the rows ($TARGET, Q=$Q, cap $MAX_TOKENS tokens)"
+  WANT=$("$TRAIN_PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["train_sha1"])' "$F/stats_${TAG}_q$Q.json")
+  log "building the rows ($TARGET, later questions $FOLLOW, Q=$Q, cap $MAX_TOKENS tokens)"
   T0=$(date +%s)
   "$TRAIN_PY" "$REPO/scripts/con1/build_full_rows.py" \
     --states "$C1/main/states_native_offmenu.jsonl.gz" "$F/states_native_offmenu_rest.jsonl.gz" \
              "$G/out/states_native_orch.jsonl.gz" "$G/out/states_scripted.jsonl.gz" \
     --exclude-rows "$C1/main/rows/train_facet.jsonl" "$C1/main/rows/dev_facet.jsonl" "$C1/main/rows/dev_facetm.jsonl" \
-    --forbid-problems "$D/queries_v2.jsonl" "$G/bench_problems.jsonl" --tokenizer "$MODEL" --target "$TARGET" \
+    --forbid-problems "$D/queries_v2.jsonl" "$G/bench_problems.jsonl" --tokenizer "$MODEL" --target "$TARGET" --follow "$FOLLOW" \
     --q "$Q" --max-tokens "$MAX_TOKENS" --seed 0 --workers "${BUILD_WORKERS:-30}" \
     --out-train "$ROWS" --out-dev "$T/dev_full_q$Q.jsonl" --stats "$T/stats.json" > "$T/logs/build.log" 2>&1
   tail -3 "$T/logs/build.log"
@@ -171,13 +173,35 @@ print("metrics restored: %d steps" % len(keep))
 EOF
   [ -e "$M/dev_start.json" ] && cp "$M/dev_start.json" "$RUN/"
 fi
+DEV_USED=$DEV
+if [ "$FOLLOW" = short ]; then
+  # the dev rows in the training layout: their later questions as build_full_rows.py --follow short writes them (the
+  # states, moves and answers unchanged); on node /tmp only
+  DEV_USED=$T/dev_short.jsonl
+  PYTHONPATH="$REPO/scripts/con1:$REPO" "$TRAIN_PY" - "$DEV" "$DEV_USED" <<'EOF' || { fail "dev rows not converted"; exit 2; }
+import json, sys
+from targets import FOLLOW_HEAD, question
+n = 0
+with open(sys.argv[2], "w", encoding="utf-8") as fo:
+    for line in open(sys.argv[1], encoding="utf-8"):
+        r = json.loads(line)
+        if r.get("supervise") == "every_assistant":
+            msgs, fmt = r["messages"], r["format"]
+            for k, mv in zip(range(3, len(msgs), 2), r["con1"]["moves"][1:]):
+                assert msgs[k]["role"] == "user" and msgs[k]["content"] == question(fmt, mv, False)
+                msgs[k]["content"] = FOLLOW_HEAD.format(move=mv) + "Same answer form."
+                n += 1
+        fo.write(json.dumps(r, ensure_ascii=False) + "\n")
+print("dev rows: %d later questions shortened" % n)
+EOF
+fi
 if [ "$INIT" = none ]; then IOV="policy.init_adapter=null policy.require_init_adapter=false"; else IOV="policy.init_adapter=$INIT_DIR"; fi
 OVR="$IOV sft.rows_per_step=$PER sft.save_every=${SAVE_EVERY:-5} sft.keep_last=1 sft.dev_every=${DEV_EVERY:-50}"
 OVR="$OVR sft.keep_adapter_every=100000 sft.lazy_rows=true sft.check_rows=false sft.resume_dir=${RD:-null}"
 OVR="$OVR sft.rewarm_steps=${REWARM:-10} ${TEST_OVR:-}"
 log "trainer: $OVR"
 setsid env CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}" NTRAIN="$NTRAIN" REPO="$REPO" RUN_DIR="$RUN" \
-  CONFIG=configs/rl/con1_sft.yaml ROWS="$ROWS" DEV="$DEV" OVERRIDES="$OVR" \
+  CONFIG=configs/rl/con1_sft.yaml ROWS="$ROWS" DEV="$DEV_USED" OVERRIDES="$OVR" \
   bash "$REPO/scripts/rl/orchard_sft_rows.sh" > "$T/logs/train.log" 2>&1 &
 TP=$!
 

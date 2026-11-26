@@ -133,21 +133,41 @@ so the 22,000 cap binds for most Q = 36 rows (p95 21,860): 16 questions per row 
 prompt is long). Per family (Q = 36): circuit2 18.1 questions/row, engibench 24.4, frame3d2 18.2, grid2 19.3, grid2op
 7.5, photonics 13.4, seir2 20.5, traffic2 28.2; grid2op's 34,015 rows are 28% of all rows for 13% of the outcomes.
 
-**Choice: Q = 36, 44 rows per step** (mine): Q = 36 needs 17% fewer tokens than Q = 12 for the same outcomes with the
-same longest row; 44 rows = 11 per GPU and ~719 outcomes per optimizer step (stage 1: 744), 2,766 steps, lr 1e-4,
-3% warm-up, cosine, one epoch.
+**Short later questions (parent's change, 11-26 08:50).** The full answer-format text (~200 tokens, masked from the
+loss) is given once, in a row's first question; later questions read "QUESTION (no move is made now): if the move X
+were played at the current design, what would the simulator return? Same answer form."
+(`build_full_rows.py --follow short`; targets.py untouched, so the held-out test queries keep the full text in every
+question and their scores stay comparable; the drc per-link eval asks single questions, k = 0, which match a row's
+first question exactly). The dev rows (stage 1's dev states / moves in facetm) get the same later-question wording on
+the node at job start (1,192 later questions; answers and first questions unchanged).
 
-| facetm | steps | outcomes / step | training hours (2 fits) | dev passes | outcomes per GPU-second |
+| facetm, cap 22,000, Q = 36 | full text in every question | **"Same answer form." after the first** |
+|---|---:|---:|
+| rows | 121,670 | **78,236** |
+| questions per row | 16.3 | **25.4** |
+| tokens per row mean / p95 / max | 20,073 / 21,860 / 22,000 | **15,309 / 21,830 / 22,000** |
+| training tokens | 2,442.2 M | **1,197.7 M** |
+| tokens per outcome | 1,228 | **602** |
+| sha1 | 5f0c9acb… | **cb197f297f6fd5a249175d3844d431b9a7b159b5** |
+
+(Orchard CPU job 176142: checks pass, the 64-worker rebuild is byte-identical.) Questions per row with short later
+questions: circuit2 27.1, engibench 24.8, frame3d2 31.3, grid2 30.3, grid2op 15.0, photonics 17.8, seir2 30.4, traffic2
+30.3.
+
+**Choice: Q = 36, short later questions, 28 rows per step** (mine): 7 rows per GPU, ~711 outcomes per optimizer step
+(stage 1: 744), 2,795 steps, lr 1e-4, 3% warm-up, cosine, one epoch.
+
+| facetm, Q = 36 | steps | outcomes / step | training hours (2 fits) | dev passes | outcomes per GPU-second |
 |---|---:|---:|---:|---:|---:|
-| Q = 12, 64 rows/step | 3,108 | 640 | 180.3–184.0 | 1.0 h | 0.75–0.77 |
-| **Q = 36, 44 rows/step** | **2,766** | **719** | **150.6–158.6** | **0.9 h** | **0.87–0.92** |
+| full text, 44 rows/step | 2,766 | 719 | 150.6–158.6 | 0.9 h | 0.87–0.92 |
+| **short, 28 rows/step** | **2,795** | **711** | **73.8–75.8** | **0.9 h** | **1.82–1.87** |
 
-Fits on 176033's first 182 measured steps (tokens only: 0.882 s per 1,000 tokens on the slowest rank; with an
-attention term 0.806 s/ktok + 0.0060 s/ktok²; dev pass 59 s).
+Fits on 176033's first 188 measured steps (tokens only: 0.881 s per 1,000 tokens on the slowest rank; with an
+attention term 0.805 s/ktok + 0.0061 s/ktok²; dev pass 59 s).
 
-**Wall-clock:** 151–160 h of training; each 24 h link loses ~12 min at start (rows built in ~100 s, slot restore,
-model load, row index) and up to 30 min at the hand-over, so ~23.2 h of training per link: **7 links**, about
-6.5–7 days on 4 H100s if the links start back to back (CHAIN_MAX 10).
+**Wall-clock:** 75–77 h of training; each 24 h link loses ~12 min at start (rows built in ~70 s, slot restore,
+model load, row index) and up to 30 min at the hand-over, so ~23.2 h of training per link: **4 links**, about
+3.3–3.5 days on 4 H100s if the links start back to back (CHAIN_MAX 10).
 
 **How a link runs** (`scripts/con1/orchard_full.sh`). Node layout as `orchard_main.sh`'s
 (`/tmp/con1_main_<job>/full/` with `metrics.jsonl`, `ckpt/step_N/COMPLETE`, `final/`), so `parent_check/mon.py`
@@ -164,9 +184,10 @@ after a sha1 read-back); `F1–F3.bin` + `F.meta` hold a stage's final adapter. 
    weight); the first link (`INIT=F`, default) restores the stage-1 final from F1–F3 per `F.meta`, which must read
    `stage1 final ...` (else the link stops); `INIT=<dir>` copies an adapter directory instead; a run that has
    copied a checkpoint before never restarts from step 0;
-3. builds the facetm Q = 36 rows (cap 22,000) on the node's /tmp and stops if the sha1 is not 5f0c9acb…;
+3. builds the facetm Q = 36 rows (short later questions, cap 22,000) on the node's /tmp and stops if the sha1 is
+   not cb197f29…;
 4. trains with `orchard_sft_rows.sh` + `con1_sft.yaml` + overrides `policy.init_adapter=/tmp/con1_init
-   sft.rows_per_step=44 sft.save_every=5 sft.keep_last=1 sft.dev_every=50 sft.lazy_rows=true sft.check_rows=false
+   sft.rows_per_step=28 sft.save_every=5 sft.keep_last=1 sft.dev_every=50 sft.lazy_rows=true sft.check_rows=false
    sft.resume_dir=/tmp/con1_resume|null sft.rewarm_steps=10`: a resume restarts AdamW, re-warms the lr over 10 steps
    and takes the schedule position from state.json; dev = stage 1's 120 dev states / moves in facetm (dev_start =
    the start adapter);
@@ -218,6 +239,31 @@ Stop the chain: `touch /project/community/wxu2/con1/full/run1/STOP` (the running
 loss (first / last 10 steps), informative-token nll, grad norm (median, last-10 max), peak memory, lr, s/step, NaN,
 dev passes (stage 1's 120 dev rows) against dev_start (the stage-1 adapter), newest node checkpoint, final. The job's
 log (`full/logs/con1_full_<id>.out`) carries the guard's SAVED / FAILED lines; the chain's state is in
-`full/run1/chain/` (next_of_<job>, copied_step_N, fail_*). Plan: every 2–3 h; expected ~190–210 s per step at 44
-rows (11 per GPU, ~220k tokens per GPU); act on a non-finite loss, a grad-norm spike, rising dev loss, peak memory
+`full/run1/chain/` (next_of_<job>, copied_step_N, fail_*). Plan: every 2–3 h; expected ~90–100 s per step at 28
+rows (7 per GPU, ~107k tokens per GPU); act on a non-finite loss, a grad-norm spike, rising dev loss, peak memory
 above ~76 GiB or FAILED guard lines.
+
+## 5. Accuracy per link (drc, Orchard keeps training)
+
+At the end of each 24 h link the newest `full` slot (A or B) holds that link's checkpoint (its successor's log names
+it: "resuming from slot X (full step_N ...)"). One pass per link, while the next link trains:
+
+1. **Orchard → local** (owner's PC, bytes only): `LABEL=full_<step> bash scripts/con1/pull_slot.sh A|B` — the RL
+   session's route (its `orr.sh` / `orch.sh` over the IAP forward, 1800 MiB byte-range chunks of the slot's valid
+   [0, length) bytes, each chunk's sha1 checked against Orchard's, 3 tries; the meta must be unchanged after the pull
+   and the joined parts must give the meta's sha1) → `D:/designbench_con1/full_xfer/con1_full__<label>/`.
+2. **local → drc**: MCP upload of that directory to `/storage/wxu/rl_open/orchard_xfer/` and the `.remote.sha1` file
+   beside it (≤ 2 GB per call; one part each), then on drc the RL session's
+   `bash /storage/wxu/rl_open/orchard_xfer/join_ckpt.sh con1_full <label>` → "1 files DRC_SHA_MATCH",
+   `/storage/wxu/rl_open/orchard_runs/con1_full/ckpt/<label>/slot.tar`. No MCP download from drc.
+3. **drc eval**: `bash /storage/wxu/con1/full_eval/eval_link.sh <label>` (`scripts/con1/eval_link.sh`): the adapter
+   to `con1/arm/run_full_<label>/final`; con1's `drc_arm.sh` unchanged (`LAB=full_<label> FMT=facetm ROWS=none
+   WAIT=1`: final exists, so no training; vLLM on GPU 4 once it is free; round 1's held-out-problem questions, zero
+   pass, 5 families; ~45 min of GPU 4 by the facetm arm's 07:12–07:53); facets as con1's `score_Fm.sh` (drc has no
+   simulator env: V_bal_phys n/a; regime_phys, cpl_dir_BA, cpl_size unaffected) next to Fm, round-1 F, M and the
+   trees; `con1/full_eval/curve.txt` rewritten with one line per checkpoint.
+4. The curve's first point: the stage-1 final from the F slots (`pull_slot.sh F`, label stage1_final), asked the same
+   facetm questions.
+
+The adapters stay on drc (`con1/arm/run_full_*/final`, 1.9 GB each; /storage had 46 GB free on 11-26), so they are
+also the off-Orchard copies of each link. The local parts can go after DRC_SHA_MATCH.
