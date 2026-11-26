@@ -12,7 +12,7 @@ PY=/storage/wenwenw/envs/vllm_drc/bin/python
 MODEL=/storage/wxu/huggingface/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
 FAM="engibench grid2op photonics circuit2 frame3d2"
 export PYTHONPATH=$C/pylib:$REPO HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false PYTHONUNBUFFERED=1
-export CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=${GPU:-${CUDA_VISIBLE_DEVICES:-4}} PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS=4
+export DATAXP_OFFLOAD_PAGEABLE=1 CUDA_DEVICE_ORDER=PCI_BUS_IDCUDA_VISIBLE_DEVICES=${GPU:-${CUDA_VISIBLE_DEVICES:-4}} PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS=4
 export TMPDIR=$C/tmp TRITON_CACHE_DIR=$C/cache/triton TORCHINDUCTOR_CACHE_DIR=$C/cache/inductor
 export HF_HOME=/storage/wxu/huggingface HF_HUB_CACHE=/storage/wxu/huggingface/hub HF_HUB_DISABLE_XET=1
 export VLLM_CACHE_ROOT=$C/cache/vllm CUDA_CACHE_PATH=$C/cache/nv VLLM_NO_USAGE_STATS=1 VLLM_USE_FLASHINFER_SAMPLER=0
@@ -30,9 +30,11 @@ done
 echo "=== $(date '+%F %T') GPU $CUDA_VISIBLE_DEVICES free enough (${USED} MiB in use)"
 free -g | head -2
 if [ ! -e "$RUN/final/adapter_config.json" ]; then
+  ( while sleep 20; do echo "$(date '+%T') $(free -m | sed -n 2p) | gpu $(nvidia-smi -i $CUDA_VISIBLE_DEVICES --query-gpu=memory.used --format=csv,noheader)"; done ) > "$RUN/logs/mem.log" 2>&1 &
+  MEMLOG=$!
   $PY -m torch.distributed.run --standalone --nproc_per_node 1 -m llm_finetune.rl_dataxp.sft_rows \
     --config configs/rl/con1_arm_drc.yaml run_dir="$RUN" "sft.rows_file=$ROWS" > "$RUN/logs/trainer.log" 2>&1
-  echo "trainer rc=$? $(date '+%F %T')"; grep "^step\|dev loss\|peak" "$RUN/logs/trainer.log" | tail -3
+  echo "trainer rc=$? $(date '+%F %T')"; kill $MEMLOG 2>/dev/null; grep "^step\|dev loss\|peak" "$RUN/logs/trainer.log" | tail -3
 fi
 [ -e "$RUN/final/adapter_config.json" ] || { echo "ABORT: no final adapter"; tail -30 "$RUN/logs/trainer.log"; exit 3; }
 PORT=$($PY -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
