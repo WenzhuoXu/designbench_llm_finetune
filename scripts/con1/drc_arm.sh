@@ -11,7 +11,10 @@ RUN=$A/run_$LAB
 PY=/storage/wenwenw/envs/vllm_drc/bin/python
 MODEL=/storage/wxu/huggingface/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
 FAM="engibench grid2op photonics circuit2 frame3d2"
-export PYTHONPATH=$C/pylib:$REPO HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false PYTHONUNBUFFERED=1
+# pylib_fla: flash-linear-attention 0.5.2 (Orchard's train env has the same); without it transformers runs the
+# reference gated-delta kernel (~760 s per 16-row step here). Checked on GPU 4 11-26: outputs and gradients match the
+# reference (cos >= 0.9999, rel err <= 0.6%).
+export PYTHONPATH=$C/pylib_fla:$C/pylib:$REPO HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false PYTHONUNBUFFERED=1
 export DATAXP_OFFLOAD_PAGEABLE=1 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=${GPU:-${CUDA_VISIBLE_DEVICES:-4}} PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OMP_NUM_THREADS=4
 export TMPDIR=$C/tmp TRITON_CACHE_DIR=$C/cache/triton TORCHINDUCTOR_CACHE_DIR=$C/cache/inductor
 export HF_HOME=/storage/wxu/huggingface HF_HUB_CACHE=/storage/wxu/huggingface/hub HF_HUB_DISABLE_XET=1
