@@ -14,6 +14,10 @@ metrics_after, feasible, the verbatim result message) and parses back (score_pre
              significant digits and the relative change in percent (3 significant digits)
   absolute   structured: verdict first, FEASIBLE AFTER, VIOLATED AFTER, one line per metric: before -> after at 4
              significant digits
+  facetm     facet plus, before FEASIBLE AFTER, a MARGINS AFTER block: per constrained metric, the side of its limit after
+             the move (satisfied / violated / at limit) and the size of its distance to the limit relative to the limit
+             in the same 1-2-5 bins (no digits), so feasibility follows from the margins as it does from M's values
+             (added 11-25 after round 1: F's regime 0.601 vs M's 0.673)
 Every format's answer carries character spans of its informative content (render's second value); the loss weighs
 those tokens 1 and the fixed wording FIXED_WEIGHT (0.05, not 0: the model must still learn to write the scaffold it
 generates at test time; 0.05 removes ~95% of the scaffold's share of the loss).
@@ -23,7 +27,7 @@ from __future__ import annotations
 import math
 import re
 
-FORMATS = ("verbatim", "masked", "facet", "delta", "absolute")
+FORMATS = ("verbatim", "masked", "facet", "delta", "absolute", "facetm")
 NL = chr(10)
 FIXED_WEIGHT = 0.05
 _EDGES = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]
@@ -64,6 +68,14 @@ FORMAT_TEXT = {
                  "value after the move, both to 4 significant digits."),
 }
 FORMAT_TEXT["masked"] = FORMAT_TEXT["verbatim"]
+FORMAT_TEXT["facetm"] = (
+    "Answer in this form: either 'VERDICT: refused' and 'REASON: <the simulator's reason>', or 'VERDICT: applied', then "
+    "'MARGINS AFTER:' and one line per constrained metric: the metric, whether it satisfies its limit after the move "
+    "(satisfied, violated or at limit) and the size of its distance to the limit relative to the limit as one of "
+    + ", ".join(BIN_NAMES) + " (or 'limit 0' when the limit is 0), then 'FEASIBLE AFTER: yes|no', 'VIOLATED AFTER: "
+    "<constraints violated after the move, or none>', then 'CHANGES:' and one line per metric: the metric, its "
+    "direction (up, down or same) and the size of the change relative to its current value as one of "
+    + ", ".join(BIN_NAMES) + " (or 'from 0' when the current value is 0).")
 
 
 def question(fmt: str, move: str, first: bool) -> str:
@@ -112,6 +124,40 @@ def violated_after(result: str) -> list:
     return STATUS_VIOL.findall(result[i:j if j > i else len(result)])
 
 
+STATUS_LIMIT = re.compile(r"^\s+([A-Za-z_][\w.\-]*)\s+(\S+)\s+limit\s*(>=|<=)\s*(\S+)(.*)$")
+
+
+def margins_after(result: str) -> list:
+    """[(constraint, side, size)] from the message's CONSTRAINT STATUS (after this move) block, in its order: side
+    'satisfied' / 'violated' (the harness's VIOLATED marker) / 'at limit'; size the bin of |value - limit| / |limit|,
+    'limit 0' when the limit is 0, '' at the limit."""
+    i = result.find("CONSTRAINT STATUS")
+    j = result.find("EFFECT OF THIS MOVE")
+    if i < 0:
+        return []
+    out = []
+    for line in result[i:j if j > i else len(result)].splitlines()[1:]:
+        m = STATUS_LIMIT.match(line)
+        if not m:
+            continue
+        try:
+            v, lim = float(m.group(2)), float(m.group(4))
+        except ValueError:
+            continue
+        marg = (v - lim) if m.group(3) == ">=" else (lim - v)
+        viol = "VIOLATED" in m.group(5)
+        if not viol and abs(marg) <= max(SAME_TOL * abs(lim), 1e-12):
+            out.append((m.group(1), "at limit", ""))
+            continue
+        side = "violated" if viol else "satisfied"
+        if lim == 0:
+            out.append((m.group(1), side, "limit 0"))
+            continue
+        r = abs(marg) / abs(lim)
+        out.append((m.group(1), side, next((name for hi, name in BINS if r < hi), BIN_NAMES[-1])))
+    return out
+
+
 def render(fmt: str, move: dict, metrics0: dict):
     """(content, informative spans [(start, end)] or None). verbatim: None (every token weighs 1); every other
     format: the spans of its informative content (the rest is fixed wording, FIXED_WEIGHT in the loss)."""
@@ -136,6 +182,10 @@ def render(fmt: str, move: dict, metrics0: dict):
     after = move["metrics_after"]
     viol = violated_after(res)
     add("VERDICT: ", "applied")
+    if fmt == "facetm":
+        add("MARGINS AFTER:")
+        for k, side, size in margins_after(res):
+            add("  %-22s " % k, ("%s %s" % (side, size)).strip())
     add("FEASIBLE AFTER: ", "yes" if move["feasible"] else "no")
     add("VIOLATED AFTER: ", ", ".join(viol) if viol else "none")
     add("METRICS (before -> after):" if fmt == "absolute" else "CHANGES:")
@@ -144,7 +194,7 @@ def render(fmt: str, move: dict, metrics0: dict):
             continue
         b, a = float(metrics0[k]), float(after[k])
         name = "  %-22s " % k
-        if fmt == "facet":
+        if fmt in ("facet", "facetm"):
             sb = size_bin(b, a)
             add(name, "same" if sb == "same" else "%s %s" % (direction(b, a), sb))
         elif fmt == "absolute":

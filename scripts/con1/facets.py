@@ -171,7 +171,7 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
         if rest.startswith("same"):
             out["dir"][k], out["bin"][k] = "same", "same"
             continue
-        if fmt == "facet":
+        if fmt in ("facet", "facetm"):                    # facetm's MARGINS block sits before CHANGES: not read here
             dr = parts[1] if parts[1] in ("up", "down") else None
             bn = " ".join(parts[2:]) if dr else None
             if dr is None:
