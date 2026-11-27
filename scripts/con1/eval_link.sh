@@ -50,6 +50,8 @@ H=$E/hf; mkdir -p "$H"
   MAXTOK=4096 OUTDIR="$H" PASSES="zero seq" QGROUPS=heldout_family bash "$E/drc_arm_groups.sh" > "$H/arm_$L.out" 2>&1
 grep "server ready\|SKILL_CLIENT_DONE\|ABORT\|DRC_ARM_DONE" "$H/arm_$L.out" | tail -3
 [ -s "$H/facets_${LAB}_seq_vs_zero.txt" ] || OUTDIR="$H" bash "$E/hf_score.sh" "$LAB" > "$H/hf_score_$L.out" 2>&1
+[ -s "$H/report_$LAB.txt" ] || bash "$E/hf_report.sh" "$LAB" > /dev/null 2>&1   # per family, each with its own se
+cat "$H/report_$LAB.txt" 2>/dev/null
 line() {   # file label: the label's line of the primary group means
   awk -v lab="$2" '/group means over all \(primary\)/{on=1; next} on && NF > 2 && $2 != "select" {exit} on && $1==lab {print; exit}' "$1"
 }
