@@ -140,8 +140,9 @@ def parse_elements(variant: str, text: str) -> dict:
                     break
                 continue
             q = {}
-            for k, v in re.findall(r"([A-Za-z][\w()*/]*)\s*=\s*(%s)" % _NUM, m.group(3)):
-                q.setdefault(k, float(v))
+            for k, v in re.findall(r"(?:(?<=^)|(?<=[\s,(]))([A-Za-z][\w()*/]*)\s*=\s*(%s)" % _NUM, m.group(3)):
+                if k.count("(") == k.count(")"):            # 'Cc)' from 'gm1/(2 pi Cc)=...' is a formula tail
+                    q.setdefault(k, float(v))
             out["%s %s" % (m.group(1), m.group(2))] = q
     return out
 
