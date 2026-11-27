@@ -31,6 +31,7 @@ def main():
     ap.add_argument("--ref", required=True)
     ap.add_argument("--group", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--passes", nargs="+", default=["zero", "seq"])
     a = ap.parse_args()
     models = [p.split("=", 1) for p in a.pred]
     names = [m for m, _ in models]
@@ -68,12 +69,12 @@ def main():
     w = out.append
     w("models side by side, group %s, reference %s; se: bootstrap over states shared by all predictors (1000, seed 0)" % (a.group, a.ref))
     for m in names:
-        for ps in ("zero", "seq"):
+        for ps in a.passes:
             n = given[(m, ps, "answers")]
             w("  %-22s %-4s answers %5d, readable %5d (%.3f), errors %d, cut at the token limit %d" % (
                 m, ps, n, given[(m, ps, "readable")], given[(m, ps, "readable")] / max(1, n), given[(m, ps, "error")],
                 given[(m, ps, "length")]))
-    for ps in ("zero", "seq"):
+    for ps in a.passes:
         per = collections.defaultdict(dict)
         nq = collections.Counter()
         unread = collections.Counter()
