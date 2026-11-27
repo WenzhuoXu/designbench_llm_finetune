@@ -724,3 +724,30 @@ The table gives model (a) minus the best no-physics comparator, ± paired-bootst
 | thermal2 (printed reader .738 / .741) | −.088 ± .030 (.97) | −.178 ± .029 (.95) | −.728 (.01) | +.003 ± .033 (.97) | −.034 ± .032 (.97) | −.687 (.08) |
 
 pref1's sequential pass directs too few lines to read on these items.
+
+## 13. Consequence prompt without the move request (owner order 11-27)
+
+Every con1 prompt up to 11-27 (all row files, queries.jsonl, queries_v2.jsonl, the 2M rows) carried the policy's move
+request (YOUR MOVE: make one change, reason in 60-150 words, end with an `<action>` line) next to the QUESTION (no move
+is made now). Measured 11-27 by the parent session: base Qwen with thinking spends its budget on this conflict in 93% of
+replies; it is also the stage-2 collapse cause recorded 11-26.
+
+- `conseq_lib.consequence_user(user)`: the served user text with exactly these cut, every other byte kept:
+  - the YOUR MOVE heading, replaced by the neutral heading `OPERATIONS` (the line "The operations in this problem are
+    exactly:" and the whole operations list stay);
+  - "Make exactly one change: ... Use only what is shown above." (with the 60-150-word rationale request);
+  - "Then end your reply with exactly this one line:", "<action>VERB(arg, ...)</action>", "VERB is one of the
+    operations listed below, written exactly as listed, ...";
+  - after a refused move, the refusal note's last line "Propose a different move." (the REFUSED MOVES list stays).
+- Used by `build_rows.py` (every consequence row, so build_prows' Qown/Q12 rows too) and `test_set.py` (new question
+  files; `--from-queries` rebuilds an existing file's prompts only). `State.prompt()` still returns the served text
+  (verify_replay). The policy rows (P rows, stage-2 policy rows) keep the served prompt: they are move rows.
+- `queries_v3.jsonl` = queries_v2.jsonl with only `user` changed (and `prompt: v3_no_move_request` added); sha1
+  855060657be8; drc `/storage/wxu/con1/arm/main/queries_v3.jsonl` (next to queries_v2), Orchard
+  `con1/noconf/queries_v3.jsonl`. Existing row files and queries_v2 are not touched.
+- Check (`noconf_check.py`): no prompt (system + user + first QUESTION) contains "YOUR MOVE", "<action>", "end your
+  reply", "60-150 words", "Make exactly one change" or "Propose a different move"; every line of the old operations
+  section (every signature) is in the new prompt in order; a line diff of old vs new removes only the request lines and
+  the refusal line and inserts only `OPERATIONS`; all other fields identical. queries_v3: 638 prompts, 11 families,
+  0 failures (refusal line removed in 11 grid2op and 1 photonics prompts). State files: see the check job's report
+  (Orchard `con1/noconf/check_*.txt`).

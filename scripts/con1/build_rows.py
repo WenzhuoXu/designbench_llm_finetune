@@ -3,7 +3,8 @@
     python build_rows.py --states native.jsonl.gz scripted.jsonl.gz --policy train_chk1.jsonl.gz \\
         --out-train train.jsonl --out-dev dev.jsonl [--per-family 2000] [--q 12] [--policy-ratio 0.33] [--seed 0]
 
-Consequence row (docs/consequence_round_con1.md section 1): the state's served (system, user) + QUESTION about one
+Consequence row (docs/consequence_round_con1.md section 1): the state's served (system, user) with the move request cut
+(conseq_lib.consequence_user, since 11-27) + QUESTION about one
 move, the simulator's result message as the answer (empty think block), then Q-1 more questions about other moves
 of the same state, each a new user turn, each answer supervised (supervise = every_assistant; llm_finetune/
 rl_dataxp/conseq_format.py). Moves of a row: the policy's own moves at the state (up to 4), the 2 best legal moves by
@@ -27,6 +28,7 @@ import random
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from conseq_lib import consequence_user  # noqa: E402  (the prompt without the move request, owner order 11-27)
 from targets import FIXED_WEIGHT, FORMATS, question, render  # noqa: E402
 
 TRAIN_FAMILIES = ["engibench", "grid2op", "photonics", "circuit2", "frame3d2", "grid2", "seir2", "traffic2"]
@@ -90,7 +92,7 @@ def answer(fmt: str, st: dict, m: dict) -> dict:
 
 def conseq_row(st: dict, moves: list, fmt: str = "verbatim") -> dict:
     msgs = [{"role": "system", "content": st["system"]},
-            {"role": "user", "content": st["user"] + question(fmt, moves[0]["move"], True)},
+            {"role": "user", "content": consequence_user(st["user"]) + question(fmt, moves[0]["move"], True)},
             answer(fmt, st, moves[0])]
     for m in moves[1:]:
         msgs.append({"role": "user", "content": question(fmt, m["move"], False)})
@@ -102,7 +104,7 @@ def conseq_row(st: dict, moves: list, fmt: str = "verbatim") -> dict:
 
 
 def est_tokens(st: dict, moves: list) -> int:
-    n = len(st["system"]) + len(st["user"]) + len(question("verbatim", "", True))
+    n = len(st["system"]) + len(consequence_user(st["user"])) + len(question("verbatim", "", True))
     n += sum(len(m["result"]) + len(question("verbatim", m["move"], False)) + 40 for m in moves)
     return int(n / CHARS_PER_TOKEN)
 
