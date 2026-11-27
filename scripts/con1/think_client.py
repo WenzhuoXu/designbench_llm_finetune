@@ -12,11 +12,16 @@ Prompt: con1's skill_client.messages_for(q, j, False, 'facetm') -> conseq_format
      inside the think block).
   2. answer: the prompt + think.strip() + '\\n</think>\\n\\n' (the trained answer layout; a think block cut by the
      budget, or ended by <|im_end|>, is closed the same way), up to --answer-tokens, stop at <|im_end|>.
-One line per question in the usual preds schema (sid, variant, predictor, pass='zero', qi, target, move, text = the
-answer after </think>, finish) plus think (raw text), think_tokens, think_end, answer_tokens, prompt_tokens.
-Resumable by (sid, qi).
+One line per question in the usual preds schema (sid, variant, group, predictor, pass='zero', qi, target, move, text =
+the answer after </think>, finish) plus think (raw text), think_tokens, think_end, answer_tokens, prompt_tokens.
+Resumable by (sid, qi): each line is written and flushed as soon as its question is done.
+Which questions (11-27 generalisation for the all-family base run): --groups / --variants / --verbs (default: all),
+--subset FILE (lines 'sid<TAB>qi': only those). --base-url takes several servers; a state's questions stay on one
+(hash of the sid), as con1's skill_client does. CON1_DIR: where con1's skill_client.py / dirlayer.py are (default this
+file's directory if it holds them, else drc's con1 repo).
 """
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -25,12 +30,13 @@ import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-CON1 = "/storage/wxu/con1/repo/scripts/con1"
+HERE = os.path.dirname(os.path.abspath(__file__))
+CON1 = os.environ.get("CON1_DIR") or (HERE if os.path.exists(os.path.join(HERE, "skill_client.py"))
+                                      else "/storage/wxu/con1/repo/scripts/con1")
 sys.path.insert(0, CON1)
 import skill_client as SC  # noqa: E402  (con1's client: messages_for, prompt_ids; read only)
 import dirlayer as DL  # noqa: E402
 
-VERBS = ("PLACE_BLOCK", "MOVE_SINK")
 LOCK = threading.Lock()
 
 
@@ -58,7 +64,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--queries", required=True)
     ap.add_argument("--tokenizer", required=True)
-    ap.add_argument("--base-url", required=True)
+    ap.add_argument("--base-url", nargs="+", required=True)
     ap.add_argument("--model", required=True)
     ap.add_argument("--label", required=True)
     ap.add_argument("--out", required=True)
@@ -66,7 +72,10 @@ def main(argv=None):
     ap.add_argument("--min-think", type=int, default=0)
     ap.add_argument("--answer-tokens", type=int, default=1024)
     ap.add_argument("--workers", type=int, default=48)
-    ap.add_argument("--verbs", nargs="+", default=list(VERBS))
+    ap.add_argument("--verbs", nargs="+", default=None)
+    ap.add_argument("--groups", nargs="+", default=None)
+    ap.add_argument("--variants", nargs="+", default=None)
+    ap.add_argument("--subset", default=None)
     a = ap.parse_args(argv)
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(a.tokenizer)
@@ -75,7 +84,10 @@ def main(argv=None):
     assert tok.encode("</think>", add_special_tokens=False) == [THINK_END], "'</think>' is not one token"
     ban = {str(t): -100 for t in (IM_END, THINK_END, EOT)}
     qs = [json.loads(l) for l in open(a.queries, encoding="utf-8")]
-    qs = [q for q in qs if q["group"] == "heldout_family" and q["variant"] == "thermal2"]
+    qs = [q for q in qs if (a.groups is None or q["group"] in a.groups) and (a.variants is None or q["variant"] in a.variants)]
+    sub = None
+    if a.subset:
+        sub = {(l.split("\t")[0], int(l.split("\t")[1])) for l in open(a.subset, encoding="utf-8") if l.strip()}
     done = set()
     if os.path.exists(a.out):
         for l in open(a.out, encoding="utf-8"):
@@ -85,30 +97,33 @@ def main(argv=None):
                     done.add((r["sid"], r["qi"]))
             except ValueError:
                 pass
-    jobs = [(q, j) for q in qs for j, m in enumerate(q["moves"]) if DL.verb_of(m) in a.verbs and (q["sid"], j) not in done]
+    jobs = [(q, j) for q in qs for j, m in enumerate(q["moves"])
+            if (a.verbs is None or DL.verb_of(m) in a.verbs) and (sub is None or (q["sid"], j) in sub)
+            and (q["sid"], j) not in done]
     print("%s: %d questions (%d done), budget %d, min think %d" % (a.label, len(jobs), len(done), a.budget, a.min_think),
           flush=True)
 
     def one(job):
         q, j = job
         ids = SC.prompt_ids(tok, SC.messages_for(q, j, False, "facetm"))
-        rec = {"sid": q["sid"], "variant": q["variant"], "predictor": a.label, "pass": "zero", "qi": j, "target": "facetm",
-               "move": q["moves"][j]["move"], "prompt_tokens": len(ids)}
+        url = a.base_url[int(hashlib.sha1(q["sid"].encode()).hexdigest()[:8], 16) % len(a.base_url)]
+        rec = {"sid": q["sid"], "variant": q["variant"], "group": q["group"], "predictor": a.label, "pass": "zero", "qi": j,
+               "target": "facetm", "move": q["moves"][j]["move"], "prompt_tokens": len(ids)}
         try:
             think, n, end = "", 0, None
             if a.min_think > 0:
-                t, fin, sr, k = call(a.base_url, a.model, ids, a.min_think, [], ban)
+                t, fin, sr, k = call(url, a.model, ids, a.min_think, [], ban)
                 think, n = t, k
             if n < a.budget:
                 cur = ids + tok.encode(think, add_special_tokens=False) if think else ids
-                t, fin, sr, k = call(a.base_url, a.model, cur, a.budget - n, [IM_END, THINK_END])
+                t, fin, sr, k = call(url, a.model, cur, a.budget - n, [IM_END, THINK_END])
                 think, n = think + t, n + k
                 end = "budget" if fin == "length" else "closed" if sr == THINK_END else "im_end" if sr == IM_END else str(sr)
             else:
                 end = "budget"
             think = think.replace("</think>", "").replace("<|im_end|>", "")
             aids = ids + tok.encode(think.strip() + "\n</think>\n\n", add_special_tokens=False)
-            ans, fin, sr, k = call(a.base_url, a.model, aids, a.answer_tokens, [IM_END])
+            ans, fin, sr, k = call(url, a.model, aids, a.answer_tokens, [IM_END])
             rec.update(text=ans.replace("<|im_end|>", "").strip(), finish=fin, think=think, think_tokens=n,
                        think_end=end, answer_tokens=k)
         except RuntimeError as e:
@@ -116,6 +131,9 @@ def main(argv=None):
         return rec
 
     t0, n = time.time(), 0
+    if os.path.exists(a.out) and os.path.getsize(a.out) and open(a.out, "rb").read()[-1:] != b"\n":
+        with open(a.out, "a", encoding="utf-8") as fo:      # a line torn by a kill: start the next on its own line
+            fo.write("\n")
     with open(a.out, "a", encoding="utf-8") as fo, ThreadPoolExecutor(a.workers) as ex:
         for fu in as_completed([ex.submit(one, jb) for jb in jobs]):
             with LOCK:

@@ -48,7 +48,7 @@ for arm in $ARMS; do
   left=$(( STOP_AT - $(date +%s) ))
   [ $left -gt 60 ] || { echo "=== $(date '+%F %T') $L not run: past the stop time"; continue; }
   timeout $left $PY $D/think_client.py --queries $QUERIES --tokenizer $MODEL --base-url "http://127.0.0.1:$PORT/v1" \
-    --model $M --label $L --min-think $K --budget ${B:-1000} --answer-tokens 1024 --workers 48 --verbs $VERBS --out $D/preds_$L.jsonl \
+    --model $M --label $L --min-think $K --budget ${B:-1000} --answer-tokens 1024 --workers 48 --verbs $VERBS --groups heldout_family --variants thermal2 --out $D/preds_$L.jsonl \
     > "$D/logs/client_$L.log" 2>&1
   echo "=== $(date '+%F %T') $L rc=$?: $(tail -1 "$D/logs/client_$L.log")"
 done
