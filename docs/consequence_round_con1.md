@@ -622,3 +622,53 @@ data prep 175934 (2,000 states per family, off-menu moves, rows in every format,
 - Stage 1 was restarted on all 15,857 rows (PER_FAMILY 2000, ~248 steps): job 176033, run dir main/run3. 175979 (1,000 per family) and 176020 (rows without off-menu) were cancelled.
 - Second row set `train_facet_b`: the same states with 12 other moves each (--exclude-rows, --move-seed 1). It has 15,153 rows; 723 photonics states have fewer than 6 moves left and are dropped. It holds no off-menu moves: set A already used the 2 per state. Use: continue stage 1 on it if the per-family numbers after this run show the native families short of data.
 - facetm arm on drc GPU 4: round-1 scale, 47 × 16 rows, the same states and moves as F and M (rows converted from F's; only the margins differ), scored next to F, M and the trees. Activations stay on the GPU: the 11-25 host-RAM kill came from pinned activation offload, not from loading. My choice over a full-scale 1-GPU run (~40 h): a direct test against F's 0.601 / M's 0.673 regime within hours. It waits for another session's vLLM to free the GPU.
+
+## 12. Direction control layer (11-27, written before any number from it)
+
+A standing layer next to the facets: scripts/con1/dirlayer.py, CPU only, re-run per answer file. It follows the 20-agent test review (main checkout `analysis/con1_review_20261126/test_design/`). It reuses the review's scripts: c1_pilot.py's cell balance, f5_rulepred.py's rules, d3_reader.py's thermal2 reader and d5_regime.py's margin predictor.
+
+**Items.** Applied moves (truth), lines on response metrics with truth up or down:
+- Response metrics: c1_pilot's live set (bookkeeping metrics, inventory2 order_cost / expedite_cost and never-moving metrics dropped).
+- Further dropped:
+  - thermal2 hotspot_node (a node index);
+  - grid2op served_load_mw, energy_cost and operating_cost (each move is a 5-minute step; the load step is not in the observation).
+- inventory2: before and after use different demand seeds. A line is kept only if its relative change exceeds that metric's no-op noise: the 90th percentile of |relative change| over the no-op moves (new value = current value) in test_states.jsonl.gz. The count kept is reported.
+- Effect floor: main items change by ≥ 1% relative; sub-floor lines are reported apart.
+- molopt is reported as two rows: {logp, tpsa} and {oracle_score, qed, sa_score}.
+
+**Headline score.**
+- c1_pilot's cell balance: inside each family × verb × sign × metric cell, truth-up and truth-down lines get equal weight, w = min(n_up, n_down).
+- Score = Σ w (acc_up + acc_down)/2 / Σ w.
+- Three columns per predictor:
+  - (a) non-answers counted wrong;
+  - (b) the weighted share of lines given a direction;
+  - (c) the same balance among lines given a direction.
+- Unreadable answers are counted on their own (and are non-answers in (a)).
+
+**Comparators (no physics), on the same items.** Each is a full predictor: where one has no value, it backs off to the verb+sign rule.
+1. State-blind rule on verb + sign. Fitted leave-one-problem-out on every simulated move of the test states, as in f5_rulepred.py.
+2. The same rule plus the element index.
+3. The same rule plus the categorical argument (molopt fragment / element name, grid2op element type).
+4. Printed-number readers:
+   - thermal2: d3_reader.reader, the observation's printed rule on its printed numbers;
+   - photonics: the sign of the printed sensitivity map's first-order estimate on target_loss (obs_features adj_gain; positive gain = lowers target_loss, as the observation's own wording says).
+   - inventory2: its "S +/-1 sd" lines give service and holding directions equal to the sign of the S change, which is comparator 1 itself on those metrics, so no separate reader.
+5. grid2op: the DO_NOTHING copier, which predicts every move's directions as DO_NOTHING's at the same state (test_states).
+6. Sequential pass: the same-type copier, which copies the most recent earlier shown move of the same verb + sign.
+
+**Reading.**
+- Per family: model (a) minus the best comparator's (a) on the same items. The best is chosen on the point estimate.
+- The se of the difference is a paired bootstrap over problems (1,000 draws; both scores recomputed on each draw).
+- Zero-shot and sequential are scored separately. The sequential pass is scored on positions ≥ 1, next to the model's own zero-shot answers on the same lines.
+
+**Regime.**
+- Applied moves, truth feasible vs infeasible after the move, cell-balanced within verb + sign cells that hold both.
+- Reported only as model minus a margin reader that ignores the move: d5_regime's score, minus the summed relative shortfall of the currently violated constraints, with a threshold fitted leave-one-problem-out.
+
+**pref1.** Its zero-shot answers are mostly unreadable, so it is compared on the sequential pass, or on lines both models give a direction.
+
+**Can / cannot show state-dependent prediction** (my thresholds, set now). A family's current questions can show it only if, after cleaning:
+- the main items hold ≥ 50 balanced pairs;
+- the best comparator's (a) is ≤ 0.80, leaving room above it;
+- for grid2op, fewer than 80% of the kept lines share DO_NOTHING's direction.
+Otherwise: "cannot", with the failing condition named.
