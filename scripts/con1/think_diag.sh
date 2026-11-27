@@ -5,6 +5,8 @@
 #   T-base       Qwen3.8-27B, no adapter, thinks as it likes up to the budget
 #   T-s1         the stage-1 final adapter (arm/run_c2m_stage1_final/final), same
 #   T-s1-min256  the stage-1 final adapter with '</think>' / end-of-turn banned for its first 256 think tokens
+# ARMS="label:model:min_think[:budget] ..." (budget default 1000); e.g. ARMS="T-base-4k:base:0:4000" (the base model
+# ran into the 1,000-token budget on ~97% of questions)
 # GPU 4 under arm/gpu4.lock as con1's drc_arm.sh (the per-link eval waits on the same lock); every client stops by
 # STOP_AT (default 14:45) so GPU 4 is free for the 15:10 link eval; resumable. Then think_score.py and the parent's
 # review_tmp/ea/ea2.py per arm. Outputs: full_eval/think_diag/
@@ -41,18 +43,18 @@ until curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null 2>&1; do
 done
 echo "=== $(date '+%F %T') server ready"
 for arm in $ARMS; do
-  IFS=: read -r L M K <<< "$arm"
+  IFS=: read -r L M K B <<< "$arm"
   left=$(( STOP_AT - $(date +%s) ))
   [ $left -gt 60 ] || { echo "=== $(date '+%F %T') $L not run: past the stop time"; continue; }
   timeout $left $PY $D/think_client.py --queries $QUERIES --tokenizer $MODEL --base-url "http://127.0.0.1:$PORT/v1" \
-    --model $M --label $L --min-think $K --budget 1000 --answer-tokens 1024 --workers 48 --out $D/preds_$L.jsonl \
+    --model $M --label $L --min-think $K --budget ${B:-1000} --answer-tokens 1024 --workers 48 --out $D/preds_$L.jsonl \
     > "$D/logs/client_$L.log" 2>&1
   echo "=== $(date '+%F %T') $L rc=$?: $(tail -1 "$D/logs/client_$L.log")"
 done
 kill -TERM -- -$SP 2>/dev/null; sleep 15
 flock -u 9; echo "=== $(date '+%F %T') GPU work done, lock released"
 for arm in $ARMS; do
-  IFS=: read -r L M K <<< "$arm"
+  IFS=: read -r L M K B <<< "$arm"
   [ -s $D/preds_$L.jsonl ] || continue
   CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 /opt/anaconda3/bin/python $D/think_score.py $D/preds_$L.jsonl > $D/score_$L.txt 2>&1
   CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 /opt/anaconda3/bin/python $C/review_tmp/ea/ea2.py $D/preds_$L.jsonl zero > $D/ea2_$L.txt 2>&1
