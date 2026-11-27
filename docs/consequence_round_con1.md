@@ -344,6 +344,32 @@ Held-out problems, 5 families, zero-shot:
 - In circuit2, frame3d2 and engibench, copying is far below the model, and the sequential gain comes on top of zero-shot physics.
 - Caveat: only these two simple controls were run. A smarter copier, for example one keyed on the same element, is not controlled (not measured).
 
+**facetc arm (11-26 21:53, drc GPU 4): the chain through the design's own elements.** facetm plus two blocks before MARGINS AFTER:
+- LOCAL: the moved element's internal-state quantities.
+- REDISTRIBUTION: the 6 other elements whose state changes most in relative terms, then a bound on the rest.
+Both use the same 1-2-5 bins.
+
+Truth:
+- Comes from the simulator only (chain_truth.py). The state is rebuilt with the harness's bookkeeping, the move is applied, and the child observation is rendered with observation_native as the next turn shows it. Per-element values are parsed from the printed observation (targets.parse_elements):
+  - frame3d2: member N;
+  - grid2op: line rho, plus generator p and storage for LOCAL;
+  - circuit2: each device's RESULTS quantities.
+- Noise floors: grid2op rho 1e-4, frame3d2 1e-3 kN.
+
+Build counts:
+- 630 states rebuilt with 0 errors: 450 training, 180 test.
+- Refusals match the stored ones: 812 / 812.
+- Re-simulated check results equal the stored messages in 354 / 360 cases. The 6 misses are frame3d2 float noise.
+- Per-element values are identical in every training state. 5 test grid2op states differ by about 1e-14 on zero-flow lines, under the floor.
+- Rows: the 750 rows of F / Fm. The 450 rows of the three chain families are converted; engibench and photonics stay facetm. They were skipped because engibench relabels its components after every change (no stable element identity), and photonics prints no per-element internal state beyond the pixel grid.
+- 4,561 answers carry the chain (every applied answer of the three families). LOCAL is none in 814 (joint and substation moves), and in 1,018 no other element changes.
+- The chain adds 186 characters (~55 tokens) per chain answer, for 669 vs 569 characters per answer over all rows.
+
+Settings and scoring plan:
+- The same settings as Fm (47 × 16 rows, lr 1e-4, from pref1, drc).
+- The think-closing piece keeps weight 1, as in Fm. Weight 0 from pref1 would let the arm reason at length at eval, a second factor in a one-factor A/B (my choice).
+- Scored on the same held-out-problem questions: facets per family vs Fm, plus the link itself (chain_score.py). The link scores are LOCAL and REDISTRIBUTION direction BA, and the hit rate of the true top-3 elements against no change, nearest and random.
+
 ## 11. Addendum 2026-11-25, 14:45 — the owner's consolidated goal (before any con1 result)
 
 Relayed by the parent session. This merges and supersedes the earlier owner messages; where it differs from
