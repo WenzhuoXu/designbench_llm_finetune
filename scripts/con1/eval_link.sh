@@ -52,6 +52,19 @@ grep "server ready\|SKILL_CLIENT_DONE\|ABORT\|DRC_ARM_DONE" "$H/arm_$L.out" | ta
 [ -s "$H/facets_${LAB}_seq_vs_zero.txt" ] || OUTDIR="$H" bash "$E/hf_score.sh" "$LAB" > "$H/hf_score_$L.out" 2>&1
 [ -s "$H/report_$LAB.txt" ] || bash "$E/hf_report.sh" "$LAB" > /dev/null 2>&1   # per family, each with its own se
 cat "$H/report_$LAB.txt" 2>/dev/null
+# the parent session's error-anatomy scripts (review_tmp/ea, read only; ea4.py through a copy with its preds path
+# replaced) on the unseen-family zero-shot answers; the two numbers asked for: PLACE_BLOCK agreement with the printed
+# rule (ea2) and thermal2 answers missing FEASIBLE AFTER (ea1)
+EA=$C/review_tmp/ea
+if [ -s "$H/preds_$LAB.jsonl" ] && [ ! -s "$H/ea_$LAB.txt" ]; then
+  { echo "## ea1"; CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 /opt/anaconda3/bin/python $EA/ea1.py "$H/preds_$LAB.jsonl" zero inventory2,molopt,thermal2
+    echo "## ea2"; CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 /opt/anaconda3/bin/python $EA/ea2.py "$H/preds_$LAB.jsonl" zero
+    echo "## ea4"; sed "s#/storage/wxu/con1/full_eval/hf/preds_c2m_stage1_final.jsonl#$H/preds_$LAB.jsonl#" $EA/ea4.py > "$H/ea4_$LAB.py" \
+      && CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 /opt/anaconda3/bin/python "$H/ea4_$LAB.py"
+  } > "$H/ea_$LAB.txt" 2>&1
+fi
+grep "^PLACE_BLOCK  .*_temp_rise" "$H/ea_$LAB.txt" 2>/dev/null
+awk '/=+ thermal2 zero/{on=1} on && /missing FEASIBLE AFTER/{print "thermal2 " $0; exit}' "$H/ea_$LAB.txt" 2>/dev/null
 line() {   # file label: the label's line of the primary group means
   awk -v lab="$2" '/group means over all \(primary\)/{on=1; next} on && NF > 2 && $2 != "select" {exit} on && $1==lab {print; exit}' "$1"
 }
