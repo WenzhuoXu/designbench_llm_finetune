@@ -749,5 +749,11 @@ replies; it is also the stage-2 collapse cause recorded 11-26.
   reply", "60-150 words", "Make exactly one change" or "Propose a different move"; every line of the old operations
   section (every signature) is in the new prompt in order; a line diff of old vs new removes only the request lines and
   the refusal line and inserts only `OPERATIONS`; all other fields identical. queries_v3: 638 prompts, 11 families,
-  0 failures (refusal line removed in 11 grid2op and 1 photonics prompts). State files: see the check job's report
-  (Orchard `con1/noconf/check_*.txt`).
+  0 failures (refusal line removed in 11 grid2op and 1 photonics prompts). Every state file the main, 2M and
+  test-set builders read (main/states_native_offmenu, full/states_native_offmenu_rest, gen/out/states_native_orch,
+  gen/out/states_scripted, data/states_native, data/states_native_drc_snap, data/test_states{,_offmenu,_offmenu2}):
+  43,960 prompts, 0 failures, no mark left (Orchard job 176408; reports `con1/noconf/check_*.{txt,json}`).
+  All files together, per family (prompts / signature lines kept / refusal lines cut): circuit2 3,534 / 38,874 / 0;
+  engibench 4,522 / 31,654 / 59; frame3d2 3,683 / 18,415 / 0; grid2 3,189 / 19,134 / 0; grid2op 8,077 / 72,693 /
+  3,144; inventory2 175 / 1,050 / 0; molopt 251 / 1,506 / 0; photonics 14,825 / 103,775 / 140; seir2 3,266 / 26,128 /
+  0; thermal2 178 / 890 / 0; traffic2 2,898 / 14,490 / 0.
