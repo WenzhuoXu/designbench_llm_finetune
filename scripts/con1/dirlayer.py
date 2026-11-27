@@ -70,9 +70,9 @@ def group_of(v, k):
     return v
 
 
-def load_preds(path, qs):
+def load_preds(paths, qs):
     d = {"zero": {}, "seq": {}}
-    for line in opener(path):
+    for line in (ln for p in paths.split(",") for ln in opener(p)):
         try:
             r = json.loads(line)
         except ValueError:
