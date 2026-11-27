@@ -328,7 +328,13 @@ class _OffloadedCheckpoint:
 
     @staticmethod
     def make():
+        import os
         import torch
+        # DATAXP_OFFLOAD_PAGEABLE=1: plain (pageable) host memory instead of pinned. The pinned caching
+        # allocator rounds every block up to a power of two and keeps it cached (a 27k-token row's 278 MB
+        # layer input holds 512 MB, ~32 GB over 64 layers); pageable memory is the exact size and goes back
+        # to the OS after the backward. Slower copies; for hosts with little RAM (drc, 93 GB shared).
+        pin = os.environ.get("DATAXP_OFFLOAD_PAGEABLE") != "1"
 
         class Fn(torch.autograd.Function):
             @staticmethod
@@ -336,8 +342,8 @@ class _OffloadedCheckpoint:
                 ctx.run_fn = run_fn
                 ctx.device = hidden.device
                 cpu = torch.empty(hidden.shape, dtype=hidden.dtype, device="cpu",
-                                  pin_memory=hidden.is_cuda)
-                cpu.copy_(hidden.detach(), non_blocking=hidden.is_cuda)
+                                  pin_memory=pin and hidden.is_cuda)
+                cpu.copy_(hidden.detach(), non_blocking=pin and hidden.is_cuda)
                 ctx.cpu = cpu
                 with torch.no_grad():
                     out = run_fn(hidden)
@@ -347,7 +353,7 @@ class _OffloadedCheckpoint:
 
             @staticmethod
             def backward(ctx, grad_out):
-                h = ctx.cpu.to(ctx.device, non_blocking=True).detach().requires_grad_(True)
+                h = ctx.cpu.to(ctx.device, non_blocking=pin).detach().requires_grad_(True)
                 ctx.cpu = None
                 with torch.enable_grad():
                     out = ctx.run_fn(h)

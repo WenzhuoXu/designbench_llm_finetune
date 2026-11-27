@@ -43,6 +43,47 @@ QUESTION = ("\n\nQUESTION (no move is made now): if the move {move} were played 
 FOLLOW_UP = ("QUESTION (no move is made now): if the move {move} were played at the current design, what would the "
              "simulator return? Answer with the simulator's result message exactly as a check of that move returns it.")
 
+# The consequence prompt (owner order 11-27): the served user text without the move request. The harness's observation
+# ends with a YOUR MOVE section (heading, a request for one change with a 60-150-word rationale and an <action> line,
+# then the operations list) and, after a refused move, a refusal note closing with a request for another move. Both
+# requests conflict with the QUESTION (no move is made now). consequence_user cuts exactly those sentences and puts
+# the operations list under a neutral OPERATIONS heading; every other byte of the served text is kept.
+# State.prompt() still returns the served text (verify_replay compares it with the harness byte for byte).
+MOVE_REQUEST = ("YOUR MOVE\n"
+                "Make exactly one change: apply one of this problem's operations, with its arguments, to the current "
+                "design. First reason, in 60-150 words and in any order: which constraints are violated and by how "
+                "much, what the results above say about where the problem is, and why this change; close by naming the "
+                "change and what it is aimed at. Use only what is shown above.\n"
+                "Then end your reply with exactly this one line:\n"
+                "<action>VERB(arg, ...)</action>\n"
+                "VERB is one of the operations listed below, written exactly as listed, with every argument in the "
+                "listed order and of the listed type: integers as bare integers, numbers as plain numbers with no "
+                "units, names exactly as the problem writes them.\n")
+OPS_HEADING = "OPERATIONS\n"
+REFUSAL_REQUEST = "\nPropose a different move.\n"           # the last line of the harness's reject_note
+REFUSAL_HEAD = "REFUSED MOVES (the simulator did not apply them; the design is unchanged since):\n"
+MOVE_REQUEST_MARKS = ("YOUR MOVE", "<action>", "end your reply", "60-150 words", "Make exactly one change",
+                      "Propose a different move")
+
+
+def consequence_user(user: str) -> str:
+    """The served user text with the move request removed (see MOVE_REQUEST). Raises ValueError when the text does not
+    carry exactly one YOUR MOVE section in the harness's wording, or when a move-request mark survives the cut."""
+    if user.count(MOVE_REQUEST) != 1 or user.count("YOUR MOVE") != 1:
+        raise ValueError("consequence_user: %d move requests in the harness's wording, %d 'YOUR MOVE'"
+                         % (user.count(MOVE_REQUEST), user.count("YOUR MOVE")))
+    u = user.replace(MOVE_REQUEST, OPS_HEADING)
+    n_ref = u.count(REFUSAL_REQUEST)
+    if n_ref:
+        if n_ref != 1 or u.count(REFUSAL_HEAD) != 1 or not u.endswith(REFUSAL_REQUEST) \
+                or u.find(REFUSAL_HEAD) > len(u) - len(REFUSAL_REQUEST):
+            raise ValueError("consequence_user: refusal request not where reject_note puts it (%d)" % n_ref)
+        u = u[:-len(REFUSAL_REQUEST)] + "\n"
+    left = [m for m in MOVE_REQUEST_MARKS if m in u]
+    if left:
+        raise ValueError("consequence_user: move-request text left: %s" % left)
+    return u
+
 
 def load_harness(path: str):
     """Import the v3rc harness file as a module (an assemble_dataxp_sft.py must sit next to it)."""

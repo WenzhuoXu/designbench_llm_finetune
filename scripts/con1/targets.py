@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 import re
 
-FORMATS = ("verbatim", "masked", "facet", "delta", "absolute", "facetm")
+FORMATS = ("verbatim", "masked", "facet", "delta", "absolute", "facetm", "facetc")
 NL = chr(10)
 FIXED_WEIGHT = 0.05
 _EDGES = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]
@@ -76,10 +76,208 @@ FORMAT_TEXT["facetm"] = (
     "<constraints violated after the move, or none>', then 'CHANGES:' and one line per metric: the metric, its "
     "direction (up, down or same) and the size of the change relative to its current value as one of "
     + ", ".join(BIN_NAMES) + " (or 'from 0' when the current value is 0).")
+# facetc (11-26): facetm plus the move's chain through the design's own elements, before MARGINS AFTER: LOCAL = the
+# moved element's internal-state quantities, REDISTRIBUTION = the CHAIN_K other elements whose state changes most
+# (relative), then a line bounding the rest. Families with per-element state printed in the observation only; the
+# others keep facetm (fmt_for).
+CHAIN_FAMILIES = ("frame3d2", "grid2op", "circuit2")
+CHAIN_K = 6
+CHAIN_QTY = {"frame3d2": "member axial force N (kN, + tension)", "grid2op": "line loading rho",
+             "circuit2": "the quantities of each element's RESULTS line"}
+FORMAT_TEXT["facetc"] = (
+    "Answer in this form: either 'VERDICT: refused' and 'REASON: <the simulator's reason>', or 'VERDICT: applied', then "
+    "'LOCAL:' and one line per internal-state quantity of the moved element (the element, the quantity, its direction "
+    "up, down or same and the size of its change relative to its current value as one of " + ", ".join(BIN_NAMES) +
+    "; 'LOCAL: none' when the move sets no element with its own state), then 'REDISTRIBUTION:' and one line for each of "
+    "the %d other elements whose state changes most in relative terms (the element, the quantity, direction and size "
+    "as above, largest first), closed by 'all other elements: change at most <size>' (or 'all other elements: same'), "
+    "then 'MARGINS AFTER:' and one line per constrained metric: the metric, whether it satisfies its limit after the "
+    "move (satisfied, violated or at limit) and the size of its distance to the limit relative to the limit (or 'limit "
+    "0' when the limit is 0), then 'FEASIBLE AFTER: yes|no', 'VIOLATED AFTER: <constraints violated after the move, or "
+    "none>', then 'CHANGES:' and one line per metric: the metric, its direction (up, down or same) and the size of the "
+    "change relative to its current value (or 'from 0' when the current value is 0)." % CHAIN_K)
+
+
+def fmt_for(fmt: str, variant: str) -> str:
+    """The format a family is asked and trained in: facetc falls back to facetm outside CHAIN_FAMILIES."""
+    return "facetm" if fmt == "facetc" and variant not in CHAIN_FAMILIES else fmt
 
 
 def question(fmt: str, move: str, first: bool) -> str:
     return (QUESTION_HEAD if first else FOLLOW_HEAD).format(move=move) + FORMAT_TEXT[fmt]
+
+
+# ---- per-element internal state (facetc): parsed from the observation text the harness renders ---------------------
+_NUM = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
+
+
+def parse_elements(variant: str, text: str) -> dict:
+    """{element label: {quantity: value}} as the observation prints them (frame3d2: installed members' N; grid2op:
+    lines' rho (0 when out), generators' p, storage power; circuit2: every key=value of each element's RESULTS
+    line)."""
+    out = {}
+    if variant == "frame3d2":
+        i = text.find("Installed members by place")
+        j = text.find("Optional members", i)
+        for line in text[i:j if j > i else len(text)].splitlines():
+            m = re.match(r"^(m\d+) \d+-\d+ [^|]*\|[^|]*\|\s*(%s)" % _NUM, line)
+            if m:
+                out[m.group(1)] = {"N": float(m.group(2))}
+    elif variant == "grid2op":
+        for m in re.finditer(r"(?m)^  line (\d+): sub \d+ - sub \d+, (?:rho (%s)|OUT)" % _NUM, text):
+            out["line %s" % m.group(1)] = {"rho": float(m.group(2)) if m.group(2) else 0.0}
+        for m in re.finditer(r"(?m)^  (gen\d+) \w+ sub \d+: p (%s) MW" % _NUM, text):
+            out[m.group(1)] = {"p": float(m.group(2))}
+        for m in re.finditer(r"(?m)^(?:Storage units: |; )?(stor\d+) sub \d+: charge (%s) of [^,]*, power (%s) MW" % (_NUM, _NUM),
+                             text.replace("; stor", "\nstor")):
+            out[m.group(1)] = {"charge": float(m.group(2)), "power": float(m.group(3))}
+    elif variant == "circuit2":
+        i = text.find("RESULTS (")
+        for line in text[i:].splitlines()[1:]:
+            m = re.match(r"^  (\d) (\w+): (.*)$", line)
+            if not m:
+                if line.strip().startswith(("Other schemes", "Frequency response", "Sensitivity", "Headroom")):
+                    break
+                continue
+            q = {}
+            for k, v in re.findall(r"(?:(?<=^)|(?<=[\s,(]))([A-Za-z][\w()*/]*)\s*=\s*(%s)" % _NUM, m.group(3)):
+                if k.count("(") == k.count(")"):            # 'Cc)' from 'gm1/(2 pi Cc)=...' is a formula tail
+                    q.setdefault(k, float(v))
+            out["%s %s" % (m.group(1), m.group(2))] = q
+    return out
+
+
+def moved_elements(variant: str, move: str, labels) -> list:
+    """Labels of the elements a move sets (LOCAL); [] when it sets none with its own printed state."""
+    m = re.match(r"\s*(\w+)\((.*)\)\s*$", move)
+    if not m:
+        return []
+    verb, args = m.group(1), [a.strip() for a in re.split(r",(?![^\[]*\])", m.group(2))]
+    ints = [int(a) for a in args if re.fullmatch(r"\d+", a)]
+    want = []
+    if variant == "frame3d2" and verb in ("SET_RADIUS", "SET_MATERIAL", "INSTALL_MEMBER", "REMOVE_MEMBER") and ints:
+        want = ["m%d" % ints[0]]
+    elif variant == "grid2op":
+        if "LINE" in verb and ints:
+            want = ["line %d" % ints[0]]
+        elif verb == "REDISPATCH" and len(ints) >= 2:
+            want = ["gen%d" % ints[0], "gen%d" % ints[1]]
+        elif ("STORAGE" in verb or verb.startswith("STOR")) and ints:
+            want = ["stor%d" % ints[0]]
+        elif "CURTAIL" in verb and ints:
+            want = ["gen%d" % ints[0]]
+    elif variant == "circuit2" and ints:
+        want = [lab for lab in labels if lab.split(" ", 1)[0] == str(ints[0])]
+    return [w for w in want if w in labels]
+
+
+def _nat(label: str):
+    return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", label)]
+
+
+# absolute floors below which a per-element change is solver noise (zero-flow lines print rho ~1e-14 that varies
+# between runs); circuit2 relies on SAME_TOL
+CHAIN_FLOOR = {"grid2op": 1e-4, "frame3d2": 1e-3}
+
+
+def _rel(b: float, a: float, floor: float = 0.0) -> float:
+    if is_same(b, a) or abs(a - b) < floor:
+        return 0.0
+    return abs(a - b) / abs(b) if b != 0 else math.inf
+
+
+def _dir_bin(b: float, a: float, floor: float = 0.0):
+    if abs(a - b) < floor:
+        return "same", "same"
+    return direction(b, a), size_bin(b, a)
+
+
+def chain_block(variant: str, move: str, before: dict, after: dict, k: int = CHAIN_K) -> dict:
+    """The facetc chain of one applied move from the per-element state before and after (parse_elements):
+    {local: [(label, qty, dir, bin)], redis: [(label, qty, dir, bin, rel)], rest: bin or 'same', ranked: [(label, rel)]}.
+    Redistribution covers the other elements' main quantity (frame3d2 N, grid2op line rho, circuit2 per element the
+    quantity with the largest relative change)."""
+    labels = set(before) | set(after)
+    moved = moved_elements(variant, move, labels)
+    fl = CHAIN_FLOOR.get(variant, 0.0)
+    local = []
+    for lab in sorted(moved, key=_nat):
+        b0, a0 = before.get(lab, {}), after.get(lab, {})
+        for q in sorted(set(b0) | set(a0)):
+            if q not in a0:
+                local.append((lab, q, "removed", ""))
+            elif q not in b0:
+                local.append((lab, q, "added", ""))
+            else:
+                local.append((lab, q) + _dir_bin(b0[q], a0[q], fl))
+    cand = []
+    for lab in labels - set(moved):
+        if variant == "grid2op" and not lab.startswith("line"):
+            continue
+        b0, a0 = before.get(lab), after.get(lab)
+        if b0 is None or a0 is None:
+            continue
+        qs = ["N"] if variant == "frame3d2" else ["rho"] if variant == "grid2op" else sorted(set(b0) & set(a0))
+        best = None
+        for q in qs:
+            if q in b0 and q in a0:
+                r = _rel(b0[q], a0[q], fl)
+                if best is None or r > best[0]:
+                    best = (r, q)
+        if best is not None:
+            q = best[1]
+            cand.append((lab, q) + _dir_bin(b0[q], a0[q], fl) + (best[0],))
+    cand.sort(key=lambda x: (-x[4], _nat(x[0])))
+    top = [c for c in cand if c[4] > 0][:k]
+    rest = [c for c in cand[len(top):]]
+    rest_bin = "same"
+    if rest and rest[0][4] > 0:
+        rest_bin = rest[0][3]
+    return {"local": local, "redis": top, "rest": rest_bin, "ranked": [(c[0], c[1], c[2], c[4]) for c in cand]}
+
+
+def parse_chain(text: str) -> dict:
+    """The LOCAL and REDISTRIBUTION blocks of a facetc answer: {local: {(label, qty): dir}, redis: [(label, dir)]}."""
+    out = {"local": {}, "redis": []}
+    text = text or ""
+    i, j, k = text.find("LOCAL:"), text.find("REDISTRIBUTION"), text.find("MARGINS AFTER:")
+    if i < 0:
+        return out
+    loc = text[i:j if j > i else (k if k > i else len(text))]
+    for m in re.finditer(r"(?m)^  (.+?) (\S+) (up|down|same|removed|added)\b", loc):
+        out["local"][(m.group(1), m.group(2))] = m.group(3)
+    if j >= 0:
+        red = text[j:k if k > j else len(text)]
+        for m in re.finditer(r"(?m)^  (?!all other)(.+?) (\S+) (up|down|same)\b", red):
+            out["redis"].append((m.group(1), m.group(3)))
+    return out
+
+
+def chain_text(ch: dict):
+    """(lines, informative spans relative to the joined text) of the LOCAL and REDISTRIBUTION blocks."""
+    lines, spans, pos = [], [], 0
+
+    def add(fixed, info=""):
+        nonlocal pos
+        if info:
+            spans.append((pos + len(fixed), pos + len(fixed) + len(info)))
+        lines.append(fixed + info)
+        pos += len(fixed) + len(info) + 1
+
+    if ch["local"]:
+        add("LOCAL:")
+        for lab, q, dr, bn in ch["local"]:
+            add("  %s %s " % (lab, q), ("%s %s" % (dr, bn)).strip() if bn != "same" else "same")
+    else:
+        add("LOCAL: ", "none")
+    if ch["redis"]:
+        add("REDISTRIBUTION:")
+        for lab, q, dr, bn, _ in ch["redis"]:
+            add("  ", "%s %s %s" % (lab, q, ("%s %s" % (dr, bn)) if bn != "same" else "same"))
+        add("  all other elements: ", "same" if ch["rest"] == "same" else "change at most %s" % ch["rest"])
+    else:
+        add("REDISTRIBUTION: ", "no other element changes")
+    return lines, spans
 
 
 def is_same(before: float, after: float) -> bool:

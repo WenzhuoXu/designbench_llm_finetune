@@ -293,6 +293,85 @@ and has the better regime; whether margins carry that over to facet is untested 
 states (main/rows/train_facetm.jsonl, same states and order as facet). Trained as the next stage-1 variant if stage 1's
 regime_phys stays below M's 0.673.
 
+**facetm arm (11-26, drc GPU 4, round-1 scale: the same 750 rows, states and moves as F; only the margins differ).**
+Held-out problems, 5 families, zero-shot:
+
+| predictor | select | regime_phys | cpl_dir_BA | cpl_size |
+|---|---|---|---|---|
+| Fm facetm | **0.579** ±0.008 | **0.678** ±0.015 | **0.683** ±0.013 | 0.375 ±0.007 |
+| F facet | 0.554 ±0.008 | 0.601 ±0.014 | 0.668 ±0.014 | 0.393 ±0.008 |
+| M masked | 0.513 ±0.009 | 0.673 ±0.019 | 0.566 ±0.014 | 0.300 ±0.006 |
+| trees | 0.489 ±0.009 | 0.596 ±0.013 | 0.600 ±0.017 | 0.270 ±0.009 |
+
+- Fm − F: select +0.024 ±0.006, regime_phys +0.077 ±0.012, cpl_dir_BA +0.015 ±0.006. The margins close the regime gap to M (Fm − M regime +0.005 ±0.019) and keep facet's coupled-direction lead.
+- Fm − trees: regime_phys +0.082 ±0.013, cpl_dir_BA +0.083 ±0.010. That is more than 2 se on both at this scale, on 5 families; rule 1 itself is judged on the main run.
+- Without photonics: Fm select 0.633, regime 0.717, cpl_dir 0.767.
+- Per family, regime_phys (Fm / F / M / trees):
+  - circuit2 0.834 / 0.663 / 0.926 / 0.607
+  - engibench 0.702 / 0.595 / 0.747 / 0.659
+  - frame3d2 0.684 / 0.673 / 0.551 / 0.529
+  - grid2op 0.649 / 0.556 / 0.528 / 0.624
+  - photonics 0.522 / 0.520 / 0.612 / 0.562
+- Photonics stays the weak family: regime below the trees, feasibility recall 0, cpl_dir_BA 0.346, near the 0.333 chance level (trees 0.423).
+- Scoring ran on drc without the harness, because drc has no engibench env. The harness only serves the Φ verdict, now out of the rules. F, M and the trees reproduce Orchard's round-1 numbers exactly.
+- Training used flash-linear-attention 0.5.2 (checked against the reference kernel) and long-row activation offload to pageable host memory (`DATAXP_OFFLOAD_PAGEABLE=1`).
+
+**facetm k-shot pass (11-26).** The same adapter, the same held-out questions at positions ≥ 1. In the sequential pass the model has seen the true facetm answers for the earlier moves at the state.
+- Two controls predict the next outcome by copying what was shown, with no physics, at bin resolution like the model's context:
+  - copy_last: the last shown outcome;
+  - copy_mode: per facet, the most common shown value.
+  facets.py `--kshot-baselines`, `--min-qi 1`.
+
+| predictor | select | regime_phys | cpl_dir_BA | cpl_size |
+|---|---|---|---|---|
+| Fm sequential | **0.701** ±0.009 | **0.794** ±0.013 | **0.783** ±0.016 | **0.525** ±0.009 |
+| Fm zero-shot, same questions | 0.580 ±0.008 | 0.679 ±0.016 | 0.684 ±0.013 | 0.376 ±0.008 |
+| copy_last | 0.472 | 0.627 | 0.565 | 0.225 |
+| copy_mode | 0.477 | 0.621 | 0.567 | 0.245 |
+
+- Fm sequential − copy_last: select +0.229 ±0.008, regime_phys +0.168 ±0.016, cpl_dir_BA +0.218 ±0.008. The k-shot gain is not explained by copying the shown outcomes.
+- Per family, regime / cpl_dir_BA / cpl_size as zero → sequential (best copy):
+
+| family | regime | cpl_dir_BA | cpl_size |
+|---|---|---|---|
+| circuit2 | .838 → .906 (.579) | .946 → .964 (.486) | .771 → .836 (.114) |
+| engibench | .698 → .778 (.593) | .743 → .772 (.566) | .367 → .439 (.152) |
+| frame3d2 | .683 → .709 (.583) | .727 → .785 (.568) | .286 → .381 (.149) |
+| grid2op | .654 → .748 (.685) | .658 → .806 (.771) | .241 → .592 (.527) |
+| photonics | .522 → .831 (.728) | .344 → .589 (.538) | .216 → .377 (.281) |
+
+- In grid2op and photonics, outcomes repeat within a state: copying alone already beats zero-shot there. Most of their sequential gain is what copying gives, and the model adds 0.04–0.10 on top.
+- In circuit2, frame3d2 and engibench, copying is far below the model, and the sequential gain comes on top of zero-shot physics.
+- Caveat: only these two simple controls were run. A smarter copier, for example one keyed on the same element, is not controlled (not measured).
+
+**STOPPED 11-26 ~22:00, before its first training step (parent session):** its redistribution lines are family-specific templated facts, so they cannot speak to carrying physics to a different domain. The rows were deleted. The code stays: chain_truth.py, chain_score.py, chain_dep.py, facetm_to_facetc.py, and the facetc pieces of targets.py. The chain truth (`chain/chain_r1.jsonl`) is kept.
+
+**facetc arm (11-26 21:53, drc GPU 4): the chain through the design's own elements.** facetm plus two blocks before MARGINS AFTER:
+- LOCAL: the moved element's internal-state quantities.
+- REDISTRIBUTION: the 6 other elements whose state changes most in relative terms, then a bound on the rest.
+Both use the same 1-2-5 bins.
+
+Truth:
+- Comes from the simulator only (chain_truth.py). The state is rebuilt with the harness's bookkeeping, the move is applied, and the child observation is rendered with observation_native as the next turn shows it. Per-element values are parsed from the printed observation (targets.parse_elements):
+  - frame3d2: member N;
+  - grid2op: line rho, plus generator p and storage for LOCAL;
+  - circuit2: each device's RESULTS quantities.
+- Noise floors: grid2op rho 1e-4, frame3d2 1e-3 kN.
+
+Build counts:
+- 630 states rebuilt with 0 errors: 450 training, 180 test.
+- Refusals match the stored ones: 812 / 812.
+- Re-simulated check results equal the stored messages in 354 / 360 cases. The 6 misses are frame3d2 float noise.
+- Per-element values are identical in every training state. 5 test grid2op states differ by about 1e-14 on zero-flow lines, under the floor.
+- Rows: the 750 rows of F / Fm. The 450 rows of the three chain families are converted; engibench and photonics stay facetm. They were skipped because engibench relabels its components after every change (no stable element identity), and photonics prints no per-element internal state beyond the pixel grid.
+- 4,561 answers carry the chain (every applied answer of the three families). LOCAL is none in 814 (joint and substation moves), and in 1,018 no other element changes.
+- The chain adds 186 characters (~55 tokens) per chain answer, for 669 vs 569 characters per answer over all rows.
+
+Settings and scoring plan:
+- The same settings as Fm (47 × 16 rows, lr 1e-4, from pref1, drc).
+- The think-closing piece keeps weight 1, as in Fm. Weight 0 from pref1 would let the arm reason at length at eval, a second factor in a one-factor A/B (my choice).
+- Scored on the same held-out-problem questions: facets per family vs Fm, plus the link itself (chain_score.py). The link scores are LOCAL and REDISTRIBUTION direction BA, and the hit rate of the true top-3 elements against no change, nearest and random.
+
 ## 11. Addendum 2026-11-25, 14:45 — the owner's consolidated goal (before any con1 result)
 
 Relayed by the parent session. This merges and supersedes the earlier owner messages; where it differs from
@@ -543,3 +622,138 @@ data prep 175934 (2,000 states per family, off-menu moves, rows in every format,
 - Stage 1 was restarted on all 15,857 rows (PER_FAMILY 2000, ~248 steps): job 176033, run dir main/run3. 175979 (1,000 per family) and 176020 (rows without off-menu) were cancelled.
 - Second row set `train_facet_b`: the same states with 12 other moves each (--exclude-rows, --move-seed 1). It has 15,153 rows; 723 photonics states have fewer than 6 moves left and are dropped. It holds no off-menu moves: set A already used the 2 per state. Use: continue stage 1 on it if the per-family numbers after this run show the native families short of data.
 - facetm arm on drc GPU 4: round-1 scale, 47 × 16 rows, the same states and moves as F and M (rows converted from F's; only the margins differ), scored next to F, M and the trees. Activations stay on the GPU: the 11-25 host-RAM kill came from pinned activation offload, not from loading. My choice over a full-scale 1-GPU run (~40 h): a direct test against F's 0.601 / M's 0.673 regime within hours. It waits for another session's vLLM to free the GPU.
+
+## 12. Direction control layer (11-27, written before any number from it)
+
+A standing layer next to the facets: scripts/con1/dirlayer.py, CPU only, re-run per answer file. It follows the 20-agent test review (main checkout `analysis/con1_review_20261126/test_design/`). It reuses the review's scripts: c1_pilot.py's cell balance, f5_rulepred.py's rules, d3_reader.py's thermal2 reader and d5_regime.py's margin predictor.
+
+**Items.** Applied moves (truth), lines on response metrics with truth up or down:
+- Response metrics: c1_pilot's live set (bookkeeping metrics, inventory2 order_cost / expedite_cost and never-moving metrics dropped).
+- Further dropped:
+  - thermal2 hotspot_node (a node index);
+  - grid2op served_load_mw, energy_cost and operating_cost (each move is a 5-minute step; the load step is not in the observation).
+- inventory2: before and after use different demand seeds. A line is kept only if its relative change exceeds that metric's no-op noise: the 90th percentile of |relative change| over the no-op moves (new value = current value) in test_states.jsonl.gz. The count kept is reported.
+- Effect floor: main items change by ≥ 1% relative; sub-floor lines are reported apart.
+- molopt is reported as two rows: {logp, tpsa} and {oracle_score, qed, sa_score}.
+
+**Headline score.**
+- c1_pilot's cell balance: inside each family × verb × sign × metric cell, truth-up and truth-down lines get equal weight, w = min(n_up, n_down).
+- Score = Σ w (acc_up + acc_down)/2 / Σ w.
+- Three columns per predictor:
+  - (a) non-answers counted wrong;
+  - (b) the weighted share of lines given a direction;
+  - (c) the same balance among lines given a direction.
+- Unreadable answers are counted on their own (and are non-answers in (a)).
+
+**Comparators (no physics), on the same items.** Each is a full predictor: where one has no value, it backs off to the verb+sign rule.
+1. State-blind rule on verb + sign. Fitted leave-one-problem-out on every simulated move of the test states, as in f5_rulepred.py.
+2. The same rule plus the element index.
+3. The same rule plus the categorical argument (molopt fragment / element name, grid2op element type).
+4. Printed-number readers:
+   - thermal2: d3_reader.reader, the observation's printed rule on its printed numbers;
+   - photonics: the sign of the printed sensitivity map's first-order estimate on target_loss (obs_features adj_gain; positive gain = lowers target_loss, as the observation's own wording says).
+   - inventory2: its "S +/-1 sd" lines give service and holding directions equal to the sign of the S change, which is comparator 1 itself on those metrics, so no separate reader.
+5. grid2op: the DO_NOTHING copier, which predicts every move's directions as DO_NOTHING's at the same state (test_states).
+6. Sequential pass: the same-type copier, which copies the most recent earlier shown move of the same verb + sign.
+
+**Reading.**
+- Per family: model (a) minus the best comparator's (a) on the same items. The best is chosen on the point estimate.
+- The se of the difference is a paired bootstrap over problems (1,000 draws; both scores recomputed on each draw).
+- Zero-shot and sequential are scored separately. The sequential pass is scored on positions ≥ 1, next to the model's own zero-shot answers on the same lines.
+
+**Regime.**
+- Applied moves, truth feasible vs infeasible after the move, cell-balanced within verb + sign cells that hold both.
+- Reported only as model minus a margin reader that ignores the move: d5_regime's score, minus the summed relative shortfall of the currently violated constraints, with a threshold fitted leave-one-problem-out.
+
+**pref1.** Its zero-shot answers are mostly unreadable, so it is compared on the sequential pass, or on lines both models give a direction.
+
+**Can / cannot show state-dependent prediction** (my thresholds, set now). A family's current questions can show it only if, after cleaning:
+- the main items hold ≥ 50 balanced pairs;
+- the best comparator's (a) is ≤ 0.80, leaving room above it;
+- for grid2op, fewer than 80% of the kept lines share DO_NOTHING's direction.
+Otherwise: "cannot", with the failing condition named.
+
+**Results (11-26 23:11, drc).** Per-family tables: drc `/storage/wxu/con1/dirlayer/report.md` and the shared notes folder (`con1_dirlayer_tables_20261127.md`).
+
+The table gives model (a) minus the best no-physics comparator, ± paired-bootstrap se over problems, for the stage-1 final in facetm. Trained families are the first eight rows; the unseen families follow.
+
+| family | items (pairs) | best comparator | zero-shot | sequential (pos ≥ 1) | regime − margin reader |
+|---|---|---|---|---|---|
+| circuit2 | 100 | rule + element + category 0.668 | **+0.297 ± 0.028** | +0.312 ± 0.028 (facet) | **+0.181 ± 0.038** |
+| grid2 | 442 | rule 0.499 | **+0.412 ± 0.011** | +0.314 ± 0.025 (facet) | **+0.280 ± 0.088** |
+| traffic2 | 150 | rule + element 0.502 | **+0.360 ± 0.034** | +0.313 ± 0.036 (facet) | **+0.299 ± 0.052** |
+| seir2 | 275 | rule + element 0.502 | **+0.172 ± 0.037** | +0.180 ± 0.025 (facet) | **+0.133 ± 0.043** |
+| frame3d2 | 238 | rule + element + category 0.529 | **+0.130 ± 0.035** | +0.148 ± 0.035 (facet) | +0.047 ± 0.052 |
+| photonics | 1271 | rule + category 0.500 (trees 0.638) | +0.098 ± 0.024, below the trees | +0.064 ± 0.025 (facet) | +0.090 ± 0.192 (14 pairs) |
+| engibench | 228 | rule + category 0.495 | +0.060 ± 0.040 | +0.034 ± 0.053 (facet) | **+0.088 ± 0.032** |
+| grid2op | 244 | DO_NOTHING copier 0.603 | **−0.262 ± 0.054** (a 0.341, only 65% of lines directed; facet −0.123) | +0.054 ± 0.048 (facet) | **−0.206 ± 0.056** |
+| inventory2* | 112 (977 of 1,920 lines above no-op noise) | rule + element 0.537 | **+0.186 ± 0.036** | **+0.157 ± 0.033** (best = same-type copier 0.678) | −0.003 ± 0.045 |
+| molopt* logp + tpsa | 216 | fragment-name rule 0.805 (CANNOT) | **−0.122 ± 0.019** | −0.043 ± 0.019 | −0.070 ± 0.063 (all molopt) |
+| molopt* oracle + qed + sa | 347 | fragment-name rule 0.597 | **−0.069 ± 0.021** | +0.039 ± 0.019 (copier 0.603) | as above |
+| thermal2* | 232 | printed-number reader 0.738 | **−0.088 ± 0.029** | +0.003 ± 0.032 (reader 0.741) | +0.035 ± 0.038 |
+
+\* unseen family.
+
+- pref1 (answers still being written) gives a direction on 1–20% of zero-shot lines and 2–41% of sequential lines, so its (a) is 0.01–0.31.
+- On lines both models direct (zero-shot), pref1 vs stage 1:
+
+  | family | lines | pref1 | stage 1 | best comparator |
+  |---|---|---|---|---|
+  | inventory2 | 46 | .542 | .875 | – |
+  | molopt logp + tpsa | 135 | .840 | .796 | .914 |
+  | molopt oracle + qed + sa | 284 | .599 | .602 | .610 |
+  | thermal2 | 18 | – | – | – |
+
+  Too few lines to read for thermal2.
+- Fm (750 rows, r1-set) minus best, zero-shot:
+  - circuit2 +0.236 ± 0.027;
+  - frame3d2 +0.044 ± 0.034;
+  - engibench +0.040 ± 0.038;
+  - photonics +0.030 ± 0.022 (the trees score +0.132);
+  - grid2op −0.203 ± 0.054.
+  F (round 1) is at or above Fm on direction everywhere.
+- The 750-row adapter on the unseen families has no answer file yet (not measured).
+
+**Unseen families with complete answer files (11-27 ~00:00, drc `dirlayer/unseen_{zero,seq}.txt`).** Model (a) minus the best comparator ± se; (b) in brackets is the share of lines given a direction.
+
+| family (best comparator, zero / seq) | stage 1 zero | 750-row facetm zero | pref1 zero | stage 1 seq | 750-row seq | pref1 seq |
+|---|---|---|---|---|---|---|
+| inventory2 (rule + element .537 / same-type copier .678) | +.186 ± .035 (.95) | +.146 ± .040 (.96) | −.512 (.05) | +.157 ± .032 (.98) | +.099 ± .036 (.96) | −.372 (.41) |
+| molopt logp + tpsa (fragment rule .805 / .798) | −.122 ± .018 (.90) | −.096 ± .019 (.93) | −.641 (.19) | −.043 ± .019 (.96) | −.006 ± .017 (.95) | −.782 (.03) |
+| molopt oracle + qed + sa (fragment rule .597 / copier .603) | −.069 ± .022 (.90) | −.075 ± .026 (.89) | −.480 (.20) | +.039 ± .019 (.99) | +.035 ± .022 (.97) | −.589 (.02) |
+| thermal2 (printed reader .738 / .741) | −.088 ± .030 (.97) | −.178 ± .029 (.95) | −.728 (.01) | +.003 ± .033 (.97) | −.034 ± .032 (.97) | −.687 (.08) |
+
+pref1's sequential pass directs too few lines to read on these items.
+
+## 13. Consequence prompt without the move request (owner order 11-27)
+
+Every con1 prompt up to 11-27 (all row files, queries.jsonl, queries_v2.jsonl, the 2M rows) carried the policy's move
+request (YOUR MOVE: make one change, reason in 60-150 words, end with an `<action>` line) next to the QUESTION (no move
+is made now). Measured 11-27 by the parent session: base Qwen with thinking spends its budget on this conflict in 93% of
+replies; it is also the stage-2 collapse cause recorded 11-26.
+
+- `conseq_lib.consequence_user(user)`: the served user text with exactly these cut, every other byte kept:
+  - the YOUR MOVE heading, replaced by the neutral heading `OPERATIONS` (the line "The operations in this problem are
+    exactly:" and the whole operations list stay);
+  - "Make exactly one change: ... Use only what is shown above." (with the 60-150-word rationale request);
+  - "Then end your reply with exactly this one line:", "<action>VERB(arg, ...)</action>", "VERB is one of the
+    operations listed below, written exactly as listed, ...";
+  - after a refused move, the refusal note's last line "Propose a different move." (the REFUSED MOVES list stays).
+- Used by `build_rows.py` (every consequence row, so build_prows' Qown/Q12 rows too) and `test_set.py` (new question
+  files; `--from-queries` rebuilds an existing file's prompts only). `State.prompt()` still returns the served text
+  (verify_replay). The policy rows (P rows, stage-2 policy rows) keep the served prompt: they are move rows.
+- `queries_v3.jsonl` = queries_v2.jsonl with only `user` changed (and `prompt: v3_no_move_request` added); sha1
+  855060657be8; drc `/storage/wxu/con1/arm/main/queries_v3.jsonl` (next to queries_v2), Orchard
+  `con1/noconf/queries_v3.jsonl`. Existing row files and queries_v2 are not touched.
+- Check (`noconf_check.py`): no prompt (system + user + first QUESTION) contains "YOUR MOVE", "<action>", "end your
+  reply", "60-150 words", "Make exactly one change" or "Propose a different move"; every line of the old operations
+  section (every signature) is in the new prompt in order; a line diff of old vs new removes only the request lines and
+  the refusal line and inserts only `OPERATIONS`; all other fields identical. queries_v3: 638 prompts, 11 families,
+  0 failures (refusal line removed in 11 grid2op and 1 photonics prompts). Every state file the main, 2M and
+  test-set builders read (main/states_native_offmenu, full/states_native_offmenu_rest, gen/out/states_native_orch,
+  gen/out/states_scripted, data/states_native, data/states_native_drc_snap, data/test_states{,_offmenu,_offmenu2}):
+  43,960 prompts, 0 failures, no mark left (Orchard job 176408; reports `con1/noconf/check_*.{txt,json}`).
+  All files together, per family (prompts / signature lines kept / refusal lines cut): circuit2 3,534 / 38,874 / 0;
+  engibench 4,522 / 31,654 / 59; frame3d2 3,683 / 18,415 / 0; grid2 3,189 / 19,134 / 0; grid2op 8,077 / 72,693 /
+  3,144; inventory2 175 / 1,050 / 0; molopt 251 / 1,506 / 0; photonics 14,825 / 103,775 / 140; seir2 3,266 / 26,128 /
+  0; thermal2 178 / 890 / 0; traffic2 2,898 / 14,490 / 0.
