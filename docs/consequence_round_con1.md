@@ -344,6 +344,8 @@ Held-out problems, 5 families, zero-shot:
 - In circuit2, frame3d2 and engibench, copying is far below the model, and the sequential gain comes on top of zero-shot physics.
 - Caveat: only these two simple controls were run. A smarter copier, for example one keyed on the same element, is not controlled (not measured).
 
+**STOPPED 11-26 ~22:00, before its first training step (parent session):** its redistribution lines are family-specific templated facts, so they cannot speak to carrying physics to a different domain. The rows were deleted. The code stays: chain_truth.py, chain_score.py, chain_dep.py, facetm_to_facetc.py, and the facetc pieces of targets.py. The chain truth (`chain/chain_r1.jsonl`) is kept.
+
 **facetc arm (11-26 21:53, drc GPU 4): the chain through the design's own elements.** facetm plus two blocks before MARGINS AFTER:
 - LOCAL: the moved element's internal-state quantities.
 - REDISTRIBUTION: the 6 other elements whose state changes most in relative terms, then a bound on the rest.
