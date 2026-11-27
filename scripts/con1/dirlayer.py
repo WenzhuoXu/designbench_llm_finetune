@@ -433,6 +433,8 @@ def main(argv=None):
         probs = sorted(byp)
         for n in P:
             d = P[n][a.pass_]
+            if not any(r["lid"] in d for r in rows):           # no answers in this family
+                continue
             mp = lambda r, d=d: (d.get(r["lid"]) or {}).get("regime") == "applied-feasible"  # noqa: E731
             ms, _ = rbal(rows, mp)
             diffs = []
