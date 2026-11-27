@@ -713,3 +713,14 @@ The table gives model (a) minus the best no-physics comparator, ± paired-bootst
   - grid2op −0.203 ± 0.054.
   F (round 1) is at or above Fm on direction everywhere.
 - The 750-row adapter on the unseen families has no answer file yet (not measured).
+
+**Unseen families with complete answer files (11-27 ~00:00, drc `dirlayer/unseen_{zero,seq}.txt`).** Model (a) minus the best comparator ± se; (b) in brackets is the share of lines given a direction.
+
+| family (best comparator, zero / seq) | stage 1 zero | 750-row facetm zero | pref1 zero | stage 1 seq | 750-row seq | pref1 seq |
+|---|---|---|---|---|---|---|
+| inventory2 (rule + element .537 / same-type copier .678) | +.186 ± .035 (.95) | +.146 ± .040 (.96) | −.512 (.05) | +.157 ± .032 (.98) | +.099 ± .036 (.96) | −.372 (.41) |
+| molopt logp + tpsa (fragment rule .805 / .798) | −.122 ± .018 (.90) | −.096 ± .019 (.93) | −.641 (.19) | −.043 ± .019 (.96) | −.006 ± .017 (.95) | −.782 (.03) |
+| molopt oracle + qed + sa (fragment rule .597 / copier .603) | −.069 ± .022 (.90) | −.075 ± .026 (.89) | −.480 (.20) | +.039 ± .019 (.99) | +.035 ± .022 (.97) | −.589 (.02) |
+| thermal2 (printed reader .738 / .741) | −.088 ± .030 (.97) | −.178 ± .029 (.95) | −.728 (.01) | +.003 ± .033 (.97) | −.034 ± .032 (.97) | −.687 (.08) |
+
+pref1's sequential pass directs too few lines to read on these items.
