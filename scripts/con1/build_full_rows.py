@@ -40,6 +40,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))        # the repo root (llm_finetune.rl_dataxp)
 from build_rows import HELD_OUT, TRAIN_FAMILIES, answer, conseq_row, opener  # noqa: E402
+from conseq_lib import consequence_user  # noqa: E402  (the prompt without the move request, owner order 11-27)
 from targets import FOLLOW_HEAD, question  # noqa: E402
 
 SID_RE = re.compile(r'"sid":\s*"((?:[^"\\]|\\.)*)"')
@@ -110,7 +111,10 @@ def _pieces(tok, st: dict, m: dict, fmt: str) -> tuple:
 
 
 def _head_msgs(st: dict, first: str, fmt: str) -> list:
-    return [{"role": "system", "content": st["system"]}, {"role": "user", "content": st["user"] + question(fmt, first, True)}]
+    """The row's head as build_rows.conseq_row writes it: since 11-27 the state's user text without the move request
+    (conseq_lib.consequence_user, owner order), so the exact token counts match the rows."""
+    return [{"role": "system", "content": st["system"]},
+            {"role": "user", "content": consequence_user(st["user"]) + question(fmt, first, True)}]
 
 
 def _row_len(tok, row: dict) -> tuple:

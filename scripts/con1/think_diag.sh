@@ -15,7 +15,8 @@ C=/storage/wxu/con1; A=$C/arm; D=$C/full_eval/think_diag
 PY=/storage/wenwenw/envs/vllm_drc/bin/python
 MODEL=/storage/wxu/huggingface/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
 ADAPTER=$A/run_c2m_stage1_final/final
-QUERIES=$A/main/queries_v2.jsonl
+QUERIES=${QUERIES:-$A/main/queries_v2.jsonl}        # queries_v3.jsonl: the same questions without the move request
+VERBS=${VERBS:-"PLACE_BLOCK MOVE_SINK"}
 STOP_AT=$(date -d "today ${STOP_AT:-14:45}" +%s)
 ARMS=${ARMS:-"T-base:base:0 T-s1:c2m_stage1_final:0 T-s1-min256:c2m_stage1_final:256"}
 export PYTHONPATH=$C/pylib:$C/repo HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false PYTHONUNBUFFERED=1
@@ -47,7 +48,7 @@ for arm in $ARMS; do
   left=$(( STOP_AT - $(date +%s) ))
   [ $left -gt 60 ] || { echo "=== $(date '+%F %T') $L not run: past the stop time"; continue; }
   timeout $left $PY $D/think_client.py --queries $QUERIES --tokenizer $MODEL --base-url "http://127.0.0.1:$PORT/v1" \
-    --model $M --label $L --min-think $K --budget ${B:-1000} --answer-tokens 1024 --workers 48 --out $D/preds_$L.jsonl \
+    --model $M --label $L --min-think $K --budget ${B:-1000} --answer-tokens 1024 --workers 48 --verbs $VERBS --out $D/preds_$L.jsonl \
     > "$D/logs/client_$L.log" 2>&1
   echo "=== $(date '+%F %T') $L rc=$?: $(tail -1 "$D/logs/client_$L.log")"
 done

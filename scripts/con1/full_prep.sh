@@ -88,6 +88,7 @@ EX="$B/main/rows/train_facet.jsonl $B/main/rows/dev_facet.jsonl $B/main/rows/dev
 FOLLOW=${FOLLOW:-short}; CAP=${MAX_TOKENS:-22000}
 TGT=${TARGET:-facetm}; TAG=$TGT; [ "$FOLLOW" = short ] && TAG=${TGT}_short
 PW=${PREFIX_WEIGHT-0}; PWARG=; [ -n "$PW" ] && PWARG="--prefix-weight $PW" && TAG=${TAG}_pw$PW   # PREFIX_WEIGHT= : unset
+TAG=${TAG}${TAG_SUFFIX:-}       # _nc: a repo whose rows carry no move request (con1 eff023a; 11-27 owner order)
 FORBID="$D/queries_v2.jsonl $G/bench_problems.jsonl"
 for Q in ${QS:-12 36}; do
   echo "=== $(date '+%F %T') 2. full build $TGT (later questions: $FOLLOW, prefix weight ${PW:-default}) Q=$Q cap $CAP (workers $WORKERS)"

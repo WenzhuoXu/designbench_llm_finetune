@@ -42,6 +42,8 @@ FOLLOW="${FOLLOW:-short}"                        # later questions of a row: "Sa
 TAG=$TARGET; [ "$FOLLOW" = short ] && TAG=${TARGET}_short
 PREFIX_WEIGHT="${PREFIX_WEIGHT-0}"              # loss weight of each answer's think-closing piece (owner 11-26: 0)
 PWARG=; [ -n "$PREFIX_WEIGHT" ] && PWARG="--prefix-weight $PREFIX_WEIGHT" && TAG=${TAG}_pw$PREFIX_WEIGHT
+TAG_SUFFIX="${TAG_SUFFIX:-}"                     # _nc: rows without the move request (a repo with con1 eff023a)
+TAG=${TAG}${TAG_SUFFIX}
 F="${F:-$C1/full}"
 DEV="${DEV:-$C1/main/rows/dev_$TARGET.jsonl}"    # stage 1's dev states and moves, in the training format
 STAGE="${STAGE:-full}"
@@ -101,7 +103,7 @@ fail() { log "FAILED: $*"; touch "$M/chain/fail_${JOB}_step$(copy_step)"; }
 NEXT=
 if [ "$CHAIN_I" -lt "$CHAIN_MAX" ]; then
   NEXT=$(sbatch --parsable $NEXT_ARGS --dependency=afterany:$JOB \
-    --export=ALL,INIT="$INIT",M="$M",Q="$Q",PER="$PER",REPO="$REPO",CHAIN_I=$((CHAIN_I+1)),CHAIN_MAX="$CHAIN_MAX",DEV="$DEV",MAX_TOKENS="$MAX_TOKENS",TARGET="$TARGET",FOLLOW="$FOLLOW",PREFIX_WEIGHT="$PREFIX_WEIGHT",RES="$RES",STAGE="$STAGE" \
+    --export=ALL,INIT="$INIT",M="$M",Q="$Q",PER="$PER",REPO="$REPO",CHAIN_I=$((CHAIN_I+1)),CHAIN_MAX="$CHAIN_MAX",DEV="$DEV",MAX_TOKENS="$MAX_TOKENS",TARGET="$TARGET",FOLLOW="$FOLLOW",PREFIX_WEIGHT="$PREFIX_WEIGHT",RES="$RES",STAGE="$STAGE",TAG_SUFFIX="$TAG_SUFFIX" \
     "${SBATCH_FILE:-$REPO/slurm/con1_full.sbatch}") && echo "$NEXT" > "$M/chain/next_of_$JOB" && log "successor $NEXT submitted" \
     || log "!!! successor not submitted"
 fi

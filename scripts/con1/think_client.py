@@ -66,6 +66,7 @@ def main(argv=None):
     ap.add_argument("--min-think", type=int, default=0)
     ap.add_argument("--answer-tokens", type=int, default=1024)
     ap.add_argument("--workers", type=int, default=48)
+    ap.add_argument("--verbs", nargs="+", default=list(VERBS))
     a = ap.parse_args(argv)
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(a.tokenizer)
@@ -84,7 +85,7 @@ def main(argv=None):
                     done.add((r["sid"], r["qi"]))
             except ValueError:
                 pass
-    jobs = [(q, j) for q in qs for j, m in enumerate(q["moves"]) if DL.verb_of(m) in VERBS and (q["sid"], j) not in done]
+    jobs = [(q, j) for q in qs for j, m in enumerate(q["moves"]) if DL.verb_of(m) in a.verbs and (q["sid"], j) not in done]
     print("%s: %d questions (%d done), budget %d, min think %d" % (a.label, len(jobs), len(done), a.budget, a.min_think),
           flush=True)
 

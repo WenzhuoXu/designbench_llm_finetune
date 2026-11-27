@@ -13,31 +13,42 @@
 #   3. full_eval/curve.txt rewritten: one line per checkpoint (c2m_*), then the comparison lines of the newest file
 #   bash /storage/wxu/con1/full_eval/eval_link.sh full_00700        (LABEL as pull_slot.sh names it: <stage>_<step>)
 #   bash /storage/wxu/con1/full_eval/eval_link.sh stage1_final      (the curve's origin: the stage-1 final from F1-F3)
+#   QV=v3 bash .../eval_link.sh LABEL   the same questions with the move request cut (queries_v3.jsonl, con1 eff023a):
+#      label c2m_LABEL_v3 (its run dir links the same adapter), outputs under full_eval/v3/ (curve, hf/), held-out
+#      families zero-shot only (HFPASSES, default "zero seq" for v2, "zero" for v3)
 set -uo pipefail
 L=${1:?label}
-C=/storage/wxu/con1; A=$C/arm; E=${OUTDIR:-$C/full_eval}
+QV=${QV:-v2}
+C=/storage/wxu/con1; A=$C/arm; E0=${OUTDIR:-$C/full_eval}; E=$E0
+QF=$A/main/queries_$QV.jsonl
+[ -s "$QF" ] || { echo "ABORT: no $QF"; exit 2; }
 TAR=/storage/wxu/rl_open/orchard_runs/con1_full/ckpt/$L/slot.tar
 LAB=c2m_$L
+RUN0=$A/run_$LAB                                          # the adapter, extracted once
+if [ "$QV" = v2 ]; then HFPASSES=${HFPASSES:-"zero seq"}; else E=$E0/$QV; LAB=c2m_${L}_$QV; HFPASSES=${HFPASSES:-zero}; fi
 RUN=$A/run_$LAB
 # con1's script: drc_arm.sh once it carries the generalised options (after con1's k-shot run, ~11-26 10:00), else
 # drc_arm_next.sh (the same script waiting to replace it; drc_arm.sh is never edited while a run executes it)
 ARM=$C/repo/scripts/con1/drc_arm.sh
 grep -q "OUTDIR" "$ARM" || ARM=$C/repo/scripts/con1/drc_arm_next.sh
-STAGE1_PREDS=${STAGE1_PREDS:-$E/preds_stage1.jsonl}      # 176033's stage-1 answers (from slot P once written)
+# stage-1 answers next to each checkpoint: v2 176033's (slot P), v3 the stage-1 final's own v3 run (none for itself)
+if [ "$QV" = v2 ]; then STAGE1_PREDS=${STAGE1_PREDS:-$E/preds_stage1.jsonl}; else STAGE1_PREDS=${STAGE1_PREDS:-$E/preds_c2m_stage1_final_$QV.jsonl}; fi
+[ "$STAGE1_PREDS" = "$E/preds_$LAB.jsonl" ] && STAGE1_PREDS=
 CMP=${CMP:-"$STAGE1_PREDS $A/main/preds_trees.jsonl"}
 mkdir -p "$E"
-echo "=== $(date '+%F %T') $LAB from $TAR with $ARM"
-if [ ! -e "$RUN/final/adapter_config.json" ]; then
+echo "=== $(date '+%F %T') $LAB ($QF) from $TAR with $ARM"
+if [ ! -e "$RUN0/final/adapter_config.json" ]; then
   [ -s "$TAR" ] || { echo "ABORT: no $TAR (pull_slot.sh + join_ckpt.sh first)"; exit 2; }
-  rm -rf "$RUN/x" && mkdir -p "$RUN/x" && tar -x -C "$RUN/x" -f "$TAR" || { echo "ABORT: tar"; exit 2; }
-  if [ -d "$RUN/x/adapter" ]; then mv "$RUN/x/adapter" "$RUN/final" && mv "$RUN/x/state.json" "$RUN/"; else mv "$RUN/x" "$RUN/final"; fi
-  rm -rf "$RUN/x"
-  [ -e "$RUN/final/adapter_config.json" ] || { echo "ABORT: no adapter_config.json in $TAR"; exit 2; }
-  [ -e "$RUN/state.json" ] && echo "state: $(cat "$RUN/state.json")"
+  rm -rf "$RUN0/x" && mkdir -p "$RUN0/x" && tar -x -C "$RUN0/x" -f "$TAR" || { echo "ABORT: tar"; exit 2; }
+  if [ -d "$RUN0/x/adapter" ]; then mv "$RUN0/x/adapter" "$RUN0/final" && mv "$RUN0/x/state.json" "$RUN0/"; else mv "$RUN0/x" "$RUN0/final"; fi
+  rm -rf "$RUN0/x"
+  [ -e "$RUN0/final/adapter_config.json" ] || { echo "ABORT: no adapter_config.json in $TAR"; exit 2; }
+  [ -e "$RUN0/state.json" ] && echo "state: $(cat "$RUN0/state.json")"
   rm -f "$TAR" && rmdir "$(dirname "$TAR")" 2>/dev/null; echo "slot.tar removed after extraction"
 fi
+[ "$RUN" = "$RUN0" ] || { mkdir -p "$RUN" && ln -sfn "$RUN0/final" "$RUN/final"; }
 for x in $CMP; do [ -s "$x" ] || echo "note: comparison $x not there yet (scored without it)"; done
-[ -s "$E/facets_${LAB}_zero.txt" ] || LAB=$LAB FMT=facetm ROWS=none WAIT=1 QUERIES=$A/main/queries_v2.jsonl FAM=all \
+[ -s "$E/facets_${LAB}_zero.txt" ] || LAB=$LAB FMT=facetm ROWS=none WAIT=1 QUERIES=$QF FAM=all \
   CMP="$CMP" MAXTOK=4096 OUTDIR="$E" PASSES=zero bash "$ARM" > "$E/arm_$L.out" 2>&1
 grep "holding\|server ready\|SKILL_CLIENT_DONE\|ABORT\|DRC_ARM_DONE" "$E/arm_$L.out" | tail -5
 [ -s "$E/facets_${LAB}_zero.txt" ] || { echo "ABORT: no facets ($E/arm_$L.out)"; exit 3; }
@@ -46,12 +57,17 @@ grep -A10 "group means over all" "$E/facets_${LAB}_zero.txt"
 # and sequential passes (con1's script with a GROUPS hook: full_eval/drc_arm_groups.sh), then the sequential pass
 # against its own zero-shot answers and the copiers (hf_score.sh); no trees exist for these families
 H=$E/hf; mkdir -p "$H"
-[ -s "$H/facets_${LAB}_seq.txt" ] || LAB=$LAB FMT=facetm ROWS=none WAIT=1 QUERIES=$A/main/queries_v2.jsonl FAM=all CMP=" " \
-  MAXTOK=4096 OUTDIR="$H" PASSES="zero seq" QGROUPS=heldout_family bash "$E/drc_arm_groups.sh" > "$H/arm_$L.out" 2>&1
+HLAST=${HFPASSES##* }
+[ -s "$H/facets_${LAB}_$HLAST.txt" ] || LAB=$LAB FMT=facetm ROWS=none WAIT=1 QUERIES=$QF FAM=all CMP=" " \
+  MAXTOK=4096 OUTDIR="$H" PASSES="$HFPASSES" QGROUPS=heldout_family bash "$E0/drc_arm_groups.sh" > "$H/arm_$L.out" 2>&1
 grep "server ready\|SKILL_CLIENT_DONE\|ABORT\|DRC_ARM_DONE" "$H/arm_$L.out" | tail -3
-[ -s "$H/facets_${LAB}_seq_vs_zero.txt" ] || OUTDIR="$H" bash "$E/hf_score.sh" "$LAB" > "$H/hf_score_$L.out" 2>&1
-[ -s "$H/report_$LAB.txt" ] || bash "$E/hf_report.sh" "$LAB" > /dev/null 2>&1   # per family, each with its own se
-cat "$H/report_$LAB.txt" 2>/dev/null
+if [ "$HLAST" = seq ]; then
+  [ -s "$H/facets_${LAB}_seq_vs_zero.txt" ] || OUTDIR="$H" bash "$E0/hf_score.sh" "$LAB" > "$H/hf_score_$L.out" 2>&1
+  [ -s "$H/report_$LAB.txt" ] || OUTDIR="$H" bash "$E0/hf_report.sh" "$LAB" > /dev/null 2>&1   # per family, own se
+  cat "$H/report_$LAB.txt" 2>/dev/null
+else
+  grep -A8 "group means over all (primary)" "$H/facets_${LAB}_zero.txt" 2>/dev/null
+fi
 # the parent session's error-anatomy scripts (review_tmp/ea, read only; ea4.py through a copy with its preds path
 # replaced) on the unseen-family zero-shot answers; the two numbers asked for: PLACE_BLOCK agreement with the printed
 # rule (ea2) and thermal2 answers missing FEASIBLE AFTER (ea1)
