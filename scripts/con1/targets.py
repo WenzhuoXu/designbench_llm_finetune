@@ -220,7 +220,24 @@ def chain_block(variant: str, move: str, before: dict, after: dict, k: int = CHA
     rest_bin = "same"
     if rest and rest[0][4] > 0:
         rest_bin = rest[0][3]
-    return {"local": local, "redis": top, "rest": rest_bin, "ranked": [(c[0], c[4]) for c in cand]}
+    return {"local": local, "redis": top, "rest": rest_bin, "ranked": [(c[0], c[1], c[2], c[4]) for c in cand]}
+
+
+def parse_chain(text: str) -> dict:
+    """The LOCAL and REDISTRIBUTION blocks of a facetc answer: {local: {(label, qty): dir}, redis: [(label, dir)]}."""
+    out = {"local": {}, "redis": []}
+    text = text or ""
+    i, j, k = text.find("LOCAL:"), text.find("REDISTRIBUTION"), text.find("MARGINS AFTER:")
+    if i < 0:
+        return out
+    loc = text[i:j if j > i else (k if k > i else len(text))]
+    for m in re.finditer(r"(?m)^  (.+?) (\S+) (up|down|same|removed|added)\b", loc):
+        out["local"][(m.group(1), m.group(2))] = m.group(3)
+    if j >= 0:
+        red = text[j:k if k > j else len(text)]
+        for m in re.finditer(r"(?m)^  (?!all other)(.+?) (\S+) (up|down|same)\b", red):
+            out["redis"].append((m.group(1), m.group(3)))
+    return out
 
 
 def chain_text(ch: dict):

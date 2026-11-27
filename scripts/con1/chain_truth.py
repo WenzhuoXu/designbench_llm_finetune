@@ -62,7 +62,15 @@ def work(job):
     from conseq_lib import rebuild
     try:
         s = rebuild(_ENV, {"variant": st["variant"], "t": st["t"], "turn_log": st["turn_log"]}, spec)
-        checks = {"prompt_same": s.prompt()[1] == st["user"], "result_same": 0, "result_checked": 0}
+        u_re = s.prompt()[1]
+        checks = {"prompt_same": u_re == st["user"], "result_same": 0, "result_checked": 0}
+        if not checks["prompt_same"]:                     # where the rebuilt observation differs from the stored one
+            e_st, e_re = parse_elements(st["variant"], st["user"]), parse_elements(st["variant"], u_re)
+            checks["elements_same"] = e_st == e_re
+            diff = [i for i, (x, y) in enumerate(zip(st["user"].splitlines(), u_re.splitlines())) if x != y]
+            checks["first_diff"] = [(st["user"].splitlines()[i][:160], u_re.splitlines()[i][:160]) for i in diff[:2]]
+            if not checks["elements_same"]:
+                checks["before_rebuilt"] = e_re
         out = {}
         for j, text in enumerate(moves):
             mv = s.parse(text)

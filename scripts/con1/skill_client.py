@@ -31,7 +31,8 @@ LOCK = threading.Lock()
 def messages_for(q, j, seq, fmt="verbatim"):
     """The prompt for question j: alone (zero-shot), or after questions 0..j-1 answered with the TRUE results in
     the asked format (sequential)."""
-    from targets import render
+    from targets import fmt_for, render
+    fmt = fmt_for(fmt, q["variant"])                       # facetc: facetm outside the chain families
     ms = q["moves"]
     if not seq or j == 0:
         return [{"role": "system", "content": q["system"]},
