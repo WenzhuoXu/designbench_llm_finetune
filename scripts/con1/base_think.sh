@@ -10,16 +10,19 @@
 # (think_client.py, as the checked T-base-4k-q run). Every answer is appended and flushed as it finishes, so a re-run
 # (or a requeue) resumes where the last one stopped. No training, no adapter, nothing under con1_reserve or repo2m.
 #   sbatch -p advanced --qos=adv_4gpu_qos -A ccm --gres=gpu:4 -c 32 --mem=256G -t 8:00:00 \
-#     -o /project/community/wxu2/con1/full/base_think/logs/base_think_%j.out \
+#     -o $HOME/con1_base_think/logs/base_think_%j.out \
 #     --wrap "bash /project/community/wxu2/con1/repo2m_v3/scripts/con1/base_think.sh"
 set -uo pipefail
 B=/project/community/wxu2
 R=${REPO:-$B/con1/repo2m_v3}
-O=${OUT:-$B/con1/full/base_think}
+# outputs in $HOME: /project/community ran out of space (0 bytes free, 11-27 18:40, job 176529 failed on it); caches on
+# the node's own /tmp (vLLM writes compile caches at start)
+O=${OUT:-$HOME/con1_base_think}
 Q=${QUERIES:-$B/con1/noconf/queries_v3.jsonl}
 VENV=$B/rl/envs/vllm
 MODEL=$B/rl/hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
-C=$B/rl/cache
+C=/tmp/base_think_cache_${SLURM_JOB_ID:-x}
+mkdir -p $C/tmp $C/xdg $C/triton $C/inductor $C/nv $C/vllm $C/flashinfer
 NSERVERS=${NSERVERS:-4}
 mkdir -p "$O/logs"
 export HF_HOME=$B/rl/hf HF_HUB_CACHE=$B/rl/hf/hub HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HUB_DISABLE_XET=1
