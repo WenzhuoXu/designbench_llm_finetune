@@ -42,14 +42,34 @@ for x in $CMP; do [ -s "$x" ] || echo "note: comparison $x not there yet (scored
 grep "holding\|server ready\|SKILL_CLIENT_DONE\|ABORT\|DRC_ARM_DONE" "$E/arm_$L.out" | tail -5
 [ -s "$E/facets_${LAB}_zero.txt" ] || { echo "ABORT: no facets ($E/arm_$L.out)"; exit 3; }
 grep -A10 "group means over all" "$E/facets_${LAB}_zero.txt"
-{ echo "# $(date '+%F %T') group means over all (primary: 8 families; held-out problems, queries_v2, k = 0): one line per checkpoint"
+# held-out families (inventory2, molopt, thermal2; queries_v2 group heldout_family, 175 states, 1,400 questions): zero-shot
+# and sequential passes (con1's script with a GROUPS hook: full_eval/drc_arm_groups.sh), then the sequential pass
+# against its own zero-shot answers and the copiers (hf_score.sh); no trees exist for these families
+H=$E/hf; mkdir -p "$H"
+[ -s "$H/facets_${LAB}_seq.txt" ] || LAB=$LAB FMT=facetm ROWS=none WAIT=1 QUERIES=$A/main/queries_v2.jsonl FAM=all CMP=" " \
+  MAXTOK=4096 OUTDIR="$H" PASSES="zero seq" QGROUPS=heldout_family bash "$E/drc_arm_groups.sh" > "$H/arm_$L.out" 2>&1
+grep "server ready\|SKILL_CLIENT_DONE\|ABORT\|DRC_ARM_DONE" "$H/arm_$L.out" | tail -3
+[ -s "$H/facets_${LAB}_seq_vs_zero.txt" ] || OUTDIR="$H" bash "$E/hf_score.sh" "$LAB" > "$H/hf_score_$L.out" 2>&1
+line() {   # file label: the label's line of the primary group means
+  awk -v lab="$2" '/group means over all \(primary\)/{on=1; next} on && NF > 2 && $2 != "select" {exit} on && $1==lab {print; exit}' "$1"
+}
+{ echo "# $(date '+%F %T') group means over all (primary), queries_v2, one line per checkpoint"
+  echo "# trained families (8; held-out problems), zero-shot:"
   newest=
   for f in $(ls "$E"/facets_c2m_*_zero.txt | sort); do
-    l=$(basename "$f" _zero.txt); l=${l#facets_}; newest=$f
-    awk -v lab="$l" '/group means over all \(primary\)/{on=1; next} on && $1==lab {print; exit}' "$f"
+    l=$(basename "$f" _zero.txt); l=${l#facets_}; newest=$f; line "$f" "$l"
   done
-  echo "# comparisons (from $(basename "$newest")):"
+  echo "#   comparisons (from $(basename "$newest")):"
   awk '/group means over all \(primary\)/{on=1; next} on && NF > 2 && $2 != "select" {exit} on && $1 !~ /^c2m_/ && $2 == "select" {print}' "$newest"
+  echo "# unseen families (inventory2, molopt, thermal2), zero-shot:"
+  for f in $(ls "$H"/facets_c2m_*_zero.txt 2>/dev/null | sort); do
+    l=$(basename "$f" _zero.txt); l=${l#facets_}; line "$f" "$l"
+  done
+  echo "# unseen families, sequential (positions >= 1) next to the same questions zero-shot and the copiers:"
+  for f in $(ls "$H"/facets_c2m_*_seq_vs_zero.txt 2>/dev/null | sort); do
+    l=$(basename "$f" _seq_vs_zero.txt); l=${l#facets_}
+    for x in "$l" "${l}_zero" copy_last copy_mode; do line "$f" "$x"; done
+  done
 } > "$E/curve.txt.tmp" && mv "$E/curve.txt.tmp" "$E/curve.txt"
 cat "$E/curve.txt"
 echo "EVAL_LINK_DONE $L $(date '+%F %T')"
