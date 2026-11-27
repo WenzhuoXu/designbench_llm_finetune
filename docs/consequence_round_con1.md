@@ -672,3 +672,44 @@ A standing layer next to the facets: scripts/con1/dirlayer.py, CPU only, re-run 
 - the best comparator's (a) is ≤ 0.80, leaving room above it;
 - for grid2op, fewer than 80% of the kept lines share DO_NOTHING's direction.
 Otherwise: "cannot", with the failing condition named.
+
+**Results (11-26 23:11, drc).** Per-family tables: drc `/storage/wxu/con1/dirlayer/report.md` and the shared notes folder (`con1_dirlayer_tables_20261127.md`).
+
+The table gives model (a) minus the best no-physics comparator, ± paired-bootstrap se over problems, for the stage-1 final in facetm. Trained families are the first eight rows; the unseen families follow.
+
+| family | items (pairs) | best comparator | zero-shot | sequential (pos ≥ 1) | regime − margin reader |
+|---|---|---|---|---|---|
+| circuit2 | 100 | rule + element + category 0.668 | **+0.297 ± 0.028** | +0.312 ± 0.028 (facet) | **+0.181 ± 0.038** |
+| grid2 | 442 | rule 0.499 | **+0.412 ± 0.011** | +0.314 ± 0.025 (facet) | **+0.280 ± 0.088** |
+| traffic2 | 150 | rule + element 0.502 | **+0.360 ± 0.034** | +0.313 ± 0.036 (facet) | **+0.299 ± 0.052** |
+| seir2 | 275 | rule + element 0.502 | **+0.172 ± 0.037** | +0.180 ± 0.025 (facet) | **+0.133 ± 0.043** |
+| frame3d2 | 238 | rule + element + category 0.529 | **+0.130 ± 0.035** | +0.148 ± 0.035 (facet) | +0.047 ± 0.052 |
+| photonics | 1271 | rule + category 0.500 (trees 0.638) | +0.098 ± 0.024, below the trees | +0.064 ± 0.025 (facet) | +0.090 ± 0.192 (14 pairs) |
+| engibench | 228 | rule + category 0.495 | +0.060 ± 0.040 | +0.034 ± 0.053 (facet) | **+0.088 ± 0.032** |
+| grid2op | 244 | DO_NOTHING copier 0.603 | **−0.262 ± 0.054** (a 0.341, only 65% of lines directed; facet −0.123) | +0.054 ± 0.048 (facet) | **−0.206 ± 0.056** |
+| inventory2* | 112 (977 of 1,920 lines above no-op noise) | rule + element 0.537 | **+0.186 ± 0.036** | **+0.157 ± 0.033** (best = same-type copier 0.678) | −0.003 ± 0.045 |
+| molopt* logp + tpsa | 216 | fragment-name rule 0.805 (CANNOT) | **−0.122 ± 0.019** | −0.043 ± 0.019 | −0.070 ± 0.063 (all molopt) |
+| molopt* oracle + qed + sa | 347 | fragment-name rule 0.597 | **−0.069 ± 0.021** | +0.039 ± 0.019 (copier 0.603) | as above |
+| thermal2* | 232 | printed-number reader 0.738 | **−0.088 ± 0.029** | +0.003 ± 0.032 (reader 0.741) | +0.035 ± 0.038 |
+
+\* unseen family.
+
+- pref1 (answers still being written) gives a direction on 1–20% of zero-shot lines and 2–41% of sequential lines, so its (a) is 0.01–0.31.
+- On lines both models direct (zero-shot), pref1 vs stage 1:
+
+  | family | lines | pref1 | stage 1 | best comparator |
+  |---|---|---|---|---|
+  | inventory2 | 46 | .542 | .875 | – |
+  | molopt logp + tpsa | 135 | .840 | .796 | .914 |
+  | molopt oracle + qed + sa | 284 | .599 | .602 | .610 |
+  | thermal2 | 18 | – | – | – |
+
+  Too few lines to read for thermal2.
+- Fm (750 rows, r1-set) minus best, zero-shot:
+  - circuit2 +0.236 ± 0.027;
+  - frame3d2 +0.044 ± 0.034;
+  - engibench +0.040 ± 0.038;
+  - photonics +0.030 ± 0.022 (the trees score +0.132);
+  - grid2op −0.203 ± 0.054.
+  F (round 1) is at or above Fm on direction everywhere.
+- The 750-row adapter on the unseen families has no answer file yet (not measured).
