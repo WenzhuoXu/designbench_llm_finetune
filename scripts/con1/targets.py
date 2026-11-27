@@ -174,10 +174,21 @@ def _nat(label: str):
     return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", label)]
 
 
-def _rel(b: float, a: float) -> float:
-    if is_same(b, a):
+# absolute floors below which a per-element change is solver noise (zero-flow lines print rho ~1e-14 that varies
+# between runs); circuit2 relies on SAME_TOL
+CHAIN_FLOOR = {"grid2op": 1e-4, "frame3d2": 1e-3}
+
+
+def _rel(b: float, a: float, floor: float = 0.0) -> float:
+    if is_same(b, a) or abs(a - b) < floor:
         return 0.0
     return abs(a - b) / abs(b) if b != 0 else math.inf
+
+
+def _dir_bin(b: float, a: float, floor: float = 0.0):
+    if abs(a - b) < floor:
+        return "same", "same"
+    return direction(b, a), size_bin(b, a)
 
 
 def chain_block(variant: str, move: str, before: dict, after: dict, k: int = CHAIN_K) -> dict:
@@ -187,6 +198,7 @@ def chain_block(variant: str, move: str, before: dict, after: dict, k: int = CHA
     quantity with the largest relative change)."""
     labels = set(before) | set(after)
     moved = moved_elements(variant, move, labels)
+    fl = CHAIN_FLOOR.get(variant, 0.0)
     local = []
     for lab in sorted(moved, key=_nat):
         b0, a0 = before.get(lab, {}), after.get(lab, {})
@@ -196,7 +208,7 @@ def chain_block(variant: str, move: str, before: dict, after: dict, k: int = CHA
             elif q not in b0:
                 local.append((lab, q, "added", ""))
             else:
-                local.append((lab, q, direction(b0[q], a0[q]), size_bin(b0[q], a0[q])))
+                local.append((lab, q) + _dir_bin(b0[q], a0[q], fl))
     cand = []
     for lab in labels - set(moved):
         if variant == "grid2op" and not lab.startswith("line"):
@@ -208,12 +220,12 @@ def chain_block(variant: str, move: str, before: dict, after: dict, k: int = CHA
         best = None
         for q in qs:
             if q in b0 and q in a0:
-                r = _rel(b0[q], a0[q])
+                r = _rel(b0[q], a0[q], fl)
                 if best is None or r > best[0]:
                     best = (r, q)
         if best is not None:
             q = best[1]
-            cand.append((lab, q, direction(b0[q], a0[q]), size_bin(b0[q], a0[q]), best[0]))
+            cand.append((lab, q) + _dir_bin(b0[q], a0[q], fl) + (best[0],))
     cand.sort(key=lambda x: (-x[4], _nat(x[0])))
     top = [c for c in cand if c[4] > 0][:k]
     rest = [c for c in cand[len(top):]]
