@@ -40,11 +40,13 @@ import dirlayer as DL  # noqa: E402
 LOCK = threading.Lock()
 
 
-def call(base, model, ids, max_tokens, stop_ids, bias=None):
-    body = {"model": model, "prompt": ids, "max_tokens": max_tokens, "temperature": 0.0, "stop_token_ids": stop_ids,
+def call(base, model, ids, max_tokens, stop_ids, bias=None, temperature=0.0, seed=None):
+    body = {"model": model, "prompt": ids, "max_tokens": max_tokens, "temperature": temperature, "stop_token_ids": stop_ids,
             "skip_special_tokens": False}
     if bias:
         body["logit_bias"] = bias
+    if seed is not None:
+        body["seed"] = seed
     req = urllib.request.Request(base.rstrip("/") + "/completions", json.dumps(body).encode(),
                                  {"Content-Type": "application/json"})
     for attempt in range(5):
@@ -86,12 +88,21 @@ def main(argv=None):
     ap.add_argument("--no-defined-terms", action="store_true",
                     help="opt out: the question without the definitions of feasible and 'same', as every arm before "
                          "11-28 (arm D) was asked; for arms that must stay comparable with arm D")
+    ap.add_argument("--temperature", type=float, default=0.0,
+                    help="sampling temperature of both calls (think and answer); 0 = every run before 11-28 (K4 arm: 0.8)")
+    ap.add_argument("--samples", type=int, default=1,
+                    help="samples per question; sample k (1..N) is sent with seed SEED_BASE + k - 1 on both calls, and "
+                         "the record carries 'sample' and 'seed' (resume per (sid, qi, sample))")
+    ap.add_argument("--seed-base", type=int, default=None,
+                    help="first seed (default: no seed sent, as every earlier run; required with --samples > 1)")
     ap.add_argument("--reasoning-effort", default=None, choices=("xhigh", "medium", "low"),
                     help="the chat template's reasoning_effort variable (default: unset = the template's default, "
                          "xhigh); the prompt is then rendered by apply_chat_template(..., reasoning_effort=X)")
     a = ap.parse_args(argv)
     if a.defined_terms and a.no_defined_terms:
         ap.error("--defined-terms and --no-defined-terms together")
+    if a.samples > 1 and a.seed_base is None:
+        ap.error("--samples > 1 needs --seed-base")
     import targets
     targets.DEFINED_DEFAULT = not a.no_defined_terms         # read by targets.question here and in skill_client
     a.defined_terms = targets.DEFINED_DEFAULT
@@ -113,12 +124,12 @@ def main(argv=None):
             try:
                 r = json.loads(l)
                 if not str(r.get("finish", "")).startswith("error"):
-                    done.add((r["sid"], r["qi"]))
+                    done.add((r["sid"], r["qi"], r.get("sample", 1)))
             except ValueError:
                 pass
-    jobs = [(q, j) for q in qs for j, m in enumerate(q["moves"])
+    jobs = [(q, j, k) for q in qs for j, m in enumerate(q["moves"]) for k in range(1, a.samples + 1)
             if (a.verbs is None or DL.verb_of(m) in a.verbs) and (sub is None or (q["sid"], j) in sub)
-            and (q["sid"], j) not in done]
+            and (q["sid"], j, k) not in done]
     print("%s: %d questions (%d done), budget %d, min think %d" % (a.label, len(jobs), len(done), a.budget, a.min_think),
           flush=True)
 
@@ -133,7 +144,9 @@ def main(argv=None):
         return ids
 
     def one(job):
-        q, j = job
+        q, j, smp = job
+        seed = None if a.seed_base is None else a.seed_base + smp - 1
+        T = a.temperature
         if a.target == "facetm" and not (a.named_metrics or a.user_suffix):   # skill_client's own messages (earlier
             msgs = SC.messages_for(q, j, False, "facetm")                    # runs' prompt with --no-defined-terms)
         else:                                                # skill_client's zero-shot layout with this form's question
@@ -148,21 +161,23 @@ def main(argv=None):
                "defined_terms": a.defined_terms, "reasoning_effort": a.reasoning_effort,
                "move": q["moves"][j]["move"],
                "prompt_tokens": len(ids)}
+        if a.samples > 1 or a.seed_base is not None or T:
+            rec.update(sample=smp, seed=seed, temperature=T)
         try:
             think, n, end = "", 0, None
             if a.min_think > 0:
-                t, fin, sr, k = call(url, a.model, ids, a.min_think, [], ban)
+                t, fin, sr, k = call(url, a.model, ids, a.min_think, [], ban, T, seed)
                 think, n = t, k
             if n < a.budget:
                 cur = ids + tok.encode(think, add_special_tokens=False) if think else ids
-                t, fin, sr, k = call(url, a.model, cur, a.budget - n, [IM_END, THINK_END])
+                t, fin, sr, k = call(url, a.model, cur, a.budget - n, [IM_END, THINK_END], None, T, seed)
                 think, n = think + t, n + k
                 end = "budget" if fin == "length" else "closed" if sr == THINK_END else "im_end" if sr == IM_END else str(sr)
             else:
                 end = "budget"
             think = think.replace("</think>", "").replace("<|im_end|>", "")
             aids = ids + tok.encode(think.strip() + "\n</think>\n\n", add_special_tokens=False)
-            ans, fin, sr, k = call(url, a.model, aids, a.answer_tokens, [IM_END])
+            ans, fin, sr, k = call(url, a.model, aids, a.answer_tokens, [IM_END], None, T, seed)
             rec.update(text=ans.replace("<|im_end|>", "").strip(), finish=fin, think=think, think_tokens=n,
                        think_end=end, answer_tokens=k)
         except RuntimeError as e:
