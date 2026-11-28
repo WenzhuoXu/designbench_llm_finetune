@@ -82,11 +82,19 @@ def main(argv=None):
     ap.add_argument("--user-suffix", default=None,
                     help="a sentence added as the last line of the user message ('\\n' + the sentence; 11-28 arm D-brief)")
     ap.add_argument("--defined-terms", action="store_true",
-                    help="the question defines feasible and 'same' (targets.question(..., defined=True); 11-28, new arms)")
+                    help="(the default since lib_v8; kept so older command lines still run)")
+    ap.add_argument("--no-defined-terms", action="store_true",
+                    help="opt out: the question without the definitions of feasible and 'same', as every arm before "
+                         "11-28 (arm D) was asked; for arms that must stay comparable with arm D")
     ap.add_argument("--reasoning-effort", default=None, choices=("xhigh", "medium", "low"),
                     help="the chat template's reasoning_effort variable (default: unset = the template's default, "
                          "xhigh); the prompt is then rendered by apply_chat_template(..., reasoning_effort=X)")
     a = ap.parse_args(argv)
+    if a.defined_terms and a.no_defined_terms:
+        ap.error("--defined-terms and --no-defined-terms together")
+    import targets
+    targets.DEFINED_DEFAULT = not a.no_defined_terms         # read by targets.question here and in skill_client
+    a.defined_terms = targets.DEFINED_DEFAULT
     from targets import question
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(a.tokenizer)
@@ -126,13 +134,12 @@ def main(argv=None):
 
     def one(job):
         q, j = job
-        if a.target == "facetm" and not (a.named_metrics or a.user_suffix or a.defined_terms):   # earlier runs' prompt
-            msgs = SC.messages_for(q, j, False, "facetm")
+        if a.target == "facetm" and not (a.named_metrics or a.user_suffix):   # skill_client's own messages (earlier
+            msgs = SC.messages_for(q, j, False, "facetm")                    # runs' prompt with --no-defined-terms)
         else:                                                # skill_client's zero-shot layout with this form's question
             msgs = [{"role": "system", "content": q["system"]},
                     {"role": "user", "content": q["user"] + question(
-                        a.target, q["moves"][j]["move"], True, sorted(q["metrics0"]) if a.named_metrics else None,
-                        defined=a.defined_terms)
+                        a.target, q["moves"][j]["move"], True, sorted(q["metrics0"]) if a.named_metrics else None)
                         + ("\n" + a.user_suffix if a.user_suffix else "")}]
         ids = render(msgs)
         url = a.base_url[int(hashlib.sha1(q["sid"].encode()).hexdigest()[:8], 16) % len(a.base_url)]

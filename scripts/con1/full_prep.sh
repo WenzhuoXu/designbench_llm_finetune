@@ -94,7 +94,7 @@ for Q in ${QS:-12 36}; do
   echo "=== $(date '+%F %T') 2. full build $TGT (later questions: $FOLLOW, prefix weight ${PW:-default}) Q=$Q cap $CAP (workers $WORKERS)"
   T0=$(date +%s)
   $TRPY "$R/scripts/con1/build_full_rows.py" --states $ST --exclude-rows $EX --forbid-problems $FORBID \
-    --tokenizer "$MODEL" --target "$TGT" --follow "$FOLLOW" $PWARG --q "$Q" --max-tokens "$CAP" --seed 0 --workers "$WORKERS" \
+    --tokenizer "$MODEL" --target "$TGT" --follow "$FOLLOW" $PWARG --q "$Q" --max-tokens "$CAP" --seed 0 --no-defined-terms --workers "$WORKERS" \
     --out-train "$T/train_${TAG}_q$Q.jsonl" --out-dev "$T/dev_${TAG}_q$Q.jsonl" --stats "$T/stats_${TAG}_q$Q.json" --lens "$T/lens_${TAG}_q$Q.txt" \
     > "$T/build_${TAG}_q$Q.log" 2>&1
   echo "build wall $(( $(date +%s) - T0 )) s"; tail -3 "$T/build_${TAG}_q$Q.log"
@@ -111,7 +111,7 @@ for Q in ${QS:-12 36}; do
   # with another worker count and compare
   if [ "$Q" = "${REBUILD_Q:-36}" ] && [ -z "${NO_REBUILD:-}" ]; then
     $TRPY "$R/scripts/con1/build_full_rows.py" --states $ST --exclude-rows $EX --forbid-problems $FORBID \
-      --tokenizer "$MODEL" --target "$TGT" --follow "$FOLLOW" $PWARG --q "$Q" --max-tokens "$CAP" --seed 0 --workers 64 \
+      --tokenizer "$MODEL" --target "$TGT" --follow "$FOLLOW" $PWARG --q "$Q" --max-tokens "$CAP" --seed 0 --no-defined-terms --workers 64 \
       --out-train "$T/train_${TAG}_q${Q}_again.jsonl" --out-dev "$T/dev_${TAG}_q${Q}_again.jsonl" --stats "$T/stats_${TAG}_q${Q}_again.json" \
       > "$T/build_${TAG}_q${Q}_again.log" 2>&1
     tail -2 "$T/build_${TAG}_q${Q}_again.log"

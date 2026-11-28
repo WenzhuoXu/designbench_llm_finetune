@@ -126,7 +126,11 @@ def main(argv=None):
     ap.add_argument("--user-suffix", default=None, help="a sentence added as the last line of the user message, as "
                     "think_client.py --user-suffix adds it (11-28)")
     ap.add_argument("--subset", default=None, help="(--pairs --every-question) only these questions: TSV sid<TAB>qi")
+    ap.add_argument("--no-defined-terms", action="store_true", help="the question without the definitions of feasible "
+                    "and 'same' (targets.DEFINED_DEFAULT off), as think_client.py --no-defined-terms asks it")
     a = ap.parse_args(argv)
+    import targets
+    targets.DEFINED_DEFAULT = not a.no_defined_terms
     sub = {(l.split("\t")[0], int(l.split("\t")[1])) for l in open(a.subset) if l.strip()} if a.subset else None
     from conseq_lib import MOVE_REQUEST
     REMOVABLE = MOVE_REQUEST.splitlines(keepends=True) + ["Propose a different move.\n"]

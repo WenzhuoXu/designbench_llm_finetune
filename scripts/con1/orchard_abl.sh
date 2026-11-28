@@ -90,7 +90,7 @@ echo "=== $(date '+%F %T') servers ready"
 cd "$REPO"
 for arm in "${ARR[@]}"; do
   IFS=: read -r lab fmt rows <<< "$arm"
-  PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/skill_client.py --queries "$QUERIES" --tokenizer "$MODEL_PATH" \
+  PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/skill_client.py --no-defined-terms --queries "$QUERIES" --tokenizer "$MODEL_PATH" \
     --base-url "${URLS[@]}" --model "$lab" --label "$lab" --target "$fmt" --out "$OUT/preds_$lab.jsonl" \
     --max-tokens 2048 --workers 96 --passes zero --groups heldout_problem --variants $VARIANTS \
     >> "$OUT/logs/client_$lab.log" 2>&1 &

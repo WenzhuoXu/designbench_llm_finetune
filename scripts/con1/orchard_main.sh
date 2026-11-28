@@ -110,7 +110,7 @@ for s in ss: print(s.getsockname()[1])' "$NG")
     [ $(( $(date +%s) - T0 )) -lt 3600 ] || { echo "ABORT: servers not ready"; exit 7; }
     sleep 10
   done
-  ( cd "$REPO" && PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/skill_client.py --queries "$Q" --tokenizer "$MODEL_PATH" \
+  ( cd "$REPO" && PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/skill_client.py --no-defined-terms --queries "$Q" --tokenizer "$MODEL_PATH" \
       --base-url "${URLS[@]}" --model "$lab" --label "$lab" --target "$FMT" --out "$TMPRUN/$(basename "$out")" --max-tokens 4096 \
       --workers 128 --passes $passes --groups heldout_problem >> "$TMPRUN/logs/client_$lab.log" 2>&1 )
   stop_servers

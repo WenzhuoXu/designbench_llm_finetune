@@ -146,7 +146,7 @@ else
              "$G/out/states_native_orch.jsonl.gz" "$G/out/states_scripted.jsonl.gz" \
     --exclude-rows "$C1/main/rows/train_facet.jsonl" "$C1/main/rows/dev_facet.jsonl" "$C1/main/rows/dev_facetm.jsonl" \
     --forbid-problems "$D/queries_v2.jsonl" "$G/bench_problems.jsonl" --tokenizer "$MODEL" --target "$TARGET" --follow "$FOLLOW" $PWARG \
-    --q "$Q" --max-tokens "$MAX_TOKENS" --seed 0 --workers "${BUILD_WORKERS:-30}" \
+    --q "$Q" --max-tokens "$MAX_TOKENS" --seed 0 --no-defined-terms --workers "${BUILD_WORKERS:-30}" \
     --out-train "$ROWS" --out-dev "$T/dev_full_q$Q.jsonl" --stats "$T/stats.json" > "$T/logs/build.log" 2>&1
   tail -3 "$T/logs/build.log"
   GOT=$("$TRAIN_PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["train_sha1"])' "$T/stats.json" 2>/dev/null)
@@ -185,6 +185,8 @@ if [ "$FOLLOW" = short ] || [ -n "$PREFIX_WEIGHT" ]; then
   PYTHONPATH="$REPO/scripts/con1:$REPO" FOLLOW="$FOLLOW" PREFIX_WEIGHT="$PREFIX_WEIGHT" "$TRAIN_PY" - "$DEV" "$DEV_USED" <<'EOF' || { fail "dev rows not converted"; exit 2; }
 import json, os, sys
 from targets import FOLLOW_HEAD, question
+import targets
+targets.DEFINED_DEFAULT = False   # the 2M set and its dev rows were built without the definitions (lib_v8 default on)
 short, pw = os.environ["FOLLOW"] == "short", os.environ["PREFIX_WEIGHT"]
 n = na = 0
 with open(sys.argv[2], "w", encoding="utf-8") as fo:

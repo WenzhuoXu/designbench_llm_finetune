@@ -31,7 +31,7 @@ echo "=== $(date '+%F %T') host=$(hostname) job=${SLURM_JOB_ID:-none} repo=$R (r
 ST="$B/main/states_native_offmenu.jsonl.gz $F/states_native_offmenu_rest.jsonl.gz $G/out/states_native_orch.jsonl.gz $G/out/states_scripted.jsonl.gz"
 EX="$B/main/rows/train_facet.jsonl $B/main/rows/dev_facet.jsonl $B/main/rows/dev_facetm.jsonl"
 FORBID="$D/queries_v2.jsonl $G/bench_problems.jsonl"
-SET="--target facetm --follow short --prefix-weight 0 --q 36 --max-tokens 22000 --seed 0"
+SET="--target facetm --follow short --prefix-weight 0 --q 36 --max-tokens 22000 --seed 0 --no-defined-terms"
 OLD=facetm_short_pw0; NEW=facetm_short_pw0_nc
 build() {   # repo tag workers
   $TRPY "$1/scripts/con1/build_full_rows.py" --states $ST --exclude-rows $EX --forbid-problems $FORBID --tokenizer "$MODEL" \

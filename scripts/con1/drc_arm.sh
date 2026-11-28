@@ -71,7 +71,7 @@ until curl -sf "http://127.0.0.1:$PORT/v1/models" >/dev/null 2>&1; do
   sleep 10
 done
 echo "=== $(date '+%F %T') server ready"
-$PY scripts/con1/skill_client.py --queries $QUERIES --tokenizer $MODEL --base-url "http://127.0.0.1:$PORT/v1" \
+$PY scripts/con1/skill_client.py --no-defined-terms --queries $QUERIES --tokenizer $MODEL --base-url "http://127.0.0.1:$PORT/v1" \
   --model $LAB --label $LAB --target $FMT --out $OUTDIR/preds_$LAB.jsonl --max-tokens $MAXTOK --workers 48 --passes ${PASSES:-zero} \
   --groups heldout_problem $VARG > "$RUN/logs/client.log" 2>&1
 tail -2 "$RUN/logs/client.log"

@@ -82,7 +82,11 @@ def main(argv=None):
     ap.add_argument("--variants", nargs="*", default=None)
     ap.add_argument("--target", choices=FORMATS, default="verbatim", help="answer format asked for (targets.py)")
     ap.add_argument("--groups", nargs="*", default=None, help="only states of these groups (heldout_problem, ...)")
+    ap.add_argument("--no-defined-terms", action="store_true", help="questions without the definitions of feasible and "
+                    "'same' (on by default since lib_v8): every evaluation before 11-28")
     a = ap.parse_args(argv)
+    import targets
+    targets.DEFINED_DEFAULT = not a.no_defined_terms
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(a.tokenizer)
     stop = [tok.convert_tokens_to_ids("<|im_end|>")]

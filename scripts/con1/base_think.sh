@@ -86,7 +86,7 @@ echo "=== $(date '+%F %T') $NSERVERS servers ready after $(( $(date +%s) - T0 ))
 W=$(( ${WORKERS_PER_SERVER:-48} * NSERVERS ))
 run() {   # label budget out [extra args]
   local L=$1 BUD=$2 OUTF=$3; shift 3
-  "$VENV/bin/python" "$R/scripts/con1/think_client.py" --queries "$Q" --tokenizer "$MODEL" --base-url "${URLS[@]}" \
+  "$VENV/bin/python" "$R/scripts/con1/think_client.py" --no-defined-terms --queries "$Q" --tokenizer "$MODEL" --base-url "${URLS[@]}" \
     --model base --label "$L" --budget "$BUD" --answer-tokens 1024 --workers "$W" --out "$OUTF" "$@" \
     > "$O/logs/client_${L}_job${SLURM_JOB_ID:-x}.log" 2>&1
   echo "=== $(date '+%F %T') $L rc=$?: $(tail -1 "$O/logs/client_${L}_job${SLURM_JOB_ID:-x}.log")"

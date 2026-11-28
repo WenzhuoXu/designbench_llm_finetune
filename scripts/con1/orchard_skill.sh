@@ -70,7 +70,7 @@ echo "=== servers ready after $(( $(date +%s) - T0 )) s"
 rc=0
 for lab in $LABELS; do
   mt=MAXTOK_$lab; mt=${!mt:-2048}
-  PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/skill_client.py --queries "$QUERIES" --tokenizer "$MODEL_PATH" \
+  PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/skill_client.py --no-defined-terms --queries "$QUERIES" --tokenizer "$MODEL_PATH" \
     --base-url "${URLS[@]}" --model "$lab" --label "$lab" --out "$OUT/preds_$lab.jsonl" --max-tokens "$mt" \
     --workers "${WORKERS:-96}" ${PASSES:+--passes $PASSES} 2>&1 | tee -a "$OUT/logs/client_$lab.log"
   r=${PIPESTATUS[0]}; [ $r -ne 0 ] && rc=$r

@@ -14,12 +14,12 @@ ST="$B/main/states_native_offmenu.jsonl.gz $G/out/states_native_orch.jsonl.gz $D
 for F in facet facetm; do
   [ -e $O/train_${F}_nooffmenu.jsonl ] || { mv $O/train_$F.jsonl $O/train_${F}_nooffmenu.jsonl; mv $O/dev_$F.jsonl $O/dev_${F}_nooffmenu.jsonl; }
   echo "=== $(date) rows $F (with off-menu)"
-  $PY $R/build_rows.py --states $ST --out-train $O/train_$F.jsonl --out-dev $O/dev_$F.jsonl --per-family 2000 --target $F \
+  $PY $R/build_rows.py --no-defined-terms --states $ST --out-train $O/train_$F.jsonl --out-dev $O/dev_$F.jsonl --per-family 2000 --target $F \
     --max-tokens 24000 > $O/build_$F.log 2>&1
   grep "src offmenu\|train rows\|DONE" $O/build_$F.log
 done
 echo "=== $(date) rows facet_b (same states, 12 other moves)"
-$PY $R/build_rows.py --states $ST --out-train $O/train_facet_b.jsonl --out-dev $O/dev_facet_b.jsonl --per-family 2000 \
+$PY $R/build_rows.py --no-defined-terms --states $ST --out-train $O/train_facet_b.jsonl --out-dev $O/dev_facet_b.jsonl --per-family 2000 \
   --target facet --max-tokens 24000 --move-seed 1 --exclude-rows $O/train_facet.jsonl $O/dev_facet.jsonl > $O/build_facet_b.log 2>&1
 grep "excluding\|dropped\|src offmenu\|train rows\|DONE" $O/build_facet_b.log
 $PY - $O/train_facet.jsonl $O/train_facet_b.jsonl $O/train_facetm.jsonl <<'EOF'

@@ -95,7 +95,7 @@ done
 echo "=== $(date '+%F %T') servers ready"
 cd "$REPO"
 for lab in control stage2; do
-  PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/skill_client.py --queries $B/con1/data/queries_v2.jsonl --tokenizer "$MODEL_PATH" \
+  PYTHONPATH="$REPO" "$TRAIN_PY" scripts/con1/skill_client.py --no-defined-terms --queries $B/con1/data/queries_v2.jsonl --tokenizer "$MODEL_PATH" \
     --base-url "${URLS[@]}" --model "$lab" --label "$lab" --target "$WFMT" --out "$S2/preds_$lab.jsonl" \
     --max-tokens 4096 --workers 64 --passes zero --groups heldout_problem >> "$S2/logs/client_$lab.log" 2>&1
 done

@@ -15,7 +15,7 @@ export PYTHONPATH=/project/community/wxu2/con1/pylib OMP_NUM_THREADS=1 OPENBLAS_
 mkdir -p $O/rows
 ST="$G/out/states_native_orch.jsonl.gz $D/states_native.jsonl.gz $D/states_native_drc_snap.jsonl.gz $G/out/states_scripted.jsonl.gz"
 echo "=== $(date) selection"
-[ -e $O/sel.done ] || { $PY $R/build_rows.py --states $ST --out-train $O/sel_rows.jsonl --out-dev $O/sel_dev.jsonl \
+[ -e $O/sel.done ] || { $PY $R/build_rows.py --no-defined-terms --states $ST --out-train $O/sel_rows.jsonl --out-dev $O/sel_dev.jsonl \
   --per-family 2000 --target masked --max-tokens 24000 | grep "rows\|available\|DONE" && \
   $PY -c "
 import json
@@ -29,7 +29,7 @@ echo "=== $(date) off-menu moves for the selected native states"
   --sids $O/sel_native_sids.txt --out $O/states_native_offmenu.jsonl.gz --workers 46 | tail -2 && touch $O/offmenu.done; }
 for F in masked facet delta absolute; do
   echo "=== $(date) rows $F"
-  [ -s $O/rows/train_$F.jsonl ] || $PY $R/build_rows.py --states $O/states_native_offmenu.jsonl.gz $ST \
+  [ -s $O/rows/train_$F.jsonl ] || $PY $R/build_rows.py --no-defined-terms --states $O/states_native_offmenu.jsonl.gz $ST \
     --out-train $O/rows/train_$F.jsonl --out-dev $O/rows/dev_$F.jsonl --per-family 2000 --target $F --max-tokens 24000 \
     > $O/rows/build_$F.log 2>&1
   tail -1 $O/rows/build_$F.log

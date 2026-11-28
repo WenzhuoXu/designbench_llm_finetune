@@ -22,6 +22,14 @@ set has the same layout, wording and loss weights as a stage-1 row; only which m
   that does not fit even alone is dropped (counted).
 Output order: input order of the states (file, line), the rows of a state in order; the trainer shuffles.
 --lens writes one line per training row: total tokens, prompt tokens, questions, family (for the time estimate).
+
+11-28 (parent's orders; recorded, the content of a row changes only through these switches):
+- questions define feasible and 'same' by default (targets.DEFINED_DEFAULT, lib_v8); --no-defined-terms builds the
+  rows as every set before 11-28 was built (the 2M set facetm_short_pw0_nc_q36, sha1 29b3a469..., needs it);
+- grid2op CHANGES lines of move-independent metrics (the next step of a time series the prompt does not contain) are
+  unanswerable from the prompt: 302,131 lines in 12,369 of this set's 16,044 grid2op rows (stage-1 set: 28,085 lines
+  in 1,335 of 2,000), step and served_load_mw 97% (build_rows.py, EXO_TARGETS, count_exo_rows.py). Leaving them out is
+  the owner's scope decision and is not applied: --exo-targets keep (default) | zero | drop.
 """
 from __future__ import annotations
 
@@ -275,6 +283,8 @@ def _init(args, excl):
     global _ARGS, _EXCL
     _ARGS, _EXCL = args, excl
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    import build_rows
+    build_rows.configure(args["no_defined_terms"], args["exo_targets"], args["exo_families"])
 
 
 def chunks(paths: list, size: int, c: collections.Counter, sid_src: dict):
@@ -325,7 +335,15 @@ def main(argv=None):
     ap.add_argument("--stats", required=True)
     ap.add_argument("--lens", default=None)
     ap.add_argument("--check-every", type=int, default=50, help="tokenise the rows of 1 state in N whole (check)")
+    ap.add_argument("--no-defined-terms", action="store_true", help="questions without the definitions of feasible and "
+                    "'same' (on by default since lib_v8): every set before 11-28, the 2M set included")
+    ap.add_argument("--exo-targets", choices=("keep", "zero", "drop"), default="keep",
+                    help="move-independent CHANGES lines (build_rows.EXO_TARGETS): keep (default: rows as before), "
+                         "zero (loss weight 0), drop (left out). The owner's decision; off unless asked")
+    ap.add_argument("--exo-families", nargs="+", default=["grid2op"])
     a = ap.parse_args(argv)
+    import build_rows
+    build_rows.configure(a.no_defined_terms, a.exo_targets, a.exo_families)
     t0 = time.time()
     excl = collections.defaultdict(set)
     n_ex = 0
@@ -346,7 +364,8 @@ def main(argv=None):
         n_ex, len(excl), len(forbid), time.time() - t0), flush=True)
     args = {"tokenizer": a.tokenizer, "target": a.target, "q": a.q, "max_tokens": a.max_tokens, "seed": a.seed,
             "follow": a.follow, "prefix_weight": a.prefix_weight,
-            "forbid": forbid, "check_every": a.check_every}
+            "forbid": forbid, "check_every": a.check_every, "no_defined_terms": a.no_defined_terms,
+            "exo_targets": a.exo_targets, "exo_families": a.exo_families}
     c = collections.Counter()
     sid_src: dict = {}
     sha = hashlib.sha1()
@@ -397,6 +416,7 @@ def main(argv=None):
                 "regime": {k[len("%s %s regime " % (sp, v)):]: n for k, n in c.items()
                            if k.startswith("%s %s regime " % (sp, v))}}
     res = {"q": a.q, "max_tokens": a.max_tokens, "target": a.target, "follow": a.follow, "prefix_weight": a.prefix_weight, "seed": a.seed, "train_rows": n_rows,
+           "defined_terms": not a.no_defined_terms, "exo_targets": a.exo_targets, "exo_families": a.exo_families,
            "train_sha1": sha.hexdigest(), "longest": {"tokens": longest[0], "family": longest[1]},
            "states_from_file": sid_src, "excluded_pairs": n_ex, "seconds": round(time.time() - t0, 1),
            "workers": a.workers, "families": summary,
