@@ -67,15 +67,15 @@ def main():
             ok_n = ref_pt.get((q["sid"], j)) == len(oi)
             c["ref tokens == arm D's prompt_tokens"] += ok_n
             nt, ot = tok.decode(ni), tok.decode(oi)
-            ops = [(t, ot[i1:i2], nt[j1:j2]) for t, i1, i2, j1, j2 in
-                   difflib.SequenceMatcher(None, ot, nt, autojunk=False).get_opcodes() if t != "equal"]
             ok_i = nt.count(a.insert) == 1 and nt.replace(a.insert, "", 1) == ot
             c["new == arm D + one insertion"] += ok_i
             dt[len(ni) - len(oi)] += 1
             if ok_n and ok_i:
                 c["all checks"] += 1
-            elif first is None:
-                first = (q["sid"], j, ops[:3])
+            elif first is None:                              # the diff only for the first failure (char-level is slow)
+                ops = [(t, ot[i1:i2][:200], nt[j1:j2][:200]) for t, i1, i2, j1, j2 in
+                       difflib.SequenceMatcher(None, ot, nt, autojunk=False).get_opcodes() if t != "equal"]
+                first = (q["sid"], j, ok_n, ops[:3])
     print(dict(c))
     print("token change (new - arm D):", dict(dt))
     print("first failure:", first)
