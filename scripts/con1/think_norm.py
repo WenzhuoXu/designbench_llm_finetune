@@ -14,6 +14,7 @@ import sys
 
 src, dst = sys.argv[1:3]
 COLON = re.compile(r"^(\s*[A-Za-z_][\w.]*)\s*:\s+(?=\S)", re.M)
+BULLET = re.compile(r"^(\s*)(?:[-*•+]|\d+[.)])\s+(?=[A-Za-z_])")   # 11-28: '- metric: ...' as the base model writes
 COMMA = re.compile(r"\b(up|down|same|satisfied|violated|at limit)\s*,\s*", re.I)
 KEEP = ("VERDICT", "REASON", "MARGINS AFTER", "FEASIBLE AFTER", "VIOLATED AFTER", "CHANGES")
 n = c = 0
@@ -24,6 +25,7 @@ with open(dst, "w", encoding="utf-8") as fo:
         if t:
             out = []
             for ln in t.split("\n"):
+                ln = BULLET.sub(r"\1", ln.replace("**", ""))
                 if not ln.lstrip().upper().startswith(KEEP):
                     ln = COMMA.sub(lambda m: m.group(1) + " ", COLON.sub(r"\1 ", ln))
                 out.append(ln)

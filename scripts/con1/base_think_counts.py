@@ -11,8 +11,10 @@ import json
 import statistics
 import sys
 
-sys.path.insert(0, "/storage/wxu/con1/repo/scripts/con1")
+import os  # noqa: E402
+sys.path.insert(0, os.environ.get("CON1_LIB", "/storage/wxu/con1/repo/scripts/con1"))   # CON1_LIB: another facets.py
 import facets as F  # noqa: E402
+FMT = os.environ.get("FMT", "facetm")                     # the answer form the file was asked in
 
 raw_p, norm_p = sys.argv[1:3]
 QF = sys.argv[3] if len(sys.argv) > 3 else "/storage/wxu/con1/arm/main/queries_v3.jsonl"
@@ -44,7 +46,7 @@ for key, r in norm.items():
         c["think " + str(r.get("think_end"))] += 1
         T[g].append(r.get("think_tokens") or 0)
         c["cut at the answer cap"] += r.get("finish") == "length"
-        pf = F.pred_facets(r.get("text"), "facetm", q)
+        pf = F.pred_facets(r.get("text"), FMT, q)
         c["unreadable"] += pf["regime"] == "unreadable"
         c["normalised"] += (raw.get(key) or {}).get("text") != r.get("text")
         if F.is_applied(pf["regime"]):

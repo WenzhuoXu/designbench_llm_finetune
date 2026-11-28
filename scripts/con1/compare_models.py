@@ -18,7 +18,8 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, "/storage/wxu/con1/repo/scripts/con1")
+import os  # noqa: E402
+sys.path.insert(0, os.environ.get("CON1_LIB", "/storage/wxu/con1/repo/scripts/con1"))   # CON1_LIB: another facets.py
 import facets as F  # noqa: E402
 
 METRICS = ("regime_phys", "cpl_dir_BA", "cpl_size")
@@ -32,7 +33,14 @@ def main():
     ap.add_argument("--group", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--passes", nargs="+", default=["zero", "seq"])
+    ap.add_argument("--exclude", default=None, help="TSV sid<TAB>qi[<TAB>flag]: questions left out (counted)")
+    ap.add_argument("--only", default=None, help="TSV sid<TAB>qi[<TAB>flag]: only these questions")
+    ap.add_argument("--fmt-of", action="append", default=[], help="LABEL=FORMAT: read LABEL's answers in this form "
+                    "(default: the answer record's 'target')")
     a = ap.parse_args()
+    tsv = lambda p: {(l.split("\t")[0], int(l.split("\t")[1])) for l in open(p) if l.strip()} if p else None  # noqa: E731
+    EXC, ONLY = tsv(a.exclude), tsv(a.only)
+    FMT_OF = dict(x.split("=", 1) for x in a.fmt_of)
     models = [p.split("=", 1) for p in a.pred]
     names = [m for m, _ in models]
     qs = {}
@@ -57,8 +65,11 @@ def main():
                 given[(lab, r["pass"], "error")] += 1
                 continue
             key = (r["sid"], r["qi"])
+            if (EXC and key in EXC) or (ONLY is not None and key not in ONLY):
+                continue
             if key not in PF[(lab, r["pass"])]:
-                PF[(lab, r["pass"])][key] = F.pred_facets(r.get("text"), r.get("target", "verbatim"), qs[r["sid"]])
+                PF[(lab, r["pass"])][key] = F.pred_facets(r.get("text"), FMT_OF.get(lab, r.get("target", "verbatim")),
+                                                          qs[r["sid"]])
                 given[(lab, r["pass"], "answers")] += 1
                 given[(lab, r["pass"], "readable")] += PF[(lab, r["pass"])][key]["regime"] != "unreadable"
                 if r.get("finish") == "length":
@@ -80,6 +91,9 @@ def main():
         unread = collections.Counter()
         for s, q in qs.items():
             for j in range(1 if ps == "seq" else 0, len(q["moves"])):
+                if (EXC and (s, j) in EXC) or (ONLY is not None and (s, j) not in ONLY):
+                    nq["flagged out"] += 1
+                    continue
                 if any((s, j) not in PF[(m, ps)] for m in names):
                     nq["dropped"] += 1
                     continue
@@ -107,7 +121,8 @@ def main():
         w("")
         w("== pass %s (%s); questions answered by every model: %s%s" % (
             ps, "all questions" if ps == "zero" else "positions >= 1", {v: nq[v] for v in fams},
-            ", left out %d" % nq["dropped"] if nq["dropped"] else ""))
+            (", left out %d" % nq["dropped"] if nq["dropped"] else "") +
+            (", flagged out (--exclude/--only) %d" % nq["flagged out"] if nq["flagged out"] else "")))
         for scope in fams + ["all"]:
             vs = fams if scope == "all" else [scope]
             nn = sum(nq[v] for v in vs)

@@ -45,6 +45,7 @@ PHYS = re.compile(r"would end the episode|diverge|no AC solution|blackout|isolat
 EDGES = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]
 NAMES = ["<0.1%"] + ["%g-%g%%" % (100 * EDGES[i], 100 * EDGES[i + 1]) for i in range(len(EDGES) - 1)] + [">1000%"]
 PHYS_REGIMES = ("refused-physical", "applied-infeasible", "applied-feasible")
+FMT = "facetm"
 
 
 def same(b, a):
@@ -92,6 +93,7 @@ def result_violated(result):
 
 def read_answer(text, m0):
     text = text or ""
+    text = text.replace("**", "").replace("`", "")
     v = re.search(r"VERDICT:\s*(\w+)", text)
     if not v:
         if "refused" in text.lower() or "rejected" in text.lower():
@@ -107,15 +109,45 @@ def read_answer(text, m0):
     if vl and vl.group(1).strip().lower() not in ("none", ""):
         out["viol"] = {x.strip() for x in vl.group(1).split(",") if x.strip()}
     if "CHANGES:" in text:
-        for line in text.split("CHANGES:", 1)[1].splitlines():
-            w = line.split()
-            if len(w) < 2 or w[0] not in m0:
-                continue
-            if w[1].startswith("same"):
+        for w in changes_items(text.split("CHANGES:", 1)[1], m0):
+            b0 = float(m0[w[0]])
+            if FMT == "delta":                              # '<metric> <signed change> (<relative %>)' or 'same'
+                if w[1].startswith("same"):
+                    out["dir"][w[0]] = "same"
+                    continue
+                n = re.match(r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?", w[1])
+                if not n:
+                    continue
+                d = float(n.group(0))
+                out["dir"][w[0]] = tdir(b0, b0 + d)
+                out["chg"][w[0]] = d if out["dir"][w[0]] != "same" else None
+            elif w[1].startswith("same"):
                 out["dir"][w[0]] = "same"
             elif w[1] in ("up", "down"):
                 out["dir"][w[0]] = w[1]
-                out["chg"][w[0]] = mid_change(float(m0[w[0]]), w[1], " ".join(w[2:]))
+                out["chg"][w[0]] = mid_change(b0, w[1], " ".join(w[2:])) if FMT != "dir" else None
+    return out
+
+
+def changes_items(body, m0):
+    """The '<metric> <word> ...' items of a CHANGES block, as word lists (11-28: written independently of facets.py's
+    _change_lines): items are cut at a ';' or ',' that is followed by a metric name; each loses a leading '-', '*',
+    '+', bullet or 'N.' / 'N)', the ':' or '=' after the metric and any ',' after up / down / same."""
+    out = []
+    keys = sorted(m0, key=len, reverse=True)
+    for raw in body.splitlines():
+        cuts = [0] + [m.end() for m in re.finditer(r"[;,]\s*", raw)
+                      if any(raw[m.end():].startswith(k) for k in keys)] + [len(raw) + 1]
+        for a, b in zip(cuts, cuts[1:]):
+            s = raw[a:b - 1 if b <= len(raw) else b].strip().rstrip(",;")
+            s = re.sub(r"^(?:[-*+•]|\d+[.)])\s+", "", s)
+            m = re.match(r"([A-Za-z_][\w.\-]*)\s*[:=]?\s*(.*)$", s)
+            if not m or m.group(1) not in m0:
+                continue
+            rest = re.sub(r"^(up|down|same)\s*,\s*", r"\1 ", m.group(2).strip())
+            w = [m.group(1)] + rest.split()
+            if len(w) >= 2:
+                out.append(w)
     return out
 
 
@@ -132,7 +164,7 @@ def scores(c):
     return {"unreadable": c["unreadable"] / c["answers"] if c["answers"] else float("nan"),
             "regime_phys": sum(ph) / len(ph) if ph else float("nan"),
             "cpl_dir_BA": rec("cpl_", ("up", "down", "same")),
-            "cpl_size": c["size_hit"] / c["size_n"] if c["size_n"] else float("nan")}
+            "cpl_size": c["size_hit"] / c["size_n"] if c["size_n"] and FMT != "dir" else float("nan")}
 
 
 def main():
@@ -142,7 +174,16 @@ def main():
     ap.add_argument("--predictor", required=True)
     ap.add_argument("--pass", dest="pass_", default="zero")
     ap.add_argument("--group", default="heldout_problem")
+    ap.add_argument("--fmt", default="facetm", choices=("facetm", "facet", "dir", "delta"),
+                    help="the answer form: CHANGES lines with a bin (facetm/facet), direction only (dir; size n/a) or a "
+                         "signed change (delta)")
+    ap.add_argument("--exclude", default=None, help="TSV sid<TAB>qi[<TAB>flag]: questions left out")
+    ap.add_argument("--only", default=None, help="TSV sid<TAB>qi[<TAB>flag]: only these questions")
     a = ap.parse_args()
+    global FMT
+    FMT = a.fmt
+    tsv = lambda p: {(l.split("\t")[0], int(l.split("\t")[1])) for l in open(p) if l.strip()} if p else None  # noqa: E731
+    EXC, ONLY = tsv(a.exclude), tsv(a.only)
     qs = {}
     for line in open(a.queries):
         q = json.loads(line)
@@ -158,7 +199,10 @@ def main():
             continue
         if str(r.get("finish", "")).startswith("error"):
             continue
-        ans.setdefault((r["sid"], r["qi"]), r.get("text"))
+        key = (r["sid"], r["qi"])
+        if (EXC and key in EXC) or (ONLY is not None and key not in ONLY):
+            continue
+        ans.setdefault(key, r.get("text"))
     C = collections.defaultdict(collections.Counter)
     for (sid, qi), text in ans.items():
         q = qs[sid]
