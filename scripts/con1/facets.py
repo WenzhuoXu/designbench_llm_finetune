@@ -189,7 +189,10 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
         if rest.startswith("same"):
             out["dir"][k], out["bin"][k] = "same", "same"
             continue
-        if fmt in ("facet", "facetm", "facetc", "dir"):   # facetm's / facetc's blocks sit before CHANGES: not read here
+        if fmt == "dirunc" and rest.lower().startswith("unclear"):   # 11-28: its own class, never absent
+            out["dir"][k] = "unclear"
+            continue
+        if fmt in ("facet", "facetm", "facetc", "dir", "dirunc"):   # facetm's / facetc's blocks sit before CHANGES
             dr = parts[1] if parts[1] in ("up", "down") else None
             bn = " ".join(parts[2:]) if dr else None
             if dr is None:

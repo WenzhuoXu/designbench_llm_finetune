@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 import re
 
-FORMATS = ("verbatim", "masked", "facet", "delta", "absolute", "facetm", "facetc", "dir")
+FORMATS = ("verbatim", "masked", "facet", "delta", "absolute", "facetm", "facetc", "dir", "dirunc")
 NL = chr(10)
 FIXED_WEIGHT = 0.05
 _EDGES = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]
@@ -103,6 +103,13 @@ FORMAT_TEXT["dir"] = (
     "Answer in this form: either 'VERDICT: refused' and 'REASON: <the simulator's reason>', or 'VERDICT: applied', "
     "'FEASIBLE AFTER: yes|no', 'VIOLATED AFTER: <constraints violated after the move, or none>', then 'CHANGES:' and "
     "one line per metric: the metric and its direction (up, down or same).")
+# dirunc (11-28, parent's order, arm D-unclear): 'dir' with one change in the CHANGES sentence, so the model can say
+# which directions it cannot determine; readers keep 'unclear' as its own class (never absent).
+_DIR_SENTENCE = "one line per metric: the metric and its direction (up, down or same)."
+FORMAT_TEXT["dirunc"] = FORMAT_TEXT["dir"].replace(
+    _DIR_SENTENCE, "one line per metric: the metric and its direction (up, down or same), or 'unclear' if its "
+    "direction cannot be determined from the information shown.")
+assert FORMAT_TEXT["dirunc"] != FORMAT_TEXT["dir"] and FORMAT_TEXT["dir"].endswith(_DIR_SENTENCE)
 NAMED_METRICS = " The metrics, one line each in this order: %s."
 # 11-28 (parent's orders): the answer's terms defined in the question. ON BY DEFAULT since lib_v8 for every new arm and
 # every builder call (question(..., defined=None) follows DEFINED_DEFAULT); an arm that must stay comparable with arm D
@@ -436,7 +443,7 @@ def render(fmt: str, move: dict, metrics0: dict):
         if fmt in ("facet", "facetm"):
             sb = size_bin(b, a)
             add(name, "same" if sb == "same" else "%s %s" % (direction(b, a), sb))
-        elif fmt == "dir":
+        elif fmt in ("dir", "dirunc"):
             add(name, direction(b, a))
         elif fmt == "absolute":
             add(name + "%s -> " % sig(b, 4), sig(a, 4))

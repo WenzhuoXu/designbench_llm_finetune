@@ -123,9 +123,11 @@ def read_answer(text, m0):
                 out["chg"][w[0]] = d if out["dir"][w[0]] != "same" else None
             elif w[1].startswith("same"):
                 out["dir"][w[0]] = "same"
+            elif FMT == "dirunc" and w[1].lower().startswith("unclear"):   # 11-28: its own class, never absent
+                out["dir"][w[0]] = "unclear"
             elif w[1] in ("up", "down"):
                 out["dir"][w[0]] = w[1]
-                out["chg"][w[0]] = mid_change(b0, w[1], " ".join(w[2:])) if FMT != "dir" else None
+                out["chg"][w[0]] = mid_change(b0, w[1], " ".join(w[2:])) if FMT not in ("dir", "dirunc") else None
     return out
 
 
@@ -174,7 +176,7 @@ def main():
     ap.add_argument("--predictor", required=True)
     ap.add_argument("--pass", dest="pass_", default="zero")
     ap.add_argument("--group", default="heldout_problem")
-    ap.add_argument("--fmt", default="facetm", choices=("facetm", "facet", "dir", "delta"),
+    ap.add_argument("--fmt", default="facetm", choices=("facetm", "facet", "dir", "delta", "dirunc"),
                     help="the answer form: CHANGES lines with a bin (facetm/facet), direction only (dir; size n/a) or a "
                          "signed change (delta)")
     ap.add_argument("--exclude", default=None, help="TSV sid<TAB>qi[<TAB>flag]: questions left out")
