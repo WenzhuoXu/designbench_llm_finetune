@@ -19,8 +19,14 @@ returns. Nothing here re-implements a renderer:
                    1e-9 (forecasts.truth_of, the scr2 gate's rule); photonics under the open rules ranks by
                    (fewer rule-breaking pixels, then Phi) (open_rules.open_gain), as every round since 11-22 does.
 
-All variants are deterministic (no domain sets stochastic = True), so the scoring seeds only matter for exact
+Seeds: every variant but inventory2 is deterministic, so for them the scoring seeds only matter for exact
 reproduction of the harness's records, and they are reproduced anyway (stable_seed(pid, 'eval', 's', t + 1)).
+inventory2 is stochastic (its constructor defaults to stochastic=True; 20 demand paths seeded from (demand_seed,
+seed)): a state's printed metrics are its score at the seed of its last applied move (stable_seed(pid, 'eval', 's',
+t_last + 1), 0 before any move), while result_of scores the child at stable_seed(pid, 'eval', 's', t + 1), so for
+inventory2 the before and after values of a check use different demand paths (11-26 test review; corrected here
+11-28). scripts/con1/inv2_common_seed.py rebuilds inventory2 questions with the child scored at the printed metrics'
+seed (queries_v3_inv2cs.jsonl).
 """
 from __future__ import annotations
 
