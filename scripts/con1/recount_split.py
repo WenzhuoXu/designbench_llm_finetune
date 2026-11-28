@@ -15,6 +15,7 @@ the ARM file is the one selected on):
 import collections
 import json
 import pickle
+import re
 import sys
 
 sys.dont_write_bytecode = True
@@ -37,6 +38,29 @@ def direction(b, a):
     if abs(a - b) <= max(1e-5 * abs(b), 1e-12):
         return "same"
     return "up" if a > b else "down"
+
+
+SIGNED = re.compile(r"^[\s\-*>]*`?([A-Za-z][A-Za-z0-9_]*)`?\s*[:=]?\s+([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|same)\b")
+
+
+def delta_dirs(text, names):
+    """For the delta form (11-28, own reader): the direction of each CHANGES line from the sign of its signed change
+    (0 = same; the word 'same' = same); first line of a metric wins."""
+    t = (text or "").replace("**", "")
+    out = {}
+    if "CHANGES:" not in t:
+        return out
+    for ln in t.split("CHANGES:", 1)[1].splitlines():
+        g = SIGNED.match(ln)
+        if not g or g.group(1) not in names or g.group(1) in out:
+            continue
+        x = g.group(2)
+        if x == "same":
+            out[g.group(1)] = "same"
+        else:
+            v = float(x)
+            out[g.group(1)] = "same" if v == 0 else ("up" if v > 0 else "down")
+    return out
 
 
 def first_records(path):
@@ -90,6 +114,8 @@ def main():
         fam = q["variant"]
         names = list(q["metrics0"])
         pa = lib.parse(arm[key].get("text"), names)
+        if arm[key].get("target") == "delta":                  # the attack reader reads direction words only
+            pa = dict(pa, d=delta_dirs(arm[key].get("text"), names))
         ps = lib.parse(s1[key].get("text"), names)
         feas = bool(mv["feasible"])
         t = T[g]
