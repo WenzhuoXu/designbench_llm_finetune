@@ -104,6 +104,26 @@ FORMAT_TEXT["dir"] = (
     "'FEASIBLE AFTER: yes|no', 'VIOLATED AFTER: <constraints violated after the move, or none>', then 'CHANGES:' and "
     "one line per metric: the metric and its direction (up, down or same).")
 NAMED_METRICS = " The metrics, one line each in this order: %s."
+# 11-28 (parent's order B, new arms only): the answer's terms defined in the question. Off by default, so every earlier
+# prompt stays byte-identical; question(..., defined=True) appends them. 'same' is defined at 0.1% relative: a line
+# whose true change is between the harness tolerance (SAME_TOL, 1e-5) and 0.1% is a 'subthreshold' line
+# (make_line_flags.py) and is scored apart, so the headline truth is the same under either tolerance.
+SAME_TOL_DEFINED = 1e-3
+DEFINE_FEASIBLE = " FEASIBLE AFTER is yes only when no constraint is violated after the move; otherwise it is no."
+DEFINE_FEASIBLE_VERBATIM = (" The last line says yes only when no constraint is violated after the move; otherwise it "
+                            "says no.")
+DEFINE_SAME = (" A metric's direction is 'same' when it changes by less than 0.1% of its current value; otherwise it "
+               "is up or down.")
+
+
+def definitions(fmt: str) -> str:
+    """The definitions appended to fmt's question when defined=True: feasible for every form, 'same' for the forms
+    that ask for a direction word."""
+    text = FORMAT_TEXT[fmt]
+    out = DEFINE_FEASIBLE_VERBATIM if fmt in ("verbatim", "masked") else DEFINE_FEASIBLE
+    if "(up, down or same)" in text or "up, down or same" in text:
+        out += DEFINE_SAME
+    return out
 
 
 def fmt_for(fmt: str, variant: str) -> str:
@@ -111,12 +131,15 @@ def fmt_for(fmt: str, variant: str) -> str:
     return "facetm" if fmt == "facetc" and variant not in CHAIN_FAMILIES else fmt
 
 
-def question(fmt: str, move: str, first: bool, metrics=None) -> str:
+def question(fmt: str, move: str, first: bool, metrics=None, defined=False) -> str:
     """The question text; with metrics (11-27, optional) the CHANGES lines are asked for exactly these metrics, in the
-    given order ('one line per listed metric' + the list), so no metric is left to the reader's guess."""
+    given order ('one line per listed metric' + the list), so no metric is left to the reader's guess; with defined
+    (11-28, optional, new arms only) the definitions of feasible and 'same' follow (definitions())."""
     text = FORMAT_TEXT[fmt]
     if metrics:
         text = text.replace("one line per metric", "one line per listed metric") + NAMED_METRICS % ", ".join(metrics)
+    if defined:
+        text += definitions(fmt)
     return (QUESTION_HEAD if first else FOLLOW_HEAD).format(move=move) + text
 
 

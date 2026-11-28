@@ -81,6 +81,11 @@ def main(argv=None):
                     help="the question names the metrics to answer: all of the state's metrics0, sorted (targets.question)")
     ap.add_argument("--user-suffix", default=None,
                     help="a sentence added as the last line of the user message ('\\n' + the sentence; 11-28 arm D-brief)")
+    ap.add_argument("--defined-terms", action="store_true",
+                    help="the question defines feasible and 'same' (targets.question(..., defined=True); 11-28, new arms)")
+    ap.add_argument("--reasoning-effort", default=None, choices=("xhigh", "medium", "low"),
+                    help="the chat template's reasoning_effort variable (default: unset = the template's default, "
+                         "xhigh); the prompt is then rendered by apply_chat_template(..., reasoning_effort=X)")
     a = ap.parse_args(argv)
     from targets import question
     from transformers import AutoTokenizer
@@ -109,19 +114,31 @@ def main(argv=None):
     print("%s: %d questions (%d done), budget %d, min think %d" % (a.label, len(jobs), len(done), a.budget, a.min_think),
           flush=True)
 
+    def render(msgs):
+        if a.reasoning_effort is None:                       # the template's default: every run before 11-28
+            return SC.prompt_ids(tok, msgs)
+        ids = tok.apply_chat_template(msgs, tokenize=True, add_generation_prompt=True,
+                                      reasoning_effort=a.reasoning_effort)
+        ids = list(ids if isinstance(ids, list) else ids["input_ids"])
+        if not tok.decode(ids[-4:]).endswith("<think>\n"):
+            raise ValueError("the prompt does not end with '<think>\\n'")
+        return ids
+
     def one(job):
         q, j = job
-        if a.target == "facetm" and not a.named_metrics and not a.user_suffix:   # every earlier run's prompt, byte for byte
+        if a.target == "facetm" and not (a.named_metrics or a.user_suffix or a.defined_terms):   # earlier runs' prompt
             msgs = SC.messages_for(q, j, False, "facetm")
         else:                                                # skill_client's zero-shot layout with this form's question
             msgs = [{"role": "system", "content": q["system"]},
                     {"role": "user", "content": q["user"] + question(
-                        a.target, q["moves"][j]["move"], True, sorted(q["metrics0"]) if a.named_metrics else None)
+                        a.target, q["moves"][j]["move"], True, sorted(q["metrics0"]) if a.named_metrics else None,
+                        defined=a.defined_terms)
                         + ("\n" + a.user_suffix if a.user_suffix else "")}]
-        ids = SC.prompt_ids(tok, msgs)
+        ids = render(msgs)
         url = a.base_url[int(hashlib.sha1(q["sid"].encode()).hexdigest()[:8], 16) % len(a.base_url)]
         rec = {"sid": q["sid"], "variant": q["variant"], "group": q["group"], "predictor": a.label, "pass": "zero", "qi": j,
                "target": a.target, "named_metrics": a.named_metrics, "user_suffix": a.user_suffix,
+               "defined_terms": a.defined_terms, "reasoning_effort": a.reasoning_effort,
                "move": q["moves"][j]["move"],
                "prompt_tokens": len(ids)}
         try:
