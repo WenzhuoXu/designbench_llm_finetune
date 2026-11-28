@@ -284,3 +284,35 @@ The adapters stay on drc (`con1/arm/run_c2m_*/final`, 1.9 GB each; /storage had 
 also the off-Orchard copies of each link; slot.tar and the local parts go after the extraction / DRC_SHA_MATCH.
 Transfer checked on 11-26 with the real slot A (stage-1 step 120, 1,867,816,960 bytes): pull 1 min, upload 54 s,
 "1 files DRC_SHA_MATCH", tar = adapter/ + state.json with stage 1's fingerprint; test copies removed.
+
+## 6. Link 1 and the move request (11-27)
+
+**Link 1** (176234, 11-26 15:39 – 11-27 15:19): stopped for the time limit at step 850 of 2,795, slot B
+(`full step_00850`, sha1 ef5f356…); loss (mean of 10 steps) 0.0704 → 0.0463, dev loss 0.0997 → 0.0504 (step 799),
+grad norm flat (median 0.046), 96.5 s/step, peak 68.9 GiB. 176235 (link 2) is held by the parent (owner order: no GPU
+hours on rows that carry the move request).
+
+**Eval of step 850** (drc; all numbers also from `indep_score.py`, a second scorer without facets.py, which matches
+facets to 3 decimals). Standard protocol (con1's skill_client: the prompt ends `<think>\n`, the answer is what follows
+the model's own `</think>`): unreadable 27% (v2) / 57% (v3) on the trained families, 32% / 72% on the unseen ones —
+the model ends its turn without writing `</think>` (370 of the v2 failures after one token). The think-closing piece
+was trained at weight 0 (§4, owner 11-26), so the model no longer closes the think block itself. With the block closed
+in the prompt (`closed_think.sh`: think_client `--budget 0`), 99.9–100% readable, and against the stage-1 final
+(regime_phys / cpl_dir_BA / cpl_size, paired se over states):
+
+| | v2 | v3 |
+|---|---|---|
+| trained families | −.021±.012 / +.026±.005 / +.070±.006 | −.015±.009 / +.016±.007 / +.070±.005 |
+| unseen families | −.028±.012 / −.001±.007 / −.018±.007 | −.023±.012 / −.002±.007 / −.015±.006 |
+
+Files: drc `full_eval/` (v2), `full_eval/v3/` (v3, `compare_full_00850.txt`), `full_eval/closed/report_full_00850.txt`.
+
+**Rows without the move request** (owner order 11-27; con1 eff023a `conseq_lib.consequence_user`): `full_prep_nc.sh`
+(Orchard 176464) rebuilt the set with the same settings in `repo2m_v3`: tag `facetm_short_pw0_nc`, train sha1
+29b3a469cfcf1e9db7b32be1fd435805ac08db0d, 77,244 rows (running set 78,236: 628 states the cap split finer on the
+longer prompt), the same 1,988,301 questions and 27,162 states per split and family, 1,165.9M tokens (−2.7%).
+`full_noconf_check.py`: no move-request mark in any row, the OPERATIONS heading once per prompt; `full_pair_check.py`:
+every row identical to the running set's except the cut prompt (70,338 rows; the 628 re-cut states: every answer
+identical); a second build gave the same bytes. Stage 1's dev rows with the cut: `full/dev_stage1_facetm_nc.jsonl`.
+Not trained on (the parent decides). The continuation's think-closing weight (0) is the cause of the broken protocol
+above; any next link needs that decided too.
