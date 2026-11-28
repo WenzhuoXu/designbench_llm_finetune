@@ -325,3 +325,48 @@ trained families 1,723 of 3,528 applied answers leave out metric lines (scored a
 v3 (regime_phys / cpl_dir_BA / cpl_size): trained families −.040±.011 / −.116±.015 / −.263±.006; unseen families
 +.107±.027 / +.010±.007 / +.037±.011 (thermal2 +.172 / +.051 / +.127). On the fixed 300-question subset, 8,000 vs
 4,000 tokens: trained part +.063 / +.043 / +.085, unseen part −.009 / +.053 / +.077 (95% still cut at 8,000).
+
+## 7. Move-independent grid2op target lines; defined terms (11-28, recorded, nothing rebuilt)
+
+**Unanswerable targets.** A grid2op result is the power flow of the next 5-minute step. Loads and renewables take the
+next values of a time series the prompt does not contain. A metric of a state is move-independent when all of these
+hold:
+
+- the state has at least two applied outcomes;
+- the metric's after-value is the same number for every applied outcome of the state (relative difference ≤ 1e-9);
+- that value differs from the before-value.
+
+The definition is `build_rows.exogenous_metrics`, and `make_line_flags.py` uses the same one on the test set. The
+CHANGES lines of such metrics cannot be answered from the prompt.
+
+Counted with `count_exo_rows.py` (Orchard 176621, count only). For the 2M set the grouping was replayed exactly from the
+lens file with the builder's own `partition()`: 77,244 rows, 3,430 grid2op states and 254,422 questions all matched.
+
+| set | grid2op rows | rows carrying such lines | lines | of which step / served_load_mw |
+|---|---:|---:|---:|---:|
+| stage 1 (`train_facet.jsonl`, 15,857 rows) | 2,000 | 1,335 | 28,085 (read in the answers) | 13,384 / 13,145 |
+| 2M (`facetm_short_pw0_nc_q36`) | 16,044 | 12,369 | 302,131 | 147,375 / 145,726 |
+
+step and served_load_mw are 97% of these lines; lines_unavailable is next (670 / 7,225). 2,323 of the 3,430 grid2op
+training states have such a metric.
+
+Leaving these lines out of the targets is the owner's scope decision and is **not applied**. The switch is
+`--exo-targets` in `build_rows.py` and `build_full_rows.py`, for `--exo-families`, by default grid2op:
+
+| value | effect |
+|---|---|
+| `keep` (default) | every row byte-identical to before |
+| `zero` | the line stays and gets loss weight 0 (`zero_spans`) |
+| `drop` | the line is left out of the CHANGES block |
+
+Under `zero` and `drop`, MARGINS AFTER lines of the same metrics stay. Verbatim and masked answers are not supported.
+
+**Defined terms.** Since lib_v8, `targets.question` adds two sentences after the answer form by default
+(`DEFINED_DEFAULT`): one defines "feasible" ("yes only when no constraint is violated after the move") and one defines
+"same" ("changes by less than 0.1% of its current value").
+
+- Every builder and client has `--no-defined-terms`, the opt-out.
+- These scripts carry it, so they keep reproducing the existing sets and arms: `orchard_full.sh`, `full_prep*.sh`,
+  `main_prep.sh`, `rows_fix.sh`, `base_think.sh`, `drc_arm*.sh`, `orchard_{abl,main,skill,stage2}.sh`.
+- Rebuilding the 2M set (sha1 29b3a469…) needs it.
+- A new row set or arm gets the definitions unless it opts out.
