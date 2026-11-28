@@ -61,9 +61,9 @@ class Tally:
         self.sigs = collections.Counter()
         self.first_fail = {}
 
-    def add(self, v, sid, system, old, new, fmt, move, metrics=None):
+    def add(self, v, sid, system, old, new, fmt, move, metrics=None, suffix=None):
         self.n[v] += 1
-        full = system + "\n" + new + question(fmt, move or "X()", True, metrics)
+        full = system + "\n" + new + question(fmt, move or "X()", True, metrics) + ("\n" + suffix if suffix else "")
         bad = []
         for m in MARKS + MARKS_EXTRA:
             if m in full:
@@ -123,7 +123,11 @@ def main(argv=None):
                     "as think_client.py --named-metrics asks it (11-28)")
     ap.add_argument("--every-question", action="store_true", help="(--pairs) check the prompt of every question of a "
                     "state (each move's QUESTION), not only the first; counts are then per question")
+    ap.add_argument("--user-suffix", default=None, help="a sentence added as the last line of the user message, as "
+                    "think_client.py --user-suffix adds it (11-28)")
+    ap.add_argument("--subset", default=None, help="(--pairs --every-question) only these questions: TSV sid<TAB>qi")
     a = ap.parse_args(argv)
+    sub = {(l.split("\t")[0], int(l.split("\t")[1])) for l in open(a.subset) if l.strip()} if a.subset else None
     from conseq_lib import MOVE_REQUEST
     REMOVABLE = MOVE_REQUEST.splitlines(keepends=True) + ["Propose a different move.\n"]
     t = Tally()
@@ -138,8 +142,11 @@ def main(argv=None):
                 if q1["user"] != consequence_user(q0["user"]):
                     same["DIFFERENT from consequence_user"] += 1
                 mets = sorted(q1["metrics0"]) if a.named_metrics else None
-                for m in (q1.get("moves") or [{}]) if a.every_question else (q1.get("moves") or [{}])[:1]:
-                    t.add(q0["variant"], q0["sid"], q1["system"], q0["user"], q1["user"], a.fmt, m.get("move"), mets)
+                for j, m in enumerate((q1.get("moves") or [{}]) if a.every_question else (q1.get("moves") or [{}])[:1]):
+                    if sub is not None and (q1["sid"], j) not in sub:
+                        continue
+                    t.add(q0["variant"], q0["sid"], q1["system"], q0["user"], q1["user"], a.fmt, m.get("move"), mets,
+                          a.user_suffix)
     for p in a.states or []:
         with opener(p) as f:
             for line in f:
