@@ -76,7 +76,11 @@ def main(argv=None):
     ap.add_argument("--groups", nargs="+", default=None)
     ap.add_argument("--variants", nargs="+", default=None)
     ap.add_argument("--subset", default=None)
+    ap.add_argument("--target", default="facetm", help="answer form (targets.FORMATS); facetm = every run before 11-28")
+    ap.add_argument("--named-metrics", action="store_true",
+                    help="the question names the metrics to answer: all of the state's metrics0, sorted (targets.question)")
     a = ap.parse_args(argv)
+    from targets import question
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(a.tokenizer)
     IM_END, THINK_END = tok.convert_tokens_to_ids("<|im_end|>"), tok.convert_tokens_to_ids("</think>")
@@ -105,10 +109,17 @@ def main(argv=None):
 
     def one(job):
         q, j = job
-        ids = SC.prompt_ids(tok, SC.messages_for(q, j, False, "facetm"))
+        if a.target == "facetm" and not a.named_metrics:     # the prompt of every earlier run, byte for byte
+            msgs = SC.messages_for(q, j, False, "facetm")
+        else:                                                # skill_client's zero-shot layout with this form's question
+            msgs = [{"role": "system", "content": q["system"]},
+                    {"role": "user", "content": q["user"] + question(
+                        a.target, q["moves"][j]["move"], True, sorted(q["metrics0"]) if a.named_metrics else None)}]
+        ids = SC.prompt_ids(tok, msgs)
         url = a.base_url[int(hashlib.sha1(q["sid"].encode()).hexdigest()[:8], 16) % len(a.base_url)]
         rec = {"sid": q["sid"], "variant": q["variant"], "group": q["group"], "predictor": a.label, "pass": "zero", "qi": j,
-               "target": "facetm", "move": q["moves"][j]["move"], "prompt_tokens": len(ids)}
+               "target": a.target, "named_metrics": a.named_metrics, "move": q["moves"][j]["move"],
+               "prompt_tokens": len(ids)}
         try:
             think, n, end = "", 0, None
             if a.min_think > 0:

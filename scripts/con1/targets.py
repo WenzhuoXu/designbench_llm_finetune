@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 import re
 
-FORMATS = ("verbatim", "masked", "facet", "delta", "absolute", "facetm", "facetc")
+FORMATS = ("verbatim", "masked", "facet", "delta", "absolute", "facetm", "facetc", "dir")
 NL = chr(10)
 FIXED_WEIGHT = 0.05
 _EDGES = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]
@@ -98,13 +98,26 @@ FORMAT_TEXT["facetc"] = (
     "change relative to its current value (or 'from 0' when the current value is 0)." % CHAIN_K)
 
 
+# dir (11-27, parent's order for the base-model read): direction only, no size bin, no margin block.
+FORMAT_TEXT["dir"] = (
+    "Answer in this form: either 'VERDICT: refused' and 'REASON: <the simulator's reason>', or 'VERDICT: applied', "
+    "'FEASIBLE AFTER: yes|no', 'VIOLATED AFTER: <constraints violated after the move, or none>', then 'CHANGES:' and "
+    "one line per metric: the metric and its direction (up, down or same).")
+NAMED_METRICS = " The metrics, one line each in this order: %s."
+
+
 def fmt_for(fmt: str, variant: str) -> str:
     """The format a family is asked and trained in: facetc falls back to facetm outside CHAIN_FAMILIES."""
     return "facetm" if fmt == "facetc" and variant not in CHAIN_FAMILIES else fmt
 
 
-def question(fmt: str, move: str, first: bool) -> str:
-    return (QUESTION_HEAD if first else FOLLOW_HEAD).format(move=move) + FORMAT_TEXT[fmt]
+def question(fmt: str, move: str, first: bool, metrics=None) -> str:
+    """The question text; with metrics (11-27, optional) the CHANGES lines are asked for exactly these metrics, in the
+    given order ('one line per listed metric' + the list), so no metric is left to the reader's guess."""
+    text = FORMAT_TEXT[fmt]
+    if metrics:
+        text = text.replace("one line per metric", "one line per listed metric") + NAMED_METRICS % ", ".join(metrics)
+    return (QUESTION_HEAD if first else FOLLOW_HEAD).format(move=move) + text
 
 
 # ---- per-element internal state (facetc): parsed from the observation text the harness renders ---------------------
@@ -395,6 +408,8 @@ def render(fmt: str, move: dict, metrics0: dict):
         if fmt in ("facet", "facetm"):
             sb = size_bin(b, a)
             add(name, "same" if sb == "same" else "%s %s" % (direction(b, a), sb))
+        elif fmt == "dir":
+            add(name, direction(b, a))
         elif fmt == "absolute":
             add(name + "%s -> " % sig(b, 4), sig(a, 4))
         else:

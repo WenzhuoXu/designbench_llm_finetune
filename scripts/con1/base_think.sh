@@ -30,7 +30,7 @@ export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false PYTHON
 export TMPDIR=$C/tmp XDG_CACHE_HOME=$C/xdg TRITON_CACHE_DIR=$C/triton TORCHINDUCTOR_CACHE_DIR=$C/inductor
 export CUDA_CACHE_PATH=$C/nv VLLM_CACHE_ROOT=$C/vllm FLASHINFER_WORKSPACE_BASE=$C/flashinfer
 export VLLM_NO_USAGE_STATS=1 DO_NOT_TRACK=1 VLLM_USE_FLASHINFER_SAMPLER=0
-echo "=== $(date '+%F %T') host=$(hostname) job=${SLURM_JOB_ID:-none} restarts=${SLURM_RESTART_COUNT:-0} repo=$R ($(cat $R/GIT_COMMIT)) queries=$Q ($(sha1sum < $Q | cut -c1-12)) out=$O"
+echo "=== $(date '+%F %T') host=$(hostname) job=${SLURM_JOB_ID:-none} restarts=${SLURM_RESTART_COUNT:-0} repo=$R ($(cat $R/GIT_COMMIT)) queries=$Q ($(sha1sum < $Q | cut -c1-12)) out=$O arms=${ARMS:-default}"
 [ -s "$Q" ] && [ -e "$MODEL/config.json" ] && [ -e "$VENV/bin/vllm" ] || { echo "ABORT: missing input"; exit 2; }
 grep -q "YOUR MOVE" "$Q" && { echo "ABORT: $Q carries the move request"; exit 2; }
 # the subset: once, deterministic
@@ -91,9 +91,17 @@ run() {   # label budget out [extra args]
     > "$O/logs/client_${L}_job${SLURM_JOB_ID:-x}.log" 2>&1
   echo "=== $(date '+%F %T') $L rc=$?: $(tail -1 "$O/logs/client_${L}_job${SLURM_JOB_ID:-x}.log")"
 }
-run base_v3_4k 4000 "$O/preds_base_v3_4k.jsonl"
-run base_v3_8k_sub300 8000 "$O/preds_base_v3_8k_sub300.jsonl" --subset "$O/subset_300.tsv"
-for f in "$O"/preds_base_v3_4k.jsonl "$O"/preds_base_v3_8k_sub300.jsonl; do
+# ARMS="label:target:named:budget:all|sub ..." (11-28): answer form (targets.FORMATS), named metrics (1/0), think
+# budget, every question or subset_300.tsv; default = the 11-27 run (facetm, metrics not named, 4,000 + 8,000 subset)
+ARMS=${ARMS:-"base_v3_4k:facetm:0:4000:all base_v3_8k_sub300:facetm:0:8000:sub"}
+FILES=()
+for arm in $ARMS; do
+  IFS=: read -r L TG NM BUD SUB <<< "$arm"
+  EXTRA=(--target "$TG"); [ "$NM" = 1 ] && EXTRA+=(--named-metrics); [ "$SUB" = sub ] && EXTRA+=(--subset "$O/subset_300.tsv")
+  run "$L" "$BUD" "$O/preds_$L.jsonl" "${EXTRA[@]}"
+  FILES+=("$O/preds_$L.jsonl")
+done
+for f in "${FILES[@]}"; do
   "$VENV/bin/python" - "$f" <<'EOF'
 import collections, json, sys
 c = collections.Counter(); g = collections.Counter()

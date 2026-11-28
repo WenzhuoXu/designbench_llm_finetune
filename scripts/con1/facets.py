@@ -122,6 +122,23 @@ def _mid_value(before: float, dr: str, bn: str):
     return before + (r * abs(before) if dr == "up" else -r * abs(before))
 
 
+def _change_lines(body: str, m0: dict) -> list:
+    """The CHANGES block's lines in the plain layout '<metric> <rest>' (11-27 reader fix, parent's order): a leading
+    bullet or number ('- ', '* ', '1. '), a ':' or '=' after the metric and a ',' after up / down / same are dropped,
+    and a line holding several '<metric> ...' items (separated by ';' or ',') is split into one line each. A line already
+    in the plain layout is returned unchanged, so answers written as trained read the same."""
+    names = sorted((re.escape(k) for k in m0), key=len, reverse=True)
+    split_at = re.compile(r"\s*[;,]\s*(?=(?:%s)\b)" % "|".join(names)) if names else None
+    out = []
+    for raw in body.splitlines():
+        for s in (split_at.split(raw) if split_at else [raw]):
+            s = re.sub(r"^\s*(?:[-*•+]|\d+[.)])\s+", "", s)
+            s = re.sub(r"^\s*([A-Za-z_][\w.\-]*)\s*[:=]\s*", r"\1 ", s)
+            s = re.sub(r"\b(up|down|same)\s*,\s*", r"\1 ", s)
+            out.append(s.strip().rstrip(",;."))
+    return out
+
+
 def pred_facets(text: str, fmt: str, q: dict) -> dict:
     """Facets of a predicted answer; regime 'unreadable' when nothing can be read."""
     text = text or ""
@@ -139,6 +156,7 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
         d, b, ch = _bins_from_values(m0, r["metrics"])
         out.update(dir=d, bin=b, change=ch, after=r["metrics"])
         return out
+    text = text.replace("**", "").replace("`", "")       # markdown emphasis (11-27 reader fix; trained answers have none)
     low = text.lower()
     mv = re.search(r"VERDICT:\s*(\w+)", text)
     if not mv:
@@ -162,7 +180,7 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
         body = text.split("METRICS (before -> after):", 1)[1]
     else:
         body = ""
-    for line in body.splitlines():
+    for line in _change_lines(body, m0):
         parts = line.split()
         if len(parts) < 2 or parts[0] not in m0:
             continue
@@ -171,7 +189,7 @@ def pred_facets(text: str, fmt: str, q: dict) -> dict:
         if rest.startswith("same"):
             out["dir"][k], out["bin"][k] = "same", "same"
             continue
-        if fmt in ("facet", "facetm", "facetc"):          # facetm's / facetc's blocks sit before CHANGES: not read here
+        if fmt in ("facet", "facetm", "facetc", "dir"):   # facetm's / facetc's blocks sit before CHANGES: not read here
             dr = parts[1] if parts[1] in ("up", "down") else None
             bn = " ".join(parts[2:]) if dr else None
             if dr is None:

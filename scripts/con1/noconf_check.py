@@ -61,9 +61,9 @@ class Tally:
         self.sigs = collections.Counter()
         self.first_fail = {}
 
-    def add(self, v, sid, system, old, new, fmt, move):
+    def add(self, v, sid, system, old, new, fmt, move, metrics=None):
         self.n[v] += 1
-        full = system + "\n" + new + question(fmt, move or "X()", True)
+        full = system + "\n" + new + question(fmt, move or "X()", True, metrics)
         bad = []
         for m in MARKS + MARKS_EXTRA:
             if m in full:
@@ -119,6 +119,10 @@ def main(argv=None):
     ap.add_argument("--states", nargs="*", default=None)
     ap.add_argument("--fmt", default="facetm")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--named-metrics", action="store_true", help="the QUESTION names the state's metrics0 (sorted), "
+                    "as think_client.py --named-metrics asks it (11-28)")
+    ap.add_argument("--every-question", action="store_true", help="(--pairs) check the prompt of every question of a "
+                    "state (each move's QUESTION), not only the first; counts are then per question")
     a = ap.parse_args(argv)
     from conseq_lib import MOVE_REQUEST
     REMOVABLE = MOVE_REQUEST.splitlines(keepends=True) + ["Propose a different move.\n"]
@@ -133,8 +137,9 @@ def main(argv=None):
                 same["identical other fields" if r0 == r1 else "DIFFERENT other fields"] += 1
                 if q1["user"] != consequence_user(q0["user"]):
                     same["DIFFERENT from consequence_user"] += 1
-                t.add(q0["variant"], q0["sid"], q1["system"], q0["user"], q1["user"], a.fmt,
-                      (q1.get("moves") or [{}])[0].get("move"))
+                mets = sorted(q1["metrics0"]) if a.named_metrics else None
+                for m in (q1.get("moves") or [{}]) if a.every_question else (q1.get("moves") or [{}])[:1]:
+                    t.add(q0["variant"], q0["sid"], q1["system"], q0["user"], q1["user"], a.fmt, m.get("move"), mets)
     for p in a.states or []:
         with opener(p) as f:
             for line in f:
@@ -147,7 +152,8 @@ def main(argv=None):
                     t.first_fail.setdefault(st["variant"], {"sid": st.get("sid"), "why": [str(e)]})
                     continue
                 mv = (st.get("moves") or [{}])[0].get("move")
-                t.add(st["variant"], st.get("sid"), st["system"], st["user"], new, a.fmt, mv)
+                t.add(st["variant"], st.get("sid"), st["system"], st["user"], new, a.fmt, mv,
+                      sorted(st.get("metrics0") or {}) if a.named_metrics else None)
     rep = t.report()
     rep["pairs"] = dict(same)
     rep["inputs"] = {"pairs": a.pairs, "states": a.states}
