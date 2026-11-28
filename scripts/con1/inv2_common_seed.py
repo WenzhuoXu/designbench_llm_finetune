@@ -70,7 +70,23 @@ def job(args):
             out["moves"].append(None)
             continue
         old = s.result_of(mv)                            # the recorded truth's seed: t + 1
-        c["old truth reproduced"] += all(old.get(x) == m.get(x) for x in KEYS if x in m or x in old)
+        diff = [x for x in KEYS if (x in m or x in old) and old.get(x) != m.get(x)]
+        c["old truth reproduced exactly"] += not diff
+        # floats (phi, metrics_after) are compared within 1e-9 relative: the recorded truth was computed on another
+        # node, and numpy reductions can differ in the last bits; strings and booleans must match exactly
+        rel = 0.0
+        for x in diff:
+            if x == "phi" and old.get(x) is not None and m.get(x) is not None:
+                rel = max(rel, abs(old[x] - m[x]) / max(1e-12, abs(m[x])))
+            elif x == "metrics_after" and old.get(x) and m.get(x) and set(old[x]) == set(m[x]):
+                rel = max([rel] + [abs(old[x][k] - m[x][k]) / max(1e-12, abs(m[x][k])) for k in m[x]])
+            else:
+                rel = float("inf")
+        out.setdefault("max_rel", 0.0)
+        out["max_rel"] = max(out["max_rel"], rel)
+        c["old truth reproduced (floats within 1e-9)"] += rel <= 1e-9
+        if diff:
+            c["old truth differs in %s (src %s)" % ("+".join(diff), "/".join(m.get("src") or []))] += 1
         t = s.t
         s.t = k_cur - 1                                  # result_of scores at stable_seed(pid, 'eval', 's', s.t + 1)
         try:
@@ -160,8 +176,10 @@ def main(argv=None):
         d = D[k]
         rep.append("  %-16s %4d  %4d (%.3f)  %s" % (k, d["lines"], d["direction changed"], d["direction changed"] / max(1, d["lines"]),
                                                   ", ".join("%s %d" % (x, v) for x, v in sorted(d.items()) if "->" in x)))
+    rep.append("  largest relative difference of a recorded float (phi, metrics_after): %.3g" % max(
+        r.get("max_rel", 0.0) for r in res.values()))
     ok = C["states"] == C["t matches"] == C["metrics0 reproduced"] == C["prompt reproduced"] \
-        and C["old truth reproduced"] == C["questions"] and not C["move unparsed"]
+        and C["old truth reproduced (floats within 1e-9)"] == C["questions"] and not C["move unparsed"]
     rep.append("INV2CS_%s" % ("DONE" if ok else "FAIL"))
     txt = "\n".join(rep)
     if a.report:
