@@ -316,3 +316,12 @@ every row identical to the running set's except the cut prompt (70,338 rows; the
 identical); a second build gave the same bytes. Stage 1's dev rows with the cut: `full/dev_stage1_facetm_nc.jsonl`.
 Not trained on (the parent decides). The continuation's think-closing weight (0) is the cause of the broken protocol
 above; any next link needs that decided too.
+
+**Base model with thinking, every family, v3** (parent's request 11-27; `base_think.sh`, Orchard 176559, outputs in
+Orchard `$HOME/con1_base_think/` because /project/community was full; scored on drc `full_eval/base_think/` by
+`base_think_score.sh`; facets and `indep_score.py` agree). Base Qwen3.8-27B, no adapter, think to `</think>` or 4,000
+tokens (97% cut by the budget), then the answer; 2,636 of 5,087 answers needed the layout-only normalisation; on the
+trained families 1,723 of 3,528 applied answers leave out metric lines (scored as "same"). Against the stage-1 final
+v3 (regime_phys / cpl_dir_BA / cpl_size): trained families −.040±.011 / −.116±.015 / −.263±.006; unseen families
++.107±.027 / +.010±.007 / +.037±.011 (thermal2 +.172 / +.051 / +.127). On the fixed 300-question subset, 8,000 vs
+4,000 tokens: trained part +.063 / +.043 / +.085, unseen part −.009 / +.053 / +.077 (95% still cut at 8,000).
